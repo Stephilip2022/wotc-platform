@@ -1,0 +1,197 @@
+The Mission
+
+Rockerbox is building the most advanced Work Opportunity Tax Credit (WOTC) automation system ever created — a fully-intelligent, frictionless experience for employers, employees, and partners.
+The goal is to achieve 100% screening compliance, zero manual intervention, and maximum credit capture — while transforming the WOTC program into a measurable, transparent, and revenue-driving asset.
+
+🌐 Platform Overview
+
+The Rockerbox WOTC Optimization System is a multi-tenant SaaS platform with four key user groups:
+
+New Hires (Employees) — complete a simplified, mobile-first WOTC questionnaire.
+
+Employers — manage screening compliance, upload payroll data, and track certified credits in real time.
+
+Rockerbox Admin Team — oversee employer onboarding, document automation, and state agency submissions.
+
+Licensees / Partners (White-Label) — CPA firms, payroll providers, or HCM vendors who resell the Rockerbox system under their brand.
+
+Each user experiences a branded, role-specific interface — powered by a shared intelligence engine that automates the flow of data, documents, and credits.
+
+⚙️ Core Functional Workflows
+1. Employer Onboarding Workflow
+
+Admin creates a new client via the ETA Form 9198 Intake Portal.
+
+The system auto-populates the client’s form, emails an e-signature request, and links to the Rockerbox Terms of Service (engagement letter).
+
+Once signed, the employer account and custom WOTC screening questionnaire are auto-generated.
+
+Employer receives:
+
+A unique WOTC questionnaire URL
+
+A branded QR code for job postings and onboarding packets
+
+An OpenAPI endpoint to integrate directly into their HRIS, ATS, or onboarding system.
+
+2. New Hire Screening Workflow
+
+New hires receive the employer’s WOTC link or QR code.
+
+They’re guided through a gamified, AI-assisted questionnaire modeled after IRS Form 8850 and ETA Form 9061.
+
+Questions are rewritten dynamically for clarity and literacy level (using OpenAI-powered simplification).
+
+On submission:
+
+A unique 9-digit confirmation code is generated.
+
+Employees can upload documentation (driver’s license, DD-214, etc.).
+
+Completed forms are stored in the employer’s secure tenant, ready for state submission.
+
+3. State Submission Workflow
+
+The system aggregates all completed questionnaires by state.
+
+With one click, admins can generate state-specific bulk CSV templates (43 formats pre-built).
+
+The Auto-State Submission Robot (Playwright-based) logs into each State Workforce Agency (SWA) portal and uploads the correct file automatically.
+
+The robot dashboard shows submission success and timestamps per state.
+
+4. Determination & Certification Workflow
+
+The system automatically monitors SWA portals and SFTP/email boxes for determination files.
+
+Files are parsed via OCR to identify certifications, denials, or requests for more info.
+
+Each employee’s profile updates with their status: Certified, Denied, or Pending.
+
+Certified employees become eligible for ongoing credit calculations.
+
+5. Payroll & Credit Calculation Workflow
+
+Employers upload payroll files or connect via API (ADP, Paycor, Paychex, Gusto, QuickBooks, etc.).
+
+The Universal Payroll Adapter auto-detects schema and maps data correctly — even across multiple formats.
+
+The Credit Engine calculates credits based on:
+
+Hours worked (120/400 thresholds)
+
+Target group eligibility
+
+State certification status
+
+Monthly credit amounts are generated automatically by the 10th of each month.
+
+6. Billing & Payment Workflow
+
+For each employer, the system automatically generates an invoice equal to a percentage of credits earned (typically 15%).
+
+Clients with Auto-Pay enabled are charged via Stripe; others receive an invoice via FreshBooks integration.
+
+All invoices, payments, and credit balances are synchronized between systems.
+
+Licensee partners have built-in revenue-share tracking for commission splits.
+
+💡 Intelligence & Automation Layer
+Feature	Purpose
+AI-Assisted Questionnaire	Dynamically simplifies questions for low-literacy employees to ensure completion and compliance.
+Optimization Scoring Engine	Quantifies each employer’s program performance based on screening %, submittal %, certification %, and average credit.
+Real-Time Credit Forecasting	Predicts 30-90 day credit volume based on hiring trends, payroll data, and certification rates.
+Auto-State Submission Robot	Logs into state portals to upload bulk CSVs automatically.
+Automated Determination Importer	Pulls certified/denied status directly from state files or emails using OCR.
+Payroll Sync Engine	Continuously synchronizes payroll data to update credit totals in real time.
+📊 Analytics & Insights
+
+Executive Dashboard — Displays total credits earned, average credit per employee, certification rate, and missed credit opportunities.
+
+Per-Branch Leaderboards — Rank stores, branches, or recruiters by screening %, certification %, and credit totals.
+
+Attrition vs. Certification Analysis — Shows how WOTC-eligible employees impact retention.
+
+Credit Recovery Dashboard — Quantifies potential missed credits due to incomplete or denied submissions.
+
+Optimization Trendlines — Chart performance improvement over time for each employer or licensee.
+
+🧰 Employer & Employee Tools
+Tool	Function
+Employer Portal	View KPIs, credits, and incomplete screenings; upload payroll data; export reports.
+Embeddable Widget	Add the WOTC screening flow directly into external ATS/onboarding systems via <iframe> or API.
+Retention Pathways	Employers can define incentive milestones (e.g., completing WOTC screening = 500 points).
+Rewards Engine	Integrates with gift card APIs (Tremendous/Tango Card) to allow point redemption.
+In-App Support Assistant (AI)	Answers employer questions about credits, program rules, or performance in plain English.
+Automated Client Health Emails	Sends weekly performance digests (screening %, missed credits, ROI).
+🤝 Partner & Licensee Ecosystem
+
+White-Label Tenant Generator API
+Instantly spins up a co-branded environment for partners (e.g., CPA firms or payroll companies) with custom pricing and branding.
+
+Partner Portal
+Provides licensees with aggregate analytics across their employers and automated revenue-share reporting.
+
+Open Developer API + Sandbox
+Enables third-party systems (HRIS, payroll, staffing platforms) to integrate WOTC screening directly into their apps via OAuth2.
+
+🔐 Compliance & Security
+
+SOC-II-Ready Audit Trails — Logs every system action (actor, entity, event, timestamp).
+
+PII Encryption & Vaulting — Encrypts sensitive data (SSN, DOB) with AES-256 per employer salt.
+
+Granular RBAC Enforcement — Role-based access for candidates, employers, admins, and licensees.
+
+E-Sign Compliance — Captures IP address, timestamp, and device info for every signature.
+
+Automated Retention Policies — Auto-purges data beyond retention limits (IRS 4-year rule).
+
+💳 Billing & Accounting Automation
+
+Dynamic Pricing Engine — Adjusts % fee by credit tier or client size.
+
+Auto-Reconciliation with FreshBooks — Syncs payment status both ways.
+
+ACH & Check Uploads — Employers can upload proof of payment or remittance PDFs.
+
+Consolidated Monthly Statements — Multi-entity employers receive a single statement PDF.
+
+Revenue Share — Automatically splits payments between Rockerbox and licensees.
+
+🧩 Integrations & Ecosystem Expansion
+Integration	Purpose
+AxisCare API (Home Health)	Streamlines caregiver screening and hours tracking.
+Bullhorn / Avionté (Staffing)	Auto-triggers WOTC screening during candidate onboarding.
+Workday / ADP / Gusto / Paycor	Direct API payroll data sync for credit calculation.
+Twilio SMS 2.0	Multi-day reminder sequences and A/B testing for screening links.
+Zapier / Make Triggers	Fire events (“screening.completed”, “state.certified”) for external automations.
+🧠 Next-Gen Expansion Pathways
+Initiative	Description
+Rockerbox RTIC (Real-Time Incentive Cloud)	Unified platform for all employer tax credits — WOTC, FICA Tip, Empowerment Zones, R&D, etc.
+WOTC Predictive Risk Engine	Machine learning model predicting denial probability based on applicant data.
+Employer ROI Calculator Widget	Quick demo tool for investors and sales teams to estimate credit value.
+Offline-Capable PWA Experience	Lets candidates complete questionnaires offline and sync later.
+WOTC University Integration	Connects training achievements and employer metrics to certification badges (C-WOP, Certified WOTC Optimization Professional).
+🔄 System Pathways (End-to-End Flow)
+
+Employer Journey
+
+Onboard → Sign ETA 9198 → Receive QR & API → Employees Complete Questionnaires →
+State Submission → Certifications → Payroll Sync → Credit Calculation → Billing → Reports
+
+
+Employee Journey
+
+Receive Link → Complete AI-Assisted Form → Upload Docs → Confirmation Code → Optional Rewards via Retention Pathway
+
+
+Admin Journey
+
+Create Client → Pre-fill & Send 9198 → Monitor Intake Signatures → Generate Bulk CSVs →
+Auto-State Submission → Import Determinations → Review KPIs → Generate Invoices
+
+
+Licensee Journey
+
+Sign Up → White-Label Setup → Add Employers → Earn Revenue Share → Track ROI via Partner Portal

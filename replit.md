@@ -10,6 +10,15 @@ The platform automates the complex workflow of WOTC screening, submission, track
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+- **October 23, 2024**: Created professional landing page at root route (/) with comprehensive WOTC system description, login options for employers and admins, and marketing content featuring all 9 target groups, 8 platform features, and system statistics
+- Enhanced WOTC questionnaire system with comprehensive screening covering all 9 target groups and 14 subcategories
+- Implemented gamified wizard interface with progress tracking, animations, and conditional logic
+- Added metadata-driven eligibility determination with composite AND/OR conditions
+- Created comprehensive seed data for all major WOTC target groups
+- Fixed critical authentication bugs preventing user data persistence
+
 ## System Architecture
 
 ### Frontend Architecture

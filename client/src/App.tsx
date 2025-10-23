@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
+import LandingPage from "@/pages/landing";
 import EmployeeQuestionnaire from "@/pages/employee/questionnaire";
 import EmployerDashboard from "@/pages/employer/dashboard";
 import EmployeesPage from "@/pages/employer/employees";
@@ -98,19 +99,7 @@ function Router() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center space-y-6 max-w-md mx-auto p-8">
-          <h1 className="text-4xl font-bold">WOTC Optimization Platform</h1>
-          <p className="text-muted-foreground text-lg">
-            Streamline your Work Opportunity Tax Credit screening and maximize your tax savings
-          </p>
-          <Button size="lg" asChild data-testid="button-login">
-            <a href="/api/login">Log In to Continue</a>
-          </Button>
-        </div>
-      </div>
-    );
+    return <LandingPage />;
   }
 
   if (user?.role === "employee") {
