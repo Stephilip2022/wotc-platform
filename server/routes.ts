@@ -82,6 +82,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/employee/questionnaire/response", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.userId, userId));
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      // Get the questionnaire for this employee
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(
+          and(
+            eq(questionnaires.employerId, employee.employerId),
+            eq(questionnaires.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (!questionnaire) {
+        return res.json(null);
+      }
+
+      // Get saved response
+      const [response] = await db
+        .select()
+        .from(questionnaireResponses)
+        .where(
+          and(
+            eq(questionnaireResponses.employeeId, employee.id),
+            eq(questionnaireResponses.questionnaireId, questionnaire.id)
+          )
+        );
+
+      res.json(response || null);
+    } catch (error) {
+      console.error("Error fetching response:", error);
+      res.status(500).json({ error: "Failed to fetch response" });
+    }
+  });
+
   app.post("/api/employee/questionnaire/response", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

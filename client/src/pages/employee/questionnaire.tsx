@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,19 +34,31 @@ export default function EmployeeQuestionnaire() {
     queryKey: ["/api/employee/questionnaire"],
   });
 
+  // Load saved responses
+  const { data: savedResponse } = useQuery<QuestionnaireResponse>({
+    queryKey: ["/api/employee/questionnaire/response"],
+    enabled: !!questionnaire,
+  });
+
+  // Initialize responses from saved data
+  useEffect(() => {
+    if (savedResponse?.responses) {
+      setResponses(savedResponse.responses as Record<string, any>);
+    }
+  }, [savedResponse]);
+
   const saveMutation = useMutation({
-    mutationFn: async (data: Partial<QuestionnaireResponse>) => {
+    mutationFn: async (data: { responses: Record<string, any>; completionPercentage: number }) => {
       return apiRequest("/api/employee/questionnaire/response", {
         method: "POST",
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          questionnaireId: questionnaire?.id,
+          ...data,
+        }),
       });
     },
     onSuccess: () => {
-      toast({
-        title: "Progress Saved",
-        description: "Your answers have been saved automatically.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/employee/questionnaire"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employee/questionnaire/response"] });
     },
   });
 
@@ -54,7 +66,10 @@ export default function EmployeeQuestionnaire() {
     mutationFn: async () => {
       return apiRequest("/api/employee/questionnaire/submit", {
         method: "POST",
-        body: JSON.stringify({ responses }),
+        body: JSON.stringify({
+          questionnaireId: questionnaire?.id,
+          responses,
+        }),
       });
     },
     onSuccess: () => {
