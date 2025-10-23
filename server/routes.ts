@@ -12,12 +12,9 @@ import {
   creditCalculations,
   invoices,
   aiAssistanceLogs,
-  type InsertEmployee,
-  type InsertEmployer,
-  type InsertQuestionnaire,
-  type InsertQuestionnaireResponse,
 } from "@shared/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import OpenAI from "openai";
 
 const openai = new OpenAI({
@@ -26,102 +23,162 @@ const openai = new OpenAI({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup Replit Auth
+  await setupAuth(app);
+
   // ============================================================================
   // AUTHENTICATION ROUTES
   // ============================================================================
   
-  app.get("/api/auth/me", async (req, res) => {
-    // Mock user for development - in production use Replit Auth
-    // For now, return a mock employer user
-    res.json({
-      id: "mock-user-1",
-      email: "employer@example.com",
-      role: "employer",
-      employerId: "mock-employer-1",
-    });
+  app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ error: "Failed to fetch user" });
+    }
   });
 
   // ============================================================================
   // EMPLOYEE PORTAL ROUTES
   // ============================================================================
   
-  app.get("/api/employee/questionnaire", async (req, res) => {
+  app.get("/api/employee/questionnaire", isAuthenticated, async (req: any, res) => {
     try {
-      // Get the employee's questionnaire (mock for now)
-      const mockQuestionnaire = {
-        id: "q1",
-        employerId: "mock-employer-1",
-        name: "WOTC Screening Questionnaire",
-        description: "Complete this questionnaire to determine WOTC eligibility",
-        isActive: true,
-        questions: [
-          {
-            id: "q1",
-            type: "radio",
-            question: "Are you a member of a family that received SNAP (Food Stamps) benefits for at least 3 months in the past 15 months?",
-            helpText: "SNAP is the Supplemental Nutrition Assistance Program, commonly known as food stamps.",
-            options: ["Yes", "No", "Unsure"],
-            required: true,
-            targetGroup: "SNAP Recipients",
-          },
-          {
-            id: "q2",
-            type: "radio",
-            question: "Are you a veteran who was unemployed for at least 4 weeks in the past year?",
-            options: ["Yes", "No"],
-            required: true,
-            targetGroup: "Veterans",
-          },
-          {
-            id: "q3",
-            type: "radio",
-            question: "Have you received Temporary Assistance for Needy Families (TANF) for at least 9 months?",
-            helpText: "TANF is a federal assistance program.",
-            options: ["Yes", "No", "Unsure"],
-            required: true,
-            targetGroup: "TANF Recipients",
-          },
-          {
-            id: "q4",
-            type: "radio",
-            question: "Were you referred to this employer by a vocational rehabilitation agency?",
-            options: ["Yes", "No"],
-            required: true,
-            targetGroup: "Vocational Rehabilitation",
-          },
-          {
-            id: "q5",
-            type: "date",
-            question: "What is your date of birth?",
-            required: true,
-          },
-        ],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
       
-      res.json(mockQuestionnaire);
+      if (!user || !user.employerId) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      // Get active questionnaire for employer
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(
+          and(
+            eq(questionnaires.employerId, user.employerId),
+            eq(questionnaires.isActive, true)
+          )
+        )
+        .limit(1);
+      
+      if (!questionnaire) {
+        return res.status(404).json({ error: "No active questionnaire" });
+      }
+      
+      res.json(questionnaire);
     } catch (error) {
+      console.error("Error fetching questionnaire:", error);
       res.status(500).json({ error: "Failed to fetch questionnaire" });
     }
   });
 
-  app.post("/api/employee/questionnaire/response", async (req, res) => {
+  app.post("/api/employee/questionnaire/response", isAuthenticated, async (req: any, res) => {
     try {
-      const { responses, completionPercentage } = req.body;
-      // Save response to database
+      const userId = req.user.claims.sub;
+      const { questionnaireId, responses, completionPercentage } = req.body;
+      
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Find employee record
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.userId, userId));
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      // Upsert response
+      const existing = await db
+        .select()
+        .from(questionnaireResponses)
+        .where(
+          and(
+            eq(questionnaireResponses.employeeId, employee.id),
+            eq(questionnaireResponses.questionnaireId, questionnaireId)
+          )
+        );
+
+      if (existing.length > 0) {
+        await db
+          .update(questionnaireResponses)
+          .set({
+            responses,
+            completionPercentage,
+            updatedAt: new Date(),
+          })
+          .where(eq(questionnaireResponses.id, existing[0].id));
+      } else {
+        await db.insert(questionnaireResponses).values({
+          employeeId: employee.id,
+          questionnaireId,
+          responses,
+          completionPercentage,
+        });
+      }
+      
       res.json({ success: true });
     } catch (error) {
+      console.error("Error saving response:", error);
       res.status(500).json({ error: "Failed to save response" });
     }
   });
 
-  app.post("/api/employee/questionnaire/submit", async (req, res) => {
+  app.post("/api/employee/questionnaire/submit", isAuthenticated, async (req: any, res) => {
     try {
-      const { responses } = req.body;
-      // Process submission and determine eligibility
+      const userId = req.user.claims.sub;
+      const { questionnaireId, responses } = req.body;
+      
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.userId, userId));
+      
+      if (!employee) {
+        return res.status(400).json({ error: "Employee not found" });
+      }
+
+      // Mark as completed
+      await db
+        .update(questionnaireResponses)
+        .set({
+          responses,
+          isCompleted: true,
+          completionPercentage: 100,
+          submittedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(questionnaireResponses.employeeId, employee.id),
+            eq(questionnaireResponses.questionnaireId, questionnaireId)
+          )
+        );
+
+      // Update employee status
+      await db
+        .update(employees)
+        .set({ status: "screening" })
+        .where(eq(employees.id, employee.id));
+      
       res.json({ success: true, message: "Questionnaire submitted successfully" });
     } catch (error) {
+      console.error("Error submitting questionnaire:", error);
       res.status(500).json({ error: "Failed to submit questionnaire" });
     }
   });
@@ -130,8 +187,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI ASSISTANCE ROUTES
   // ============================================================================
   
-  app.post("/api/ai/simplify-question", async (req, res) => {
+  app.post("/api/ai/simplify-question", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { questionId, questionText } = req.body;
 
       const completion = await openai.chat.completions.create({
@@ -152,6 +210,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const simplifiedQuestion = completion.choices[0].message.content;
 
+      // Log AI assistance for analytics
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.userId, userId));
+      
+      if (employee) {
+        await db.insert(aiAssistanceLogs).values({
+          employeeId: employee.id,
+          questionId,
+          originalQuestion: questionText,
+          simplifiedQuestion: simplifiedQuestion || questionText,
+          usedSimplified: true,
+        });
+      }
+
       res.json({ simplifiedQuestion });
     } catch (error) {
       console.error("AI simplification error:", error);
@@ -163,154 +237,180 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // EMPLOYER PORTAL ROUTES
   // ============================================================================
   
-  app.get("/api/employer/stats", async (req, res) => {
+  app.get("/api/employer/stats", isAuthenticated, async (req: any, res) => {
     try {
-      // Mock stats for development
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employeeCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(employees)
+        .where(eq(employees.employerId, user.employerId));
+
+      const activeScreeningsCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(screenings)
+        .where(
+          and(
+            eq(screenings.employerId, user.employerId),
+            eq(screenings.status, "pending")
+          )
+        );
+
+      const certifiedCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(screenings)
+        .where(
+          and(
+            eq(screenings.employerId, user.employerId),
+            eq(screenings.status, "certified")
+          )
+        );
+
+      const creditsResult = await db
+        .select({
+          projected: sql<string>`COALESCE(SUM(${creditCalculations.projectedCreditAmount}), 0)`,
+          actual: sql<string>`COALESCE(SUM(${creditCalculations.actualCreditAmount}), 0)`,
+        })
+        .from(creditCalculations)
+        .where(eq(creditCalculations.employerId, user.employerId));
+
       res.json({
-        totalEmployees: 45,
-        activeScreenings: 12,
-        certifiedEmployees: 28,
-        projectedCredits: "$126,000",
-        actualCredits: "$84,000",
+        totalEmployees: Number(employeeCount[0].count) || 0,
+        activeScreenings: Number(activeScreeningsCount[0].count) || 0,
+        certifiedEmployees: Number(certifiedCount[0].count) || 0,
+        projectedCredits: `$${Number(creditsResult[0].projected || 0).toLocaleString()}`,
+        actualCredits: `$${Number(creditsResult[0].actual || 0).toLocaleString()}`,
       });
     } catch (error) {
+      console.error("Error fetching employer stats:", error);
       res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
-  app.get("/api/employer/recent-activity", async (req, res) => {
+  app.get("/api/employer/recent-activity", isAuthenticated, async (req: any, res) => {
     try {
-      // Mock activity data
-      res.json([
-        {
-          id: "1",
-          employeeName: "John Smith",
-          action: "Completed Questionnaire",
-          status: "eligible",
-          date: "2025-10-20",
-        },
-        {
-          id: "2",
-          employeeName: "Jane Doe",
-          action: "Screening Started",
-          status: "pending",
-          date: "2025-10-19",
-        },
-        {
-          id: "3",
-          employeeName: "Mike Johnson",
-          action: "Certification Received",
-          status: "certified",
-          date: "2025-10-18",
-        },
-      ]);
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const recentScreenings = await db
+        .select({
+          id: screenings.id,
+          employeeName: sql<string>`${employees.firstName} || ' ' || ${employees.lastName}`,
+          action: sql<string>`CASE 
+            WHEN ${screenings.status} = 'certified' THEN 'Certification Received'
+            WHEN ${screenings.status} = 'eligible' THEN 'Screening Completed'
+            ELSE 'Screening Started'
+          END`,
+          status: screenings.status,
+          date: screenings.updatedAt,
+        })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .where(eq(screenings.employerId, user.employerId))
+        .orderBy(desc(screenings.updatedAt))
+        .limit(10);
+
+      res.json(
+        recentScreenings.map((s) => ({
+          ...s,
+          date: s.date.toISOString().split("T")[0],
+        }))
+      );
     } catch (error) {
+      console.error("Error fetching activity:", error);
       res.status(500).json({ error: "Failed to fetch activity" });
     }
   });
 
-  app.get("/api/employer/employees", async (req, res) => {
+  app.get("/api/employer/employees", isAuthenticated, async (req: any, res) => {
     try {
-      // Mock employee data
-      res.json([
-        {
-          id: "emp1",
-          employerId: "mock-employer-1",
-          firstName: "John",
-          lastName: "Smith",
-          email: "john.smith@example.com",
-          phone: "555-0100",
-          jobTitle: "Sales Associate",
-          hireDate: "2025-09-15",
-          status: "certified",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: "emp2",
-          employerId: "mock-employer-1",
-          firstName: "Jane",
-          lastName: "Doe",
-          email: "jane.doe@example.com",
-          phone: "555-0101",
-          jobTitle: "Warehouse Worker",
-          hireDate: "2025-10-01",
-          status: "screening",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]);
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employeesList = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.employerId, user.employerId))
+        .orderBy(desc(employees.createdAt));
+
+      res.json(employeesList);
     } catch (error) {
+      console.error("Error fetching employees:", error);
       res.status(500).json({ error: "Failed to fetch employees" });
     }
   });
 
-  app.post("/api/employer/employees", async (req, res) => {
+  app.post("/api/employer/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const employeeData = req.body as InsertEmployee;
-      // Add employer ID from session
-      employeeData.employerId = "mock-employer-1";
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
       
-      // In production, insert into database
-      // const newEmployee = await db.insert(employees).values(employeeData).returning();
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employeeData = req.body;
+      employeeData.employerId = user.employerId;
+      employeeData.status = "pending";
       
-      res.json({ success: true, id: "new-emp-id" });
+      const [newEmployee] = await db.insert(employees).values(employeeData).returning();
+      
+      res.json({ success: true, id: newEmployee.id });
     } catch (error) {
+      console.error("Error adding employee:", error);
       res.status(500).json({ error: "Failed to add employee" });
     }
   });
 
-  app.post("/api/employer/employees/:id/remind", async (req, res) => {
+  app.post("/api/employer/employees/:id/remind", isAuthenticated, async (req: any, res) => {
     try {
-      const { id } = req.params;
-      // Send reminder email
+      // TODO: Implement email/SMS reminder
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to send reminder" });
     }
   });
 
-  app.get("/api/employer/screenings", async (req, res) => {
+  app.get("/api/employer/screenings", isAuthenticated, async (req: any, res) => {
     try {
-      // Mock screening data with employee info
-      res.json([
-        {
-          id: "scr1",
-          employeeId: "emp1",
-          employerId: "mock-employer-1",
-          primaryTargetGroup: "SNAP Recipients",
-          status: "certified",
-          certificationNumber: "WOTC-2025-12345",
-          form8850Generated: true,
-          form9061Generated: true,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          employee: {
-            id: "emp1",
-            firstName: "John",
-            lastName: "Smith",
-            email: "john.smith@example.com",
-          },
-        },
-        {
-          id: "scr2",
-          employeeId: "emp2",
-          employerId: "mock-employer-1",
-          primaryTargetGroup: "Veterans",
-          status: "eligible",
-          form8850Generated: false,
-          form9061Generated: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          employee: {
-            id: "emp2",
-            firstName: "Jane",
-            lastName: "Doe",
-            email: "jane.doe@example.com",
-          },
-        },
-      ]);
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const screeningsList = await db
+        .select({
+          screening: screenings,
+          employee: employees,
+        })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .where(eq(screenings.employerId, user.employerId))
+        .orderBy(desc(screenings.updatedAt));
+
+      res.json(
+        screeningsList.map((s) => ({
+          ...s.screening,
+          employee: s.employee,
+        }))
+      );
     } catch (error) {
+      console.error("Error fetching screenings:", error);
       res.status(500).json({ error: "Failed to fetch screenings" });
     }
   });
@@ -319,107 +419,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ADMIN PORTAL ROUTES
   // ============================================================================
   
-  app.get("/api/admin/stats", async (req, res) => {
+  app.get("/api/admin/stats", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerCount = await db.select({ count: sql<number>`count(*)` }).from(employers);
+      const employeeCount = await db.select({ count: sql<number>`count(*)` }).from(employees);
+      const screeningCount = await db.select({ count: sql<number>`count(*)` }).from(screenings);
+      
+      const invoiceTotal = await db
+        .select({ total: sql<string>`COALESCE(SUM(${invoices.amount}), 0)` })
+        .from(invoices)
+        .where(eq(invoices.status, "paid"));
+
       res.json({
-        totalEmployers: 8,
-        activeEmployers: 7,
-        totalEmployees: 324,
-        totalScreenings: 256,
-        totalRevenue: "$127,450",
-        monthlyRevenue: "$24,800",
+        totalEmployers: Number(employerCount[0].count) || 0,
+        activeEmployers: Number(employerCount[0].count) || 0,
+        totalEmployees: Number(employeeCount[0].count) || 0,
+        totalScreenings: Number(screeningCount[0].count) || 0,
+        totalRevenue: `$${Number(invoiceTotal[0].total || 0).toLocaleString()}`,
+        monthlyRevenue: `$${Math.round(Number(invoiceTotal[0].total || 0) / 12).toLocaleString()}`,
       });
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch admin stats" });
+      console.error("Error fetching admin stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
-  app.get("/api/admin/employers/summary", async (req, res) => {
+  app.get("/api/admin/employers/summary", isAuthenticated, async (req: any, res) => {
     try {
-      res.json([
-        {
-          id: "emp1",
-          name: "TechCorp Industries",
-          ein: "12-3456789",
-          contactEmail: "hr@techcorp.com",
-          revenueSharePercentage: "25.00",
-          billingStatus: "active",
-          employeeCount: 45,
-          screeningCount: 38,
-          certifiedCount: 28,
-          projectedCredits: "$126,000",
-        },
-        {
-          id: "emp2",
-          name: "Retail Solutions Inc",
-          ein: "98-7654321",
-          contactEmail: "admin@retailsolutions.com",
-          revenueSharePercentage: "25.00",
-          billingStatus: "active",
-          employeeCount: 82,
-          screeningCount: 72,
-          certifiedCount: 51,
-          projectedCredits: "$204,000",
-        },
-      ]);
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employersList = await db
+        .select({
+          employer: employers,
+          employeeCount: sql<number>`COUNT(DISTINCT ${employees.id})`,
+          screeningCount: sql<number>`COUNT(DISTINCT ${screenings.id})`,
+          certifiedCount: sql<number>`SUM(CASE WHEN ${screenings.status} = 'certified' THEN 1 ELSE 0 END)`,
+          projectedCredits: sql<string>`COALESCE(SUM(${creditCalculations.projectedCreditAmount}), 0)`,
+        })
+        .from(employers)
+        .leftJoin(employees, eq(employees.employerId, employers.id))
+        .leftJoin(screenings, eq(screenings.employerId, employers.id))
+        .leftJoin(creditCalculations, eq(creditCalculations.employerId, employers.id))
+        .groupBy(employers.id);
+
+      res.json(
+        employersList.map((e) => ({
+          ...e.employer,
+          employeeCount: Number(e.employeeCount) || 0,
+          screeningCount: Number(e.screeningCount) || 0,
+          certifiedCount: Number(e.certifiedCount) || 0,
+          projectedCredits: `$${Number(e.projectedCredits || 0).toLocaleString()}`,
+        }))
+      );
     } catch (error) {
+      console.error("Error fetching employer summary:", error);
       res.status(500).json({ error: "Failed to fetch employer summary" });
     }
   });
 
-  app.get("/api/admin/employers", async (req, res) => {
+  app.get("/api/admin/employers", isAuthenticated, async (req: any, res) => {
     try {
-      res.json([
-        {
-          id: "emp1",
-          name: "TechCorp Industries",
-          ein: "12-3456789",
-          contactEmail: "hr@techcorp.com",
-          contactPhone: "555-1000",
-          address: "123 Tech Street",
-          city: "San Francisco",
-          state: "CA",
-          zipCode: "94105",
-          revenueSharePercentage: "25.00",
-          billingStatus: "active",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-        {
-          id: "emp2",
-          name: "Retail Solutions Inc",
-          ein: "98-7654321",
-          contactEmail: "admin@retailsolutions.com",
-          contactPhone: "555-2000",
-          address: "456 Commerce Ave",
-          city: "Los Angeles",
-          state: "CA",
-          zipCode: "90001",
-          revenueSharePercentage: "25.00",
-          billingStatus: "active",
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ]);
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employersList = await db
+        .select()
+        .from(employers)
+        .orderBy(desc(employers.createdAt));
+
+      res.json(employersList);
     } catch (error) {
+      console.error("Error fetching employers:", error);
       res.status(500).json({ error: "Failed to fetch employers" });
     }
   });
 
-  app.post("/api/admin/employers", async (req, res) => {
+  app.post("/api/admin/employers", isAuthenticated, async (req: any, res) => {
     try {
-      const employerData = req.body as InsertEmployer;
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
       
-      // In production, insert into database
-      // const newEmployer = await db.insert(employers).values(employerData).returning();
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerData = req.body;
+      const [newEmployer] = await db.insert(employers).values(employerData).returning();
       
-      res.json({ success: true, id: "new-employer-id" });
+      res.json({ success: true, id: newEmployer.id });
     } catch (error) {
+      console.error("Error adding employer:", error);
       res.status(500).json({ error: "Failed to add employer" });
     }
   });
 
   const httpServer = createServer(app);
-
   return httpServer;
 }

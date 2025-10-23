@@ -184,7 +184,7 @@ export default function EmployeeQuestionnaire() {
             />
           )}
 
-          {question.type === "textarea" && (
+          {question.type === "text" && question.question.length > 100 && (
             <Textarea
               value={responses[question.id] || ""}
               onChange={(e) => setResponses({ ...responses, [question.id]: e.target.value })}
