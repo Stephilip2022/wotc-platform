@@ -210,35 +210,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employee/questionnaire/submit", isAuthenticated, async (req: any, res) => {
     try {
+      console.log("[SUBMIT] Starting questionnaire submission");
       const userId = req.user.claims.sub;
       const { questionnaireId, responses } = req.body;
       
+      console.log("[SUBMIT] User ID:", userId);
+      console.log("[SUBMIT] Questionnaire ID:", questionnaireId);
+      console.log("[SUBMIT] Response count:", Object.keys(responses || {}).length);
+      
       const [user] = await db.select().from(users).where(eq(users.id, userId));
+      console.log("[SUBMIT] User found:", !!user);
+      
       const [employee] = await db
         .select()
         .from(employees)
         .where(eq(employees.userId, userId));
       
+      console.log("[SUBMIT] Employee found:", !!employee);
+      
       if (!employee) {
+        console.error("[SUBMIT] Employee not found for userId:", userId);
         return res.status(400).json({ error: "Employee not found" });
       }
 
-      // Mark as completed
-      await db
-        .update(questionnaireResponses)
-        .set({
-          responses,
-          isCompleted: true,
-          completionPercentage: 100,
-          submittedAt: new Date(),
-          updatedAt: new Date(),
-        })
+      // Check if response already exists
+      const [existing] = await db
+        .select()
+        .from(questionnaireResponses)
         .where(
           and(
             eq(questionnaireResponses.employeeId, employee.id),
             eq(questionnaireResponses.questionnaireId, questionnaireId)
           )
         );
+
+      if (existing) {
+        console.log("[SUBMIT] Updating existing response:", existing.id);
+        // Update existing response
+        await db
+          .update(questionnaireResponses)
+          .set({
+            responses,
+            isCompleted: true,
+            completionPercentage: 100,
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(questionnaireResponses.id, existing.id));
+        console.log("[SUBMIT] Response updated successfully");
+      } else {
+        console.log("[SUBMIT] Creating new response");
+        // Create new response
+        await db.insert(questionnaireResponses).values({
+          employeeId: employee.id,
+          questionnaireId,
+          responses,
+          isCompleted: true,
+          completionPercentage: 100,
+          submittedAt: new Date(),
+        });
+        console.log("[SUBMIT] Response created successfully");
+      }
 
       // Get questionnaire to access question metadata
       const [questionnaire] = await db

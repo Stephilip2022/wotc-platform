@@ -83,11 +83,11 @@ async function upsertUser(claims: any) {
   const [existingUserByEmail] = await db.select().from(users).where(eq(users.email, userEmail));
   
   if (existingUserByEmail) {
-    // Email exists but different sub - update the existing user's ID and other fields
+    // Email exists but different sub - update user fields but preserve existing ID
+    // to avoid breaking foreign key constraints
     const [updatedUser] = await db
       .update(users)
       .set({
-        id: userId,
         firstName: claims["first_name"],
         lastName: claims["last_name"],
         profileImageUrl: claims["profile_image_url"],

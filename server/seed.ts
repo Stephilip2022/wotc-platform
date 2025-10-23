@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { employers, users, employees, questionnaires } from "@shared/schema";
+import { sql, eq } from "drizzle-orm";
 
 async function seed() {
   console.log("Seeding database...");
 
-  // Create sample employers
-  const [employer1] = await db
+  // Create sample employers (or get existing)
+  let employer1 = await db
     .insert(employers)
     .values({
       name: "Acme Corporation",
@@ -20,9 +21,15 @@ async function seed() {
       logoUrl: null,
     })
     .onConflictDoNothing()
-    .returning();
+    .returning()
+    .then(rows => rows[0]);
 
-  const [employer2] = await db
+  // If employer already exists, fetch it
+  if (!employer1) {
+    employer1 = await db.select().from(employers).where(sql`ein = '12-3456789'`).then(rows => rows[0]);
+  }
+
+  let employer2 = await db
     .insert(employers)
     .values({
       name: "Global Retail Inc",
@@ -37,9 +44,45 @@ async function seed() {
       logoUrl: null,
     })
     .onConflictDoNothing()
-    .returning();
+    .returning()
+    .then(rows => rows[0]);
+
+  if (!employer2) {
+    employer2 = await db.select().from(employers).where(sql`ein = '98-7654321'`).then(rows => rows[0]);
+  }
 
   console.log("✓ Created employers");
+
+  // Create test employee user linked to employer1
+  if (employer1) {
+    const [testUser] = await db
+      .insert(users)
+      .values({
+        email: "test.employee@example.com",
+        firstName: "Test",
+        lastName: "Employee",
+        role: "employee",
+        employerId: employer1.id,
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (testUser) {
+      await db
+        .insert(employees)
+        .values({
+          employerId: employer1.id,
+          userId: testUser.id,
+          firstName: "Test",
+          lastName: "Employee",
+          email: "test.employee@example.com",
+          status: "screening",
+        })
+        .onConflictDoNothing();
+
+      console.log("✓ Created test employee user");
+    }
+  }
 
   // Create comprehensive WOTC questionnaire for employer1
   if (employer1) {
