@@ -60,6 +60,15 @@ export const employers = pgTable("employers", {
   welcomeMessage: text("welcome_message"),
   customFooter: text("custom_footer"),
   
+  // Questionnaire distribution
+  questionnaireUrl: text("questionnaire_url").unique(), // Unique URL slug: /screen/acme-corp
+  qrCodeUrl: text("qr_code_url"), // Generated QR code image URL
+  embedCode: text("embed_code"), // <iframe> or API integration code
+  
+  // Status
+  onboardingStatus: text("onboarding_status").default("pending"), // 'pending', 'documents_sent', 'signed', 'active'
+  activatedAt: timestamp("activated_at"),
+  
   // Billing configuration
   revenueSharePercentage: decimal("revenue_share_percentage", { precision: 5, scale: 2 }).default("25.00"),
   stripeCustomerId: text("stripe_customer_id"),
@@ -297,6 +306,66 @@ export const aiAssistanceLogs = pgTable("ai_assistance_logs", {
 export const insertAiAssistanceLogSchema = createInsertSchema(aiAssistanceLogs).omit({ id: true, createdAt: true });
 export type InsertAiAssistanceLog = z.infer<typeof insertAiAssistanceLogSchema>;
 export type AiAssistanceLog = typeof aiAssistanceLogs.$inferSelect;
+
+// ============================================================================
+// ETA FORM 9198 (EMPLOYER INTAKE & ONBOARDING)
+// ============================================================================
+
+export const etaForm9198 = pgTable("eta_form_9198", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Employer Information (Section 1)
+  employerName: text("employer_name").notNull(),
+  tradeName: text("trade_name"),
+  ein: text("ein").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  zipCode: text("zip_code").notNull(),
+  contactName: text("contact_name").notNull(),
+  contactTitle: text("contact_title"),
+  contactPhone: text("contact_phone").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  
+  // Business Details
+  businessType: text("business_type"), // 'corporation', 'partnership', 'sole_proprietor', 'llc', 'other'
+  naicsCode: text("naics_code"),
+  numberOfEmployees: integer("number_of_employees"),
+  averageHiresPerMonth: integer("average_hires_per_month"),
+  
+  // Authorization (Section 2)
+  authorizedName: text("authorized_name"),
+  authorizedTitle: text("authorized_title"),
+  authorizedSignature: text("authorized_signature"), // Base64 or signature URL
+  authorizedDate: text("authorized_date"),
+  
+  // E-signature tracking
+  signatureRequestSentAt: timestamp("signature_request_sent_at"),
+  signedAt: timestamp("signed_at"),
+  signatureIpAddress: text("signature_ip_address"),
+  signatureUserAgent: text("signature_user_agent"),
+  
+  // Document URLs
+  pdfUrl: text("pdf_url"), // Generated PDF of completed form
+  termsOfServiceUrl: text("terms_of_service_url"), // Link to engagement letter
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  
+  // Status
+  status: text("status").default("draft"), // 'draft', 'sent', 'signed', 'processed'
+  
+  // Admin tracking
+  createdBy: varchar("created_by").references(() => users.id),
+  processedBy: varchar("processed_by").references(() => users.id),
+  processedAt: timestamp("processed_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertEtaForm9198Schema = createInsertSchema(etaForm9198).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEtaForm9198 = z.infer<typeof insertEtaForm9198Schema>;
+export type EtaForm9198 = typeof etaForm9198.$inferSelect;
 
 // ============================================================================
 // QUESTIONNAIRE METADATA TYPES (for conditional logic & gamification)
