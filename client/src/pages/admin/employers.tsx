@@ -341,7 +341,12 @@ export default function AdminEmployersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" data-testid={`button-settings-${employer.id}`}>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => navigate(`/admin/employers/${employer.id}/settings`)}
+                        data-testid={`button-settings-${employer.id}`}
+                      >
                         <Settings className="h-4 w-4" />
                       </Button>
                     </TableCell>

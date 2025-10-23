@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import { promises as fs } from "fs";
 import path from "path";
+import QRCode from "qrcode";
 import { db } from "./db";
 import { 
   users, 
@@ -775,6 +776,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/admin/employers/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerId = req.params.id;
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      res.json(employer);
+    } catch (error) {
+      console.error("Error fetching employer:", error);
+      res.status(500).json({ error: "Failed to fetch employer" });
+    }
+  });
+
   app.post("/api/admin/employers", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -791,6 +818,162 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error adding employer:", error);
       res.status(500).json({ error: "Failed to add employer" });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN EMPLOYER BRANDING ROUTES
+  // ============================================================================
+
+  app.post("/api/admin/employers/:id/logo", isAuthenticated, upload.single("logo"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const employerId = req.params.id;
+
+      // Get employer to verify it exists
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      // Upload logo to public object storage
+      const publicDir = process.env.PUBLIC_OBJECT_SEARCH_PATHS
+        ? JSON.parse(process.env.PUBLIC_OBJECT_SEARCH_PATHS)[0]
+        : "/public";
+      const logosDir = path.join(publicDir, "logos");
+      const fileName = `${employerId}-${Date.now()}.${req.file.originalname.split('.').pop()}`;
+      const filePath = path.join(logosDir, fileName);
+
+      // Create directory and write file
+      await fs.mkdir(logosDir, { recursive: true });
+      await fs.writeFile(filePath, req.file.buffer);
+
+      // Update employer with logo URL (relative path for serving)
+      const logoUrl = `/logos/${fileName}`;
+      await db
+        .update(employers)
+        .set({ logoUrl })
+        .where(eq(employers.id, employerId));
+
+      res.json({ success: true, logoUrl });
+    } catch (error) {
+      console.error("Error uploading logo:", error);
+      res.status(500).json({ error: "Failed to upload logo" });
+    }
+  });
+
+  app.patch("/api/admin/employers/:id/branding", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerId = req.params.id;
+      const { primaryColor, welcomeMessage, customFooter } = req.body;
+
+      // Update employer branding
+      const [updatedEmployer] = await db
+        .update(employers)
+        .set({
+          primaryColor: primaryColor || undefined,
+          welcomeMessage: welcomeMessage || undefined,
+          customFooter: customFooter || undefined,
+        })
+        .where(eq(employers.id, employerId))
+        .returning();
+
+      if (!updatedEmployer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      res.json(updatedEmployer);
+    } catch (error) {
+      console.error("Error updating branding:", error);
+      res.status(500).json({ error: "Failed to update branding" });
+    }
+  });
+
+  app.post("/api/admin/employers/:id/qr-code", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerId = req.params.id;
+
+      // Get employer
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      if (!employer.questionnaireUrl) {
+        return res.status(400).json({ error: "Employer has no questionnaire URL" });
+      }
+
+      // Generate QR code as data URL
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : "http://localhost:5000";
+      const fullUrl = `${baseUrl}/screen/${employer.questionnaireUrl}`;
+      
+      const qrCodeDataUrl = await QRCode.toDataURL(fullUrl, {
+        errorCorrectionLevel: "M",
+        margin: 2,
+        width: 400,
+      });
+
+      // Save QR code as PNG to public object storage
+      const publicDir = process.env.PUBLIC_OBJECT_SEARCH_PATHS
+        ? JSON.parse(process.env.PUBLIC_OBJECT_SEARCH_PATHS)[0]
+        : "/public";
+      const qrCodesDir = path.join(publicDir, "qr-codes");
+      const fileName = `${employerId}-qr.png`;
+      const filePath = path.join(qrCodesDir, fileName);
+
+      // Convert data URL to buffer
+      const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+
+      // Create directory and write file
+      await fs.mkdir(qrCodesDir, { recursive: true });
+      await fs.writeFile(filePath, buffer);
+
+      // Update employer with QR code URL
+      const qrCodeUrl = `/qr-codes/${fileName}`;
+      await db
+        .update(employers)
+        .set({ qrCodeUrl })
+        .where(eq(employers.id, employerId));
+
+      res.json({ success: true, qrCodeUrl, qrCodeDataUrl });
+    } catch (error) {
+      console.error("Error generating QR code:", error);
+      res.status(500).json({ error: "Failed to generate QR code" });
     }
   });
 
