@@ -23,6 +23,7 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import OpenAI from "openai";
 import { determineEligibility, calculateCredit } from "./eligibility";
+import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -818,6 +819,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error adding employer:", error);
       res.status(500).json({ error: "Failed to add employer" });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN CSV EXPORT ROUTES
+  // ============================================================================
+
+  app.get("/api/admin/export/wotc-csv", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { employerId, state, startDate, endDate } = req.query;
+
+      // Build query with filters including the most recent completed questionnaire response
+      // Subquery to get latest completed response per employee
+      const latestResponsesSubquery = db
+        .select({
+          employeeId: questionnaireResponses.employeeId,
+          latestResponseId: sql<string>`MAX(${questionnaireResponses.id})`.as("latest_response_id"),
+        })
+        .from(questionnaireResponses)
+        .where(eq(questionnaireResponses.isCompleted, true))
+        .groupBy(questionnaireResponses.employeeId)
+        .as("latest_responses");
+
+      let query = db
+        .select({
+          screening: screenings,
+          employee: employees,
+          employer: employers,
+          responses: questionnaireResponses,
+        })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .innerJoin(employers, eq(screenings.employerId, employers.id))
+        .leftJoin(latestResponsesSubquery, eq(latestResponsesSubquery.employeeId, employees.id))
+        .leftJoin(
+          questionnaireResponses,
+          eq(questionnaireResponses.id, latestResponsesSubquery.latestResponseId)
+        );
+
+      // Apply filters
+      const conditions = [];
+      if (employerId) {
+        conditions.push(eq(screenings.employerId, employerId as string));
+      }
+      if (state) {
+        conditions.push(eq(employees.state, state as string));
+      }
+      if (startDate) {
+        conditions.push(sql`${screenings.createdAt} >= ${new Date(startDate as string)}`);
+      }
+      if (endDate) {
+        conditions.push(sql`${screenings.createdAt} <= ${new Date(endDate as string)}`);
+      }
+      
+      // Only export eligible or certified screenings
+      conditions.push(sql`${screenings.status} IN ('eligible', 'certified')`);
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+
+      const results = await query.orderBy(desc(screenings.createdAt));
+
+      // Generate CSV content using state-specific template if state is provided
+      const csvContent = state
+        ? generateStateSpecificCSV(results, state as string)
+        : generateWOTCExportCSV(results);
+
+      // Get unique employer names for filename
+      const uniqueEmployers = [...new Set(results.map(r => r.employer.name))];
+      
+      const filename = generateExportFilename(
+        uniqueEmployers,
+        results.length,
+        state as string,
+        startDate ? new Date(startDate as string) : undefined,
+        endDate ? new Date(endDate as string) : undefined
+      );
+
+      // Set headers for CSV download
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error generating CSV export:", error);
+      res.status(500).json({ error: "Failed to generate export" });
     }
   });
 
