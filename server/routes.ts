@@ -879,6 +879,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/admin/eta-forms/:id/complete-signature", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { signedByName, signedByEmail } = req.body;
+
+      if (!signedByName || !signedByEmail) {
+        return res.status(400).json({ error: "signedByName and signedByEmail are required" });
+      }
+
+      // Import the utility function
+      const { completeSignatureAndActivate } = await import("./utils/onboarding");
+
+      // Trigger employer account creation
+      const result = await completeSignatureAndActivate(
+        req.params.id,
+        signedByName,
+        signedByEmail
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error completing signature:", error);
+      res.status(500).json({ error: error.message || "Failed to complete signature" });
+    }
+  });
+
   // ============================================================================
   // ADMIN QUESTIONNAIRE ROUTES
   // ============================================================================

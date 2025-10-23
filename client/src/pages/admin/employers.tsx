@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -22,14 +23,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Settings } from "lucide-react";
+import { Plus, Search, Settings, FileText, CheckCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Employer } from "@shared/schema";
+import type { Employer, EtaForm9198 } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployerSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { z } from "zod";
+import { Link } from "wouter";
 
 type EmployerFormData = z.infer<typeof insertEmployerSchema>;
 
@@ -37,9 +39,17 @@ export default function AdminEmployersPage() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [signatureDialogOpen, setSignatureDialogOpen] = useState(false);
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [signedByName, setSignedByName] = useState("");
+  const [signedByEmail, setSignedByEmail] = useState("");
 
   const { data: employers, isLoading } = useQuery<Employer[]>({
     queryKey: ["/api/admin/employers"],
+  });
+
+  const { data: etaForms } = useQuery<EtaForm9198[]>({
+    queryKey: ["/api/admin/eta-forms"],
   });
 
   const form = useForm<EmployerFormData>({
@@ -66,10 +76,8 @@ export default function AdminEmployersPage() {
 
   const addEmployerMutation = useMutation({
     mutationFn: async (data: EmployerFormData) => {
-      return apiRequest("/api/admin/employers", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("POST", "/api/admin/employers", data);
+      return await response.json();
     },
     onSuccess: () => {
       toast({
@@ -89,6 +97,35 @@ export default function AdminEmployersPage() {
     },
   });
 
+  const completeSignatureMutation = useMutation({
+    mutationFn: async ({ formId, signedByName, signedByEmail }: { formId: string; signedByName: string; signedByEmail: string }) => {
+      const response = await apiRequest("POST", `/api/admin/eta-forms/${formId}/complete-signature`, {
+        signedByName,
+        signedByEmail,
+      });
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Employer Account Created!",
+        description: `${data.employer.name} has been activated. Questionnaire URL: ${data.questionnaireUrl}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/eta-forms"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/employers"] });
+      setSignatureDialogOpen(false);
+      setSignedByName("");
+      setSignedByEmail("");
+      setSelectedFormId(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to complete signature",
+        variant: "destructive",
+      });
+    },
+  });
+
   const filteredEmployers = employers?.filter((emp) => {
     const search = searchTerm.toLowerCase();
     return (
@@ -98,22 +135,31 @@ export default function AdminEmployersPage() {
     );
   }) || [];
 
+  const pendingForms = etaForms?.filter((form) => form.status === "sent") || [];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2">Employers</h1>
           <p className="text-muted-foreground">
-            Manage employer accounts and billing configuration
+            Manage employer accounts, onboarding, and billing
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-employer">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Employer
-            </Button>
-          </DialogTrigger>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild data-testid="button-new-eta-form">
+            <Link href="/admin/employers/new">
+              <FileText className="h-4 w-4 mr-2" />
+              New ETA Form 9198
+            </Link>
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-employer">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Employer
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Employer</DialogTitle>
@@ -240,24 +286,36 @@ export default function AdminEmployersPage() {
             </Form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search employers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-                data-testid="input-search-employers"
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
+      <Tabs defaultValue="employers" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="employers" data-testid="tab-employers">
+            Active Employers ({employers?.length || 0})
+          </TabsTrigger>
+          <TabsTrigger value="pending" data-testid="tab-pending-forms">
+            Pending Forms ({pendingForms.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="employers" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-4">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search employers..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search-employers"
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
@@ -298,8 +356,124 @@ export default function AdminEmployersPage() {
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="pending" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending ETA Form 9198 Signatures</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employer Name</TableHead>
+                    <TableHead>EIN</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Sent Date</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pendingForms.length > 0 ? (
+                    pendingForms.map((form) => (
+                      <TableRow key={form.id} data-testid={`row-eta-form-${form.id}`}>
+                        <TableCell className="font-medium">{form.employerName}</TableCell>
+                        <TableCell className="font-mono text-sm">{form.ein}</TableCell>
+                        <TableCell>{form.contactEmail}</TableCell>
+                        <TableCell>
+                          {form.signatureRequestSentAt
+                            ? new Date(form.signatureRequestSentAt).toLocaleDateString()
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedFormId(form.id);
+                              setSignedByName(form.contactName);
+                              setSignedByEmail(form.contactEmail);
+                              setSignatureDialogOpen(true);
+                            }}
+                            data-testid={`button-complete-signature-${form.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Complete Signature
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No pending forms awaiting signature.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      <Dialog open={signatureDialogOpen} onOpenChange={setSignatureDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete Signature & Activate Employer</DialogTitle>
+            <DialogDescription>
+              This will create the employer account and activate their WOTC screening portal.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Signed By Name</label>
+              <Input
+                value={signedByName}
+                onChange={(e) => setSignedByName(e.target.value)}
+                placeholder="John Doe"
+                data-testid="input-signed-by-name"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Signed By Email</label>
+              <Input
+                type="email"
+                value={signedByEmail}
+                onChange={(e) => setSignedByEmail(e.target.value)}
+                placeholder="john@example.com"
+                data-testid="input-signed-by-email"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setSignatureDialogOpen(false)}
+              data-testid="button-cancel-signature"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedFormId) {
+                  completeSignatureMutation.mutate({
+                    formId: selectedFormId,
+                    signedByName,
+                    signedByEmail,
+                  });
+                }
+              }}
+              disabled={!signedByName || !signedByEmail || completeSignatureMutation.isPending}
+              data-testid="button-confirm-signature"
+            >
+              {completeSignatureMutation.isPending ? "Processing..." : "Complete & Activate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
