@@ -297,3 +297,154 @@ export const aiAssistanceLogs = pgTable("ai_assistance_logs", {
 export const insertAiAssistanceLogSchema = createInsertSchema(aiAssistanceLogs).omit({ id: true, createdAt: true });
 export type InsertAiAssistanceLog = z.infer<typeof insertAiAssistanceLogSchema>;
 export type AiAssistanceLog = typeof aiAssistanceLogs.$inferSelect;
+
+// ============================================================================
+// QUESTIONNAIRE METADATA TYPES (for conditional logic & gamification)
+// ============================================================================
+
+// WOTC Target Groups (9 major groups + all 14 subcategories)
+export const WOTCTargetGroups = {
+  // Group IV: TANF Recipients
+  "IV-A": "TANF Recipients",
+  "IV-B": "TANF Long-term Recipients (18+ months)",
+  
+  // Group V: Veterans (with all subcategories)
+  "V": "Veterans (General)",
+  "V-Unemployed-4wk": "Unemployed Veterans (4+ weeks)",
+  "V-Unemployed-6mo": "Unemployed Veterans (6+ months)", 
+  "V-Disability": "Veterans with Service-Connected Disability",
+  "V-Disability-Unemployed-6mo": "Veterans with Disability + Unemployed 6+ months",
+  "V-SNAP": "Veterans receiving SNAP",
+  
+  // Group VI: Ex-Felons
+  "VI": "Ex-Felons (Convicted Felons)",
+  
+  // Group VII: Designated Community Residents
+  "VII-EZ": "Empowerment Zone Residents",
+  "VII-RRC": "Rural Renewal County Residents",
+  
+  // Group VIII: Vocational Rehabilitation
+  "VIII": "Vocational Rehabilitation Referrals",
+  
+  // Group IX: SNAP Recipients
+  "IX": "SNAP Recipients (Age 18-39)",
+  
+  // Group X: SSI Recipients
+  "X": "SSI Recipients",
+  
+  // Group XI: Summer Youth
+  "XI": "Summer Youth Employees (16-17)",
+  "XI-EZ": "Summer Youth in Empowerment Zones",
+  "XI-RRC": "Summer Youth in Rural Renewal Counties",
+  
+  // Group XII: Long-Term Unemployment Recipients
+  "XII": "Long-Term Unemployment Recipients (27+ weeks)",
+} as const;
+
+export type WOTCTargetGroup = keyof typeof WOTCTargetGroups;
+
+// Simple condition for single predicate
+export interface SimpleCondition {
+  sourceQuestionId: string;
+  operator: "equals" | "notEquals" | "includes" | "greaterThan" | "lessThan" | "exists";
+  value: any;
+}
+
+// Composite condition for AND/OR logic
+export interface CompositeCondition {
+  logic: "AND" | "OR";
+  conditions: (SimpleCondition | CompositeCondition)[];
+}
+
+export type DisplayCondition = SimpleCondition | CompositeCondition;
+
+export interface QuestionUI {
+  icon?: string; // Lucide icon name
+  helpText?: string;
+  placeholder?: string;
+  encouragingMessage?: string; // Gamification: "Great job!", "Almost there!"
+}
+
+// Gating configuration for section applicability
+export interface GatingConfig {
+  questionId: string; // Stable ID of the gating question
+  questionText: string; // Display text: "Are you a Veteran?"
+  applicableAnswers: any[]; // ["Yes"] - answers that make section applicable
+  notApplicableAnswers: any[]; // ["No", "Not Applicable"] - answers that skip section
+  skipMessage?: string; // "No problem! Moving on to the next section."
+  skipReasonKey?: string; // Key for tracking why section was skipped
+}
+
+export interface QuestionMetadata {
+  id: string;
+  question: string;
+  type: "text" | "radio" | "checkbox" | "date" | "file" | "number" | "select";
+  required?: boolean;
+  options?: string[]; // For radio/checkbox/select
+  
+  // WOTC Eligibility (now type-safe)
+  targetGroup?: WOTCTargetGroup;
+  eligibilityTrigger?: any; // Value that makes this question trigger eligibility
+  eligibleValues?: any[]; // Alternative: array of eligible values
+  
+  // Conditional Logic (supports complex AND/OR)
+  displayCondition?: DisplayCondition; // When to show this question
+  followUpQuestions?: QuestionMetadata[]; // Nested follow-up questions
+  notApplicableBehavior?: "skip" | "require"; // What happens if marked N/A
+  
+  // UI/UX
+  ui?: QuestionUI;
+}
+
+export interface QuestionnaireSection {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string; // Lucide icon name for the section
+  targetGroups: WOTCTargetGroup[]; // Target groups this section screens for
+  
+  // Explicit gating configuration
+  gatingConfig: GatingConfig;
+  
+  // Follow-up questions (shown if section is applicable)
+  questions: QuestionMetadata[];
+  
+  // UI
+  order: number;
+  weight?: number; // For progress calculation
+  completionMessage?: string; // "Thank you for sharing your Veteran status!"
+}
+
+export interface EnhancedQuestionnaire {
+  name: string;
+  description?: string;
+  welcomeMessage?: string;
+  completionMessage?: string;
+  
+  // Section-based structure
+  sections: QuestionnaireSection[];
+  
+  // Metadata
+  estimatedMinutes?: number;
+  gamification?: {
+    showProgressBar: boolean;
+    celebrateCompletion: boolean;
+    encouragingMessages: boolean;
+  };
+}
+
+// Response tracking with section states
+export interface SectionState {
+  sectionId: string;
+  status: "pending" | "in_progress" | "completed" | "skipped";
+  completedAt?: string;
+  skippedReason?: string;
+}
+
+export interface ResponseData {
+  answers: Record<string, any>; // questionId -> answer
+  sectionStates: SectionState[];
+  currentSectionId?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
