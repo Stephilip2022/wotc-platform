@@ -1173,25 +1173,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/eta-forms", isAuthenticated, async (req: any, res) => {
     try {
+      console.log("🔍 POST /api/admin/eta-forms - Request received");
+      console.log("📦 Request body:", JSON.stringify(req.body, null, 2));
+      
       const userId = req.user.claims.sub;
+      console.log("👤 User ID from claims:", userId);
+      
       const [user] = await db.select().from(users).where(eq(users.id, userId));
+      console.log("🔐 User from DB:", user);
       
       if (!user || user.role !== "admin") {
+        console.log("❌ Authorization failed - user role:", user?.role);
         return res.status(403).json({ error: "Unauthorized" });
       }
 
+      console.log("✅ Authorization passed");
+
       // Validate request body
+      console.log("🔬 Validating request body with schema...");
       const validatedData = insertEtaForm9198Schema.parse(req.body);
+      console.log("✅ Validation passed. Validated data:", JSON.stringify(validatedData, null, 2));
       
       // Create ETA Form 9198
+      console.log("💾 Inserting into database...");
+      const insertData = {
+        ...validatedData,
+        createdBy: userId,
+        signatureRequestSentAt: validatedData.status === "sent" ? new Date() : undefined,
+      };
+      console.log("📝 Insert data:", JSON.stringify(insertData, null, 2));
+      
       const [newForm] = await db
         .insert(etaForm9198)
-        .values({
-          ...validatedData,
-          createdBy: userId,
-          signatureRequestSentAt: validatedData.status === "sent" ? new Date() : undefined,
-        })
+        .values(insertData)
         .returning();
+
+      console.log("✅ Database insert successful. New form:", JSON.stringify(newForm, null, 2));
 
       // TODO: If status is "sent", trigger email to contactEmail with e-signature request
       if (newForm.status === "sent") {
@@ -1199,10 +1216,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Future: Integrate with DocuSign, HelloSign, or build custom e-signature flow
       }
 
+      console.log("📤 Sending response...");
       res.json(newForm);
     } catch (error) {
-      console.error("Error creating ETA form:", error);
-      res.status(500).json({ error: "Failed to create ETA form" });
+      console.error("❌ Error creating ETA form:", error);
+      console.error("Stack trace:", error instanceof Error ? error.stack : "No stack");
+      res.status(500).json({ error: "Failed to create ETA form", details: error instanceof Error ? error.message : String(error) });
     }
   });
 

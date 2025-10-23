@@ -27,7 +27,7 @@ const etaForm9198Schema = z.object({
   zipCode: z.string().regex(/^\d{5}(-\d{4})?$/, "Invalid ZIP code"),
   contactName: z.string().min(2, "Contact name is required"),
   contactTitle: z.string().optional(),
-  contactPhone: z.string().min(10, "Phone number is required"),
+  contactPhone: z.string().min(7, "Phone number must be at least 7 digits").regex(/^[\d\s\-\(\)\.]+$/, "Phone number can only contain digits, spaces, dashes, dots, and parentheses"),
   contactEmail: z.string().email("Valid email is required"),
   
   // Business Details
