@@ -57,39 +57,61 @@ function updateUserSession(
 
 async function upsertUser(claims: any) {
   const userId = claims["sub"];
+  const userEmail = claims["email"];
   
-  // Check if user exists
-  const [existingUser] = await db.select().from(users).where(eq(users.id, userId));
+  // Check if user exists by ID
+  const [existingUserById] = await db.select().from(users).where(eq(users.id, userId));
   
-  if (existingUser) {
-    // Update existing user
+  if (existingUserById) {
+    // Update existing user (preserve role unless claims specify it)
     const [updatedUser] = await db
       .update(users)
       .set({
-        email: claims["email"],
+        email: userEmail,
         firstName: claims["first_name"],
         lastName: claims["last_name"],
         profileImageUrl: claims["profile_image_url"],
+        ...(claims["role"] && { role: claims["role"] }), // Update role if provided in claims
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
       .returning();
     return updatedUser;
-  } else {
-    // Create new user with default employee role
-    const [newUser] = await db
-      .insert(users)
-      .values({
+  }
+  
+  // Check if email already exists with different ID
+  const [existingUserByEmail] = await db.select().from(users).where(eq(users.email, userEmail));
+  
+  if (existingUserByEmail) {
+    // Email exists but different sub - update the existing user's ID and other fields
+    const [updatedUser] = await db
+      .update(users)
+      .set({
         id: userId,
-        email: claims["email"],
         firstName: claims["first_name"],
         lastName: claims["last_name"],
         profileImageUrl: claims["profile_image_url"],
-        role: "employee",
+        ...(claims["role"] && { role: claims["role"] }), // Update role if provided in claims
+        updatedAt: new Date(),
       })
+      .where(eq(users.email, userEmail))
       .returning();
-    return newUser;
+    return updatedUser;
   }
+  
+  // Create new user with role from claims or default to employee
+  const [newUser] = await db
+    .insert(users)
+    .values({
+      id: userId,
+      email: userEmail,
+      firstName: claims["first_name"],
+      lastName: claims["last_name"],
+      profileImageUrl: claims["profile_image_url"],
+      role: claims["role"] || "employee",
+    })
+    .returning();
+  return newUser;
 }
 
 export async function setupAuth(app: Express) {
@@ -133,11 +155,30 @@ export async function setupAuth(app: Express) {
     })(req, res, next);
   });
 
-  app.get("/api/callback", (req, res, next) => {
+  app.get("/api/callback", async (req, res, next) => {
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
       failureRedirect: "/api/login",
-    })(req, res, next);
+    })(req, res, async () => {
+      // After successful auth, redirect based on user role
+      try {
+        const userId = (req.user as any)?.claims?.sub;
+        if (userId) {
+          const [user] = await db.select().from(users).where(eq(users.id, userId));
+          if (user) {
+            const redirectMap: Record<string, string> = {
+              admin: "/admin",
+              employer: "/employer",
+              employee: "/employee",
+            };
+            return res.redirect(redirectMap[user.role] || "/");
+          }
+        }
+        res.redirect("/");
+      } catch (error) {
+        console.error("Error in callback redirect:", error);
+        res.redirect("/");
+      }
+    });
   });
 
   app.get("/api/logout", (req, res) => {

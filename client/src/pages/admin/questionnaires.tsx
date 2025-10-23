@@ -27,10 +27,7 @@ export default function QuestionnairesPage() {
 
   const createMutation = useMutation({
     mutationFn: (data: any) =>
-      apiRequest("/api/admin/questionnaires", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+      apiRequest("POST", "/api/admin/questionnaires", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/questionnaires"] });
       setDialogOpen(false);
@@ -41,9 +38,7 @@ export default function QuestionnairesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      apiRequest(`/api/admin/questionnaires/${id}`, {
-        method: "DELETE",
-      }),
+      apiRequest("DELETE", `/api/admin/questionnaires/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/questionnaires"] });
       toast({ title: "Questionnaire deleted" });
@@ -128,7 +123,7 @@ export default function QuestionnairesPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-sm text-muted-foreground">
-                  {q.questions.length} questions
+                  {((q.questions as any[]) || []).length} questions
                 </div>
               </CardContent>
             </Card>
@@ -153,8 +148,8 @@ function QuestionnaireForm({
   const [name, setName] = useState(questionnaire?.name || "");
   const [employerId, setEmployerId] = useState(questionnaire?.employerId || "");
   const [isActive, setIsActive] = useState(questionnaire?.isActive ?? true);
-  const [questions, setQuestions] = useState(
-    questionnaire?.questions || [
+  const [questions, setQuestions] = useState<any[]>(
+    (questionnaire?.questions as any[]) || [
       {
         id: "q1",
         question: "Have you received SNAP (Food Stamps) benefits in the last 6 months?",
