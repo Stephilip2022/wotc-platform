@@ -432,19 +432,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const userId = req.user.claims.sub;
-      const { employeeId, documentType, description } = req.body;
+      const { documentType, description } = req.body;
 
-      // Get employee to verify access
+      // Get employee from authenticated user
       const [employee] = await db
         .select()
         .from(employees)
         .where(eq(employees.userId, userId));
 
       if (!employee) {
-        return res.status(403).json({ error: "Unauthorized" });
+        return res.status(403).json({ error: "No employee record found. Please contact your employer." });
       }
 
-      // Create directory path in object storage
+      // Create directory path in object storage (private storage for sensitive documents)
       const privateDir = process.env.PRIVATE_OBJECT_DIR || "/.private";
       const employerDir = path.join(privateDir, employee.employerId);
       const filePath = path.join(employerDir, `${Date.now()}-${req.file.originalname}`);

@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -5,8 +6,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { HelpCircle, Sparkles } from "lucide-react";
+import { HelpCircle, Sparkles, Upload, CheckCircle, FileText, Loader2 } from "lucide-react";
 import { shouldDisplayQuestion } from "./conditional-logic";
+import { useToast } from "@/hooks/use-toast";
 import type { QuestionMetadata } from "@shared/schema";
 
 interface QuestionRendererProps {
@@ -28,6 +30,19 @@ export default function QuestionRenderer({
   isSimplifying,
   simplifiedText,
 }: QuestionRendererProps) {
+  const { toast } = useToast();
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; url: string } | null>(null);
+
+  // Sync uploaded file state with value prop (for persisted responses)
+  useEffect(() => {
+    if (value && typeof value === "object" && value.url) {
+      setUploadedFile(value);
+    } else if (!value) {
+      setUploadedFile(null);
+    }
+  }, [value]);
+
   // Check if question should be displayed
   if (!shouldDisplayQuestion(question.id, question.displayCondition, responses)) {
     return null;
@@ -40,6 +55,53 @@ export default function QuestionRenderer({
   const questionVariants = {
     hidden: { opacity: 0, y: 10 },
     visible: { opacity: 1, y: 0 },
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("documentType", question.ui?.documentType || "other");
+      formData.append("description", questionText);
+
+      const response = await fetch("/api/upload/document", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const data = await response.json();
+      const fileData = {
+        name: file.name,
+        url: data.document.filePath,
+        documentId: data.document.id,
+      };
+
+      setUploadedFile(fileData);
+      onAnswerChange(question.id, fileData);
+
+      toast({
+        title: "File uploaded",
+        description: `${file.name} has been uploaded successfully.`,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Upload failed",
+        description: "Failed to upload file. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -189,6 +251,51 @@ export default function QuestionRenderer({
             </option>
           ))}
         </select>
+      )}
+
+      {question.type === "file" && (
+        <div className="space-y-3">
+          {uploadedFile ? (
+            <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/50">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <div className="flex-1">
+                <p className="font-medium text-sm">{uploadedFile.name}</p>
+                <p className="text-xs text-muted-foreground">File uploaded successfully</p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setUploadedFile(null);
+                  onAnswerChange(question.id, null);
+                }}
+                data-testid={`button-remove-file-${question.id}`}
+              >
+                Remove
+              </Button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Input
+                id={question.id}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+                data-testid={`input-file-${question.id}`}
+                className="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium hover:file:bg-accent"
+              />
+              {isUploading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/80 rounded-md">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                </div>
+              )}
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Accepted formats: PDF, JPG, PNG, DOC, DOCX (max 10MB)
+          </p>
+        </div>
       )}
 
       {/* Encouraging Message */}
