@@ -19,6 +19,7 @@ import {
   Building2,
   ClipboardCheck,
   FolderOpen,
+  Download,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -33,6 +34,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Employers", url: "/admin/employers", icon: Building2 },
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
+    { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "Analytics", url: "/admin/analytics", icon: FileText },
     { title: "Billing", url: "/admin/billing", icon: DollarSign },
     { title: "Settings", url: "/admin/settings", icon: Settings },

@@ -826,6 +826,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ADMIN CSV EXPORT ROUTES
   // ============================================================================
 
+  // Admin: Get export record count
+  app.get("/api/admin/export/wotc-csv/count", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { employerId, state, startDate, endDate, status } = req.query;
+
+      // Build same query as export but just count
+      const latestResponsesSubquery = db
+        .select({
+          employeeId: questionnaireResponses.employeeId,
+          latestResponseId: sql<string>`MAX(${questionnaireResponses.id})`.as("latest_response_id"),
+        })
+        .from(questionnaireResponses)
+        .where(eq(questionnaireResponses.isCompleted, true))
+        .groupBy(questionnaireResponses.employeeId)
+        .as("latest_responses");
+
+      let query = db
+        .select({
+          screening: screenings,
+          employee: employees,
+          employer: employers,
+          responses: questionnaireResponses,
+        })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .innerJoin(employers, eq(screenings.employerId, employers.id))
+        .leftJoin(latestResponsesSubquery, eq(latestResponsesSubquery.employeeId, employees.id))
+        .leftJoin(
+          questionnaireResponses,
+          eq(questionnaireResponses.id, latestResponsesSubquery.latestResponseId)
+        );
+
+      // Apply same filters as export
+      const conditions = [];
+      if (employerId) {
+        conditions.push(eq(screenings.employerId, employerId as string));
+      }
+      if (state) {
+        conditions.push(eq(employees.state, state as string));
+      }
+      if (startDate) {
+        conditions.push(sql`${screenings.createdAt} >= ${new Date(startDate as string)}`);
+      }
+      if (endDate) {
+        conditions.push(sql`${screenings.createdAt} <= ${new Date(endDate as string)}`);
+      }
+      
+      // Status filter
+      if (status === "eligible" || status === "certified") {
+        conditions.push(eq(screenings.status, status));
+      } else {
+        // Default: only export eligible or certified screenings
+        conditions.push(sql`${screenings.status} IN ('eligible', 'certified')`);
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+
+      const results = await query;
+      
+      res.json({ count: results.length });
+    } catch (error: any) {
+      console.error("Export count error:", error);
+      res.status(500).json({ message: "Failed to count records" });
+    }
+  });
+
   app.get("/api/admin/export/wotc-csv", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
