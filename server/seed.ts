@@ -56,6 +56,8 @@ async function seed() {
             type: "radio",
             required: true,
             options: ["Yes", "No"],
+            targetGroup: "IX",
+            eligibilityTrigger: "Yes",
           },
           {
             id: "q2",
@@ -63,6 +65,8 @@ async function seed() {
             type: "radio",
             required: true,
             options: ["Yes", "No"],
+            targetGroup: "V",
+            eligibilityTrigger: "Yes",
           },
           {
             id: "q3",
@@ -70,6 +74,8 @@ async function seed() {
             type: "radio",
             required: true,
             options: ["Yes", "No"],
+            targetGroup: "X",
+            eligibilityTrigger: "Yes",
           },
           {
             id: "q4",
@@ -77,6 +83,8 @@ async function seed() {
             type: "radio",
             required: true,
             options: ["Yes", "No"],
+            targetGroup: "IV-B",
+            eligibilityTrigger: "Yes",
           },
           {
             id: "q5",
@@ -84,6 +92,8 @@ async function seed() {
             type: "radio",
             required: true,
             options: ["Yes", "No"],
+            targetGroup: "VI",
+            eligibilityTrigger: "Yes",
           },
           {
             id: "q6",
@@ -134,6 +144,8 @@ async function seed() {
             type: "checkbox",
             required: false,
             options: ["SNAP/Food Stamps", "TANF", "SSI", "Unemployment", "None"],
+            targetGroup: "IX",
+            eligibilityTrigger: ["SNAP/Food Stamps"],
           },
           {
             id: "q3",

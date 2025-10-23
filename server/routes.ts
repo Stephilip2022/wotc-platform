@@ -1,5 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
+import { promises as fs } from "fs";
+import path from "path";
 import { db } from "./db";
 import { 
   users, 
@@ -16,10 +19,30 @@ import {
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import OpenAI from "openai";
+import { determineEligibility, calculateCredit } from "./eligibility";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only certain file types
+    const allowedTypes = /jpeg|jpg|png|pdf|doc|docx/;
+    const mimeType = allowedTypes.test(file.mimetype);
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    
+    if (mimeType && extname) {
+      return cb(null, true);
+    }
+    cb(new Error("Invalid file type. Only JPEG, PNG, PDF, DOC, and DOCX files are allowed."));
+  },
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -217,13 +240,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
           )
         );
 
+      // Get questionnaire to access question metadata
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(eq(questionnaires.id, questionnaireId));
+
+      if (!questionnaire) {
+        return res.status(400).json({ error: "Questionnaire not found" });
+      }
+
+      // Determine WOTC eligibility using metadata-driven approach
+      const eligibilityResult = determineEligibility(
+        responses,
+        questionnaire.questions as any[],
+        employee.dateOfBirth || undefined,
+        employee.hireDate || undefined
+      );
+
+      // Create or update screening record
+      const existingScreening = await db
+        .select()
+        .from(screenings)
+        .where(eq(screenings.employeeId, employee.id));
+
+      if (existingScreening.length > 0) {
+        await db
+          .update(screenings)
+          .set({
+            targetGroups: eligibilityResult.targetGroups,
+            primaryTargetGroup: eligibilityResult.primaryTargetGroup,
+            status: eligibilityResult.isEligible ? "eligible" : "not_eligible",
+            eligibilityDeterminedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(screenings.id, existingScreening[0].id));
+      } else {
+        await db.insert(screenings).values({
+          employeeId: employee.id,
+          employerId: employee.employerId,
+          targetGroups: eligibilityResult.targetGroups,
+          primaryTargetGroup: eligibilityResult.primaryTargetGroup,
+          status: eligibilityResult.isEligible ? "eligible" : "not_eligible",
+          eligibilityDeterminedAt: new Date(),
+        });
+      }
+
       // Update employee status
       await db
         .update(employees)
-        .set({ status: "screening" })
+        .set({ 
+          status: eligibilityResult.isEligible ? "screening" : "not_eligible" 
+        })
         .where(eq(employees.id, employee.id));
+
+      // Calculate projected credit
+      if (eligibilityResult.isEligible && eligibilityResult.primaryTargetGroup) {
+        const projectedCredit = eligibilityResult.maxPotentialCredit;
+        
+        // Create or update credit calculation
+        const existingCredit = await db
+          .select()
+          .from(creditCalculations)
+          .where(eq(creditCalculations.employeeId, employee.id));
+
+        if (existingCredit.length > 0) {
+          await db
+            .update(creditCalculations)
+            .set({
+              targetGroup: eligibilityResult.primaryTargetGroup,
+              projectedCreditAmount: projectedCredit.toString(),
+              updatedAt: new Date(),
+            })
+            .where(eq(creditCalculations.id, existingCredit[0].id));
+        } else {
+          await db.insert(creditCalculations).values({
+            employeeId: employee.id,
+            employerId: employee.employerId,
+            targetGroup: eligibilityResult.primaryTargetGroup,
+            projectedCreditAmount: projectedCredit.toString(),
+            hoursWorked: 0,
+            wagesEarned: "0",
+          });
+        }
+      }
       
-      res.json({ success: true, message: "Questionnaire submitted successfully" });
+      res.json({ 
+        success: true, 
+        message: "Questionnaire submitted successfully",
+        eligibility: eligibilityResult,
+      });
     } catch (error) {
       console.error("Error submitting questionnaire:", error);
       res.status(500).json({ error: "Failed to submit questionnaire" });
@@ -277,6 +383,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("AI simplification error:", error);
       res.status(500).json({ error: "Failed to simplify question" });
+    }
+  });
+
+  // ============================================================================
+  // DOCUMENT UPLOAD ROUTES
+  // ============================================================================
+
+  app.post("/api/upload/document", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const userId = req.user.claims.sub;
+      const { employeeId, documentType, description } = req.body;
+
+      // Get employee to verify access
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.userId, userId));
+
+      if (!employee) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Create directory path in object storage
+      const privateDir = process.env.PRIVATE_OBJECT_DIR || "/.private";
+      const employerDir = path.join(privateDir, employee.employerId);
+      const filePath = path.join(employerDir, `${Date.now()}-${req.file.originalname}`);
+
+      // Write file to object storage
+      await fs.mkdir(employerDir, { recursive: true });
+      await fs.writeFile(filePath, req.file.buffer);
+
+      // Save document record to database
+      const [document] = await db.insert(documents).values({
+        employeeId: employee.id,
+        employerId: employee.employerId,
+        documentType: documentType || "other",
+        fileName: req.file.originalname,
+        filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        description,
+        uploadedBy: userId,
+      }).returning();
+
+      res.json({ success: true, document });
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      res.status(500).json({ error: "Failed to upload document" });
+    }
+  });
+
+  app.get("/api/documents", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.userId, userId));
+
+      if (!employee) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const docs = await db
+        .select()
+        .from(documents)
+        .where(eq(documents.employeeId, employee.id))
+        .orderBy(desc(documents.createdAt));
+
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
     }
   });
 

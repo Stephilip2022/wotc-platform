@@ -123,7 +123,7 @@ export const questionnaires = pgTable("questionnaires", {
   name: text("name").notNull(),
   description: text("description"),
   isActive: boolean("is_active").default(true),
-  questions: jsonb("questions").notNull(), // Array of question objects
+  questions: jsonb("questions").notNull(), // Array of question objects with targetGroup metadata
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

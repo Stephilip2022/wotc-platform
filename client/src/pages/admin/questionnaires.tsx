@@ -262,12 +262,12 @@ function QuestionnaireForm({
                     data-testid={`input-question-${index}`}
                   />
 
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Select
                       value={q.type}
                       onValueChange={(value) => updateQuestion(index, "type", value)}
                     >
-                      <SelectTrigger data-testid={`select-type-${index}`}>
+                      <SelectTrigger data-testid={`select-type-${index}`} className="w-40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -276,6 +276,25 @@ function QuestionnaireForm({
                         <SelectItem value="checkbox">Checkboxes</SelectItem>
                         <SelectItem value="date">Date</SelectItem>
                         <SelectItem value="file">File Upload</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={q.targetGroup || "none"}
+                      onValueChange={(value) => updateQuestion(index, "targetGroup", value === "none" ? undefined : value)}
+                    >
+                      <SelectTrigger data-testid={`select-target-group-${index}`} className="w-48">
+                        <SelectValue placeholder="Target Group (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="IX">IX - SNAP</SelectItem>
+                        <SelectItem value="IV-A">IV-A - TANF Long-term</SelectItem>
+                        <SelectItem value="IV-B">IV-B - TANF Short-term</SelectItem>
+                        <SelectItem value="V">V - Veteran</SelectItem>
+                        <SelectItem value="VI">VI - Ex-Felon</SelectItem>
+                        <SelectItem value="X">X - SSI</SelectItem>
+                        <SelectItem value="XI">XI - Summer Youth</SelectItem>
                       </SelectContent>
                     </Select>
 
@@ -291,9 +310,32 @@ function QuestionnaireForm({
                         }
                         placeholder="Options (comma separated)"
                         data-testid={`input-options-${index}`}
+                        className="flex-1"
                       />
                     )}
                   </div>
+
+                  {q.targetGroup && (
+                    <div className="mt-2">
+                      <Input
+                        value={
+                          Array.isArray(q.eligibilityTrigger)
+                            ? q.eligibilityTrigger.join(", ")
+                            : q.eligibilityTrigger || ""
+                        }
+                        onChange={(e) => {
+                          const values = e.target.value.split(",").map((v) => v.trim());
+                          updateQuestion(index, "eligibilityTrigger", values.length === 1 ? values[0] : values);
+                        }}
+                        placeholder="Eligibility trigger value(s) - comma separated for multiple"
+                        data-testid={`input-trigger-${index}`}
+                        className="text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Which answer(s) make employee eligible for this target group
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <Button
