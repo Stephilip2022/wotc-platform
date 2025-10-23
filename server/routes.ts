@@ -529,6 +529,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // ADMIN QUESTIONNAIRE ROUTES
+  // ============================================================================
+
+  app.get("/api/admin/questionnaires", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const questionnairesList = await db
+        .select()
+        .from(questionnaires)
+        .orderBy(desc(questionnaires.createdAt));
+
+      res.json(questionnairesList);
+    } catch (error) {
+      console.error("Error fetching questionnaires:", error);
+      res.status(500).json({ error: "Failed to fetch questionnaires" });
+    }
+  });
+
+  app.post("/api/admin/questionnaires", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { id, name, employerId, isActive, questions } = req.body;
+      
+      if (id) {
+        // Update existing
+        await db
+          .update(questionnaires)
+          .set({ name, employerId, isActive, questions, updatedAt: new Date() })
+          .where(eq(questionnaires.id, id));
+        res.json({ success: true, id });
+      } else {
+        // Create new
+        const [newQuestionnaire] = await db
+          .insert(questionnaires)
+          .values({ name, employerId, isActive, questions })
+          .returning();
+        res.json({ success: true, id: newQuestionnaire.id });
+      }
+    } catch (error) {
+      console.error("Error saving questionnaire:", error);
+      res.status(500).json({ error: "Failed to save questionnaire" });
+    }
+  });
+
+  app.delete("/api/admin/questionnaires/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      await db.delete(questionnaires).where(eq(questionnaires.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting questionnaire:", error);
+      res.status(500).json({ error: "Failed to delete questionnaire" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

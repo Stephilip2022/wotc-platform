@@ -32,6 +32,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
     { title: "Employers", url: "/admin/employers", icon: Building2 },
+    { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
     { title: "Analytics", url: "/admin/analytics", icon: FileText },
     { title: "Billing", url: "/admin/billing", icon: DollarSign },
     { title: "Settings", url: "/admin/settings", icon: Settings },

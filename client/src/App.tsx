@@ -15,6 +15,7 @@ import EmployeesPage from "@/pages/employer/employees";
 import ScreeningsPage from "@/pages/employer/screenings";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminEmployersPage from "@/pages/admin/employers";
+import AdminQuestionnairesPage from "@/pages/admin/questionnaires";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -66,6 +67,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                 <>
                   <Route path="/admin" component={AdminDashboard} />
                   <Route path="/admin/employers" component={AdminEmployersPage} />
+                  <Route path="/admin/questionnaires" component={AdminQuestionnairesPage} />
                   <Route component={NotFound} />
                 </>
               ) : (
