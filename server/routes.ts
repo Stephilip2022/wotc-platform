@@ -15,6 +15,8 @@ import {
   creditCalculations,
   invoices,
   aiAssistanceLogs,
+  etaForm9198,
+  insertEtaForm9198Schema,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -789,6 +791,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error adding employer:", error);
       res.status(500).json({ error: "Failed to add employer" });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN ETA FORM 9198 ROUTES (Employer Onboarding)
+  // ============================================================================
+
+  app.get("/api/admin/eta-forms", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const forms = await db
+        .select()
+        .from(etaForm9198)
+        .orderBy(desc(etaForm9198.createdAt));
+
+      res.json(forms);
+    } catch (error) {
+      console.error("Error fetching ETA forms:", error);
+      res.status(500).json({ error: "Failed to fetch ETA forms" });
+    }
+  });
+
+  app.post("/api/admin/eta-forms", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Validate request body
+      const validatedData = insertEtaForm9198Schema.parse(req.body);
+      
+      // Create ETA Form 9198
+      const [newForm] = await db
+        .insert(etaForm9198)
+        .values({
+          ...validatedData,
+          createdBy: userId,
+          signatureRequestSentAt: validatedData.status === "sent" ? new Date() : undefined,
+        })
+        .returning();
+
+      // TODO: If status is "sent", trigger email to contactEmail with e-signature request
+      if (newForm.status === "sent") {
+        console.log(`📧 E-signature request would be sent to: ${newForm.contactEmail}`);
+        // Future: Integrate with DocuSign, HelloSign, or build custom e-signature flow
+      }
+
+      res.json(newForm);
+    } catch (error) {
+      console.error("Error creating ETA form:", error);
+      res.status(500).json({ error: "Failed to create ETA form" });
+    }
+  });
+
+  app.get("/api/admin/eta-forms/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const [form] = await db
+        .select()
+        .from(etaForm9198)
+        .where(eq(etaForm9198.id, req.params.id));
+
+      if (!form) {
+        return res.status(404).json({ error: "Form not found" });
+      }
+
+      res.json(form);
+    } catch (error) {
+      console.error("Error fetching ETA form:", error);
+      res.status(500).json({ error: "Failed to fetch ETA form" });
     }
   });
 

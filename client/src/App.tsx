@@ -17,6 +17,7 @@ import ScreeningsPage from "@/pages/employer/screenings";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminEmployersPage from "@/pages/admin/employers";
 import AdminQuestionnairesPage from "@/pages/admin/questionnaires";
+import EtaForm9198Page from "@/pages/admin/eta-form-9198";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -68,6 +69,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                 <>
                   <Route path="/admin" component={AdminDashboard} />
                   <Route path="/admin/employers" component={AdminEmployersPage} />
+                  <Route path="/admin/employers/new" component={EtaForm9198Page} />
                   <Route path="/admin/questionnaires" component={AdminQuestionnairesPage} />
                   <Route component={NotFound} />
                 </>
