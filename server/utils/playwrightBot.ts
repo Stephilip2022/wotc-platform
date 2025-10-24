@@ -80,6 +80,72 @@ export class StatePortalBot {
   }
 
   /**
+   * Handle Multi-Factor Authentication (MFA)
+   * Supports TOTP, SMS, and Email-based MFA
+   */
+  private async handleMFA(config: StatePortalConfig): Promise<void> {
+    if (!this.page) throw new Error('Page not initialized');
+    
+    try {
+      // Wait for MFA prompt (various selectors for different portal types)
+      const mfaPrompt = await this.page.waitForSelector(
+        'input[name="mfaCode"], input[name="verificationCode"], input[name="otpCode"], input[id="mfa"], input[placeholder*="code" i], input[placeholder*="verification" i]',
+        { timeout: 5000 }
+      ).catch(() => null);
+      
+      if (!mfaPrompt) {
+        // No MFA prompt found - either not required or already bypassed
+        return;
+      }
+      
+      // Generate MFA token based on type
+      let mfaToken: string | null = null;
+      
+      switch (config.mfaType) {
+        case 'totp':
+        case 'authenticator_app':
+          if (config.mfaSecret) {
+            const { generateTOTPToken } = await import('./mfaHandler');
+            mfaToken = generateTOTPToken(config.mfaSecret);
+          }
+          break;
+          
+        case 'sms':
+        case 'email':
+          // For SMS/Email, we would need to wait for manual entry or integrate with provider
+          // For now, try to use backup codes if available
+          if (config.mfaBackupCodes && Array.isArray(config.mfaBackupCodes) && config.mfaBackupCodes.length > 0) {
+            mfaToken = config.mfaBackupCodes[0]; // Use first backup code
+          } else {
+            throw new Error(`${config.mfaType} MFA requires manual token entry or backup codes`);
+          }
+          break;
+          
+        default:
+          console.warn(`Unknown MFA type: ${config.mfaType}`);
+          return;
+      }
+      
+      if (mfaToken) {
+        await mfaPrompt.fill(mfaToken);
+        
+        // Submit MFA token
+        const mfaSubmit = await this.page.waitForSelector(
+          'button[type="submit"], button:has-text("Verify"), button:has-text("Submit"), button:has-text("Continue")',
+          { timeout: 5000 }
+        );
+        await mfaSubmit?.click();
+        
+        // Wait for MFA verification to complete
+        await this.page.waitForLoadState('networkidle', { timeout: 15000 });
+      }
+    } catch (error) {
+      console.error('MFA handling failed:', error);
+      // Don't throw - let the main flow handle login errors
+    }
+  }
+
+  /**
    * Texas WOTC OLS Portal automation
    * Updated with resilient selectors and explicit waits
    */
@@ -114,6 +180,11 @@ export class StatePortalBot {
       
       // Wait for navigation and check for login errors
       await this.page.waitForLoadState('networkidle', { timeout: 30000 });
+      
+      // Handle MFA if enabled
+      if (config.mfaEnabled && config.mfaSecret) {
+        await this.handleMFA(config);
+      }
       
       const loginError = await this.page.locator('text=/invalid.*credentials|incorrect.*password|login.*failed/i').count();
       if (loginError > 0) {

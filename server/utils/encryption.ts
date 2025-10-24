@@ -114,3 +114,23 @@ export function decryptChallengeQuestions(questions: Array<{ question: string; a
     answer: q.answer ? decrypt(q.answer) : q.answer,
   }));
 }
+
+/**
+ * Encrypts MFA backup codes array
+ * @param codes - Array of backup code strings
+ * @returns Array with encrypted codes
+ */
+export function encryptMfaBackupCodes(codes: string[] | null) {
+  if (!codes || !Array.isArray(codes)) return codes;
+  return codes.map(code => encrypt(code));
+}
+
+/**
+ * Decrypts MFA backup codes array
+ * @param codes - Array with encrypted codes
+ * @returns Array with decrypted codes
+ */
+export function decryptMfaBackupCodes(codes: string[] | null) {
+  if (!codes || !Array.isArray(codes)) return codes;
+  return codes.map(code => decrypt(code));
+}

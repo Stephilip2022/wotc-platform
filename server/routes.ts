@@ -3650,7 +3650,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs } = await import("@shared/schema");
-      const { decryptCredentials, decryptChallengeQuestions } = await import("./utils/encryption");
+      const { decryptCredentials, decryptChallengeQuestions, decryptMfaBackupCodes, decrypt } = await import("./utils/encryption");
       
       const configs = await db.select().from(statePortalConfigs).orderBy(statePortalConfigs.stateName);
       
@@ -3659,6 +3659,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...config,
         credentials: decryptCredentials(config.credentials as any),
         challengeQuestions: decryptChallengeQuestions(config.challengeQuestions as any),
+        mfaSecret: config.mfaSecret ? decrypt(config.mfaSecret) : null,
+        mfaBackupCodes: decryptMfaBackupCodes(config.mfaBackupCodes as any),
       }));
       
       res.json(decryptedConfigs);
@@ -3679,7 +3681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs } = await import("@shared/schema");
-      const { decryptCredentials, decryptChallengeQuestions } = await import("./utils/encryption");
+      const { decryptCredentials, decryptChallengeQuestions, decryptMfaBackupCodes, decrypt } = await import("./utils/encryption");
       
       const [config] = await db
         .select()
@@ -3695,6 +3697,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...config,
         credentials: decryptCredentials(config.credentials as any),
         challengeQuestions: decryptChallengeQuestions(config.challengeQuestions as any),
+        mfaSecret: config.mfaSecret ? decrypt(config.mfaSecret) : null,
+        mfaBackupCodes: decryptMfaBackupCodes(config.mfaBackupCodes as any),
       };
 
       res.json(decrypted);
@@ -3715,7 +3719,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs, updateStatePortalConfigSchema } = await import("@shared/schema");
-      const { encryptCredentials, encryptChallengeQuestions } = await import("./utils/encryption");
+      const { encryptCredentials, encryptChallengeQuestions, encryptMfaBackupCodes, encrypt } = await import("./utils/encryption");
       
       // Validate input
       const validated = updateStatePortalConfigSchema.safeParse(req.body);
@@ -3733,6 +3737,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (dataToUpdate.challengeQuestions) {
         dataToUpdate.challengeQuestions = encryptChallengeQuestions(dataToUpdate.challengeQuestions);
+      }
+      if (dataToUpdate.mfaSecret) {
+        dataToUpdate.mfaSecret = encrypt(dataToUpdate.mfaSecret);
+      }
+      if (dataToUpdate.mfaBackupCodes) {
+        dataToUpdate.mfaBackupCodes = encryptMfaBackupCodes(dataToUpdate.mfaBackupCodes as any);
       }
 
       const [updated] = await db

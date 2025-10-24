@@ -958,6 +958,14 @@ export const statePortalConfigs = pgTable("state_portal_configs", {
   challengeQuestions: jsonb("challenge_questions"), // Array of { question: string, answer: string }
   loginFieldSelectors: jsonb("login_field_selectors"), // Playwright selectors for login fields
   
+  // Multi-Factor Authentication (MFA)
+  mfaEnabled: boolean("mfa_enabled").default(false),
+  mfaType: text("mfa_type"), // 'totp', 'sms', 'email', 'authenticator_app'
+  mfaSecret: text("mfa_secret"), // Encrypted TOTP secret for authenticator apps
+  mfaPhone: text("mfa_phone"), // Phone number for SMS-based MFA
+  mfaEmail: text("mfa_email"), // Email for email-based MFA
+  mfaBackupCodes: jsonb("mfa_backup_codes"), // Array of encrypted backup codes
+  
   // CSV format requirements
   requiredColumns: text("required_columns").array(), // Required CSV columns for this state
   optionalColumns: text("optional_columns").array(), // Optional columns
