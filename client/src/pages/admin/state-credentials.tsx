@@ -260,13 +260,13 @@ export default function StateCredentialsPage() {
                     {state.ocrEnabled && (
                       <Badge variant="secondary">OCR Enabled</Badge>
                     )}
-                    {state.nextRotationDue && new Date(state.nextRotationDue) < new Date() && (
+                    {state.credentials && state.nextRotationDue && new Date(state.nextRotationDue) < new Date() && (
                       <Badge variant="destructive" data-testid={`badge-rotation-overdue-${state.stateCode}`}>
                         <AlertTriangle className="w-3 h-3 mr-1" />
                         Rotation Overdue
                       </Badge>
                     )}
-                    {state.nextRotationDue && new Date(state.nextRotationDue) > new Date() && (
+                    {state.credentials && state.nextRotationDue && new Date(state.nextRotationDue) > new Date() && (
                       <Badge variant="outline" data-testid={`badge-rotation-scheduled-${state.stateCode}`}>
                         <Calendar className="w-3 h-3 mr-1" />
                         Next: {new Date(state.nextRotationDue).toLocaleDateString()}

@@ -3694,8 +3694,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get single state portal configuration (with decryption for bot use)
-  app.get("/api/admin/state-portals/:stateCode", isAuthenticated, async (req: any, res) => {
+  // ====================================================================
+  // SPECIFIC STATE PORTAL ROUTES (must come before parameterized routes)
+  // ====================================================================
+
+  // Get state portals that are due for credential rotation
+  app.get("/api/admin/state-portals/rotation-due", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -3705,87 +3709,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs } = await import("@shared/schema");
-      const { decryptCredentials, decryptChallengeQuestions, decryptMfaBackupCodes, decrypt } = await import("./utils/encryption");
+      const { sql } = await import("drizzle-orm");
       
-      const [config] = await db
+      const now = new Date();
+      
+      // Get portals that:
+      // 1. Have credentials set
+      // 2. Either have passed their expiry date OR next rotation is due
+      const duePortals = await db
         .select()
         .from(statePortalConfigs)
-        .where(eq(statePortalConfigs.stateCode, req.params.stateCode));
+        .where(
+          sql`${statePortalConfigs.credentials} IS NOT NULL 
+          AND (
+            ${statePortalConfigs.credentialExpiryDate} < ${now}
+            OR ${statePortalConfigs.nextRotationDue} < ${now}
+          )`
+        )
+        .orderBy(statePortalConfigs.credentialExpiryDate);
+
+      // Calculate days overdue for each
+      const portalsWithStatus = duePortals.map(portal => {
+        const expiryDate = portal.credentialExpiryDate || portal.nextRotationDue;
+        const daysOverdue = expiryDate 
+          ? Math.floor((now.getTime() - new Date(expiryDate).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+        
+        return {
+          ...portal,
+          daysOverdue,
+          status: daysOverdue > 0 ? 'overdue' : 'due-soon',
+        };
+      });
       
-      if (!config) {
-        return res.status(404).json({ error: "State portal not found" });
-      }
-
-      // Decrypt for bot/admin use
-      const decrypted = {
-        ...config,
-        credentials: decryptCredentials(config.credentials as any),
-        challengeQuestions: decryptChallengeQuestions(config.challengeQuestions as any),
-        mfaSecret: config.mfaSecret ? decrypt(config.mfaSecret) : null,
-        mfaBackupCodes: decryptMfaBackupCodes(config.mfaBackupCodes as any),
-      };
-
-      res.json(decrypted);
+      res.json(portalsWithStatus);
     } catch (error) {
-      console.error("Error fetching state portal:", error);
-      res.status(500).json({ error: "Failed to fetch state portal" });
-    }
-  });
-
-  // Update state portal configuration
-  app.patch("/api/admin/state-portals/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      
-      if (!user || user.role !== 'admin') {
-        return res.status(403).json({ error: "Admin access required" });
-      }
-
-      const { statePortalConfigs, updateStatePortalConfigSchema } = await import("@shared/schema");
-      const { encryptCredentials, encryptChallengeQuestions, encryptMfaBackupCodes, encrypt } = await import("./utils/encryption");
-      
-      // Validate input
-      const validated = updateStatePortalConfigSchema.safeParse(req.body);
-      if (!validated.success) {
-        return res.status(400).json({ 
-          error: "Invalid input", 
-          details: validated.error.issues 
-        });
-      }
-
-      // Encrypt sensitive fields before storage
-      const dataToUpdate = { ...validated.data };
-      if (dataToUpdate.credentials) {
-        dataToUpdate.credentials = encryptCredentials(dataToUpdate.credentials);
-      }
-      if (dataToUpdate.challengeQuestions) {
-        dataToUpdate.challengeQuestions = encryptChallengeQuestions(dataToUpdate.challengeQuestions);
-      }
-      if (dataToUpdate.mfaSecret) {
-        dataToUpdate.mfaSecret = encrypt(dataToUpdate.mfaSecret);
-      }
-      if (dataToUpdate.mfaBackupCodes) {
-        dataToUpdate.mfaBackupCodes = encryptMfaBackupCodes(dataToUpdate.mfaBackupCodes as any);
-      }
-
-      const [updated] = await db
-        .update(statePortalConfigs)
-        .set({
-          ...dataToUpdate,
-          updatedAt: new Date(),
-        })
-        .where(eq(statePortalConfigs.id, req.params.id))
-        .returning();
-
-      if (!updated) {
-        return res.status(404).json({ error: "State portal not found" });
-      }
-
-      res.json(updated);
-    } catch (error) {
-      console.error("Error updating state portal:", error);
-      res.status(500).json({ error: "Failed to update state portal" });
+      console.error("Error fetching rotation-due portals:", error);
+      res.status(500).json({ error: "Failed to fetch rotation-due portals" });
     }
   });
 
@@ -3904,11 +3864,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ====================================================================
-  // CREDENTIAL ROTATION ENDPOINTS
+  // PARAMETERIZED STATE PORTAL ROUTES (must come after specific routes)
   // ====================================================================
 
-  // Get state portals that are due for credential rotation
-  app.get("/api/admin/state-portals/rotation-due", isAuthenticated, async (req: any, res) => {
+  // Get single state portal configuration (with decryption for bot use)
+  app.get("/api/admin/state-portals/:stateCode", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const [user] = await db.select().from(users).where(eq(users.id, userId));
@@ -3918,48 +3878,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs } = await import("@shared/schema");
-      const { sql } = await import("drizzle-orm");
+      const { decryptCredentials, decryptChallengeQuestions, decryptMfaBackupCodes, decrypt } = await import("./utils/encryption");
       
-      const now = new Date();
-      
-      // Get portals that:
-      // 1. Have credentials set
-      // 2. Either have passed their expiry date OR next rotation is due
-      const duePortals = await db
+      const [config] = await db
         .select()
         .from(statePortalConfigs)
-        .where(
-          sql`${statePortalConfigs.credentials} IS NOT NULL 
-          AND (
-            ${statePortalConfigs.credentialExpiryDate} < ${now}
-            OR ${statePortalConfigs.nextRotationDue} < ${now}
-          )`
-        )
-        .orderBy(statePortalConfigs.credentialExpiryDate);
+        .where(eq(statePortalConfigs.stateCode, req.params.stateCode));
+      
+      if (!config) {
+        return res.status(404).json({ error: "State portal not found" });
+      }
 
-      // Calculate days overdue for each
-      const portalsWithStatus = duePortals.map(portal => {
-        const expiryDate = portal.credentialExpiryDate || portal.nextRotationDue;
-        const daysOverdue = expiryDate 
-          ? Math.floor((now.getTime() - new Date(expiryDate).getTime()) / (1000 * 60 * 60 * 24))
-          : 0;
-        
-        return {
-          ...portal,
-          daysOverdue,
-          urgency: daysOverdue > 30 ? 'critical' : daysOverdue > 14 ? 'high' : 'medium'
-        };
-      });
+      // Decrypt for bot/admin use
+      const decrypted = {
+        ...config,
+        credentials: decryptCredentials(config.credentials as any),
+        challengeQuestions: decryptChallengeQuestions(config.challengeQuestions as any),
+        mfaSecret: config.mfaSecret ? decrypt(config.mfaSecret) : null,
+        mfaBackupCodes: decryptMfaBackupCodes(config.mfaBackupCodes as any),
+      };
 
-      res.json({
-        count: portalsWithStatus.length,
-        portals: portalsWithStatus
-      });
+      res.json(decrypted);
     } catch (error) {
-      console.error("Error fetching rotation-due portals:", error);
-      res.status(500).json({ error: "Failed to fetch rotation-due portals" });
+      console.error("Error fetching state portal:", error);
+      res.status(500).json({ error: "Failed to fetch state portal" });
     }
   });
+
+  // Update state portal configuration
+  app.patch("/api/admin/state-portals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs, updateStatePortalConfigSchema } = await import("@shared/schema");
+      const { encryptCredentials, encryptChallengeQuestions, encryptMfaBackupCodes, encrypt } = await import("./utils/encryption");
+      
+      // Validate input
+      const validated = updateStatePortalConfigSchema.safeParse(req.body);
+      if (!validated.success) {
+        return res.status(400).json({ 
+          error: "Invalid input", 
+          details: validated.error.issues 
+        });
+      }
+
+      // Encrypt sensitive fields before storage
+      const dataToUpdate = { ...validated.data };
+      if (dataToUpdate.credentials) {
+        dataToUpdate.credentials = encryptCredentials(dataToUpdate.credentials);
+      }
+      if (dataToUpdate.challengeQuestions) {
+        dataToUpdate.challengeQuestions = encryptChallengeQuestions(dataToUpdate.challengeQuestions);
+      }
+      if (dataToUpdate.mfaSecret) {
+        dataToUpdate.mfaSecret = encrypt(dataToUpdate.mfaSecret);
+      }
+      if (dataToUpdate.mfaBackupCodes) {
+        dataToUpdate.mfaBackupCodes = encryptMfaBackupCodes(dataToUpdate.mfaBackupCodes as any);
+      }
+
+      const [updated] = await db
+        .update(statePortalConfigs)
+        .set({
+          ...dataToUpdate,
+          updatedAt: new Date(),
+        })
+        .where(eq(statePortalConfigs.id, req.params.id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "State portal not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating state portal:", error);
+      res.status(500).json({ error: "Failed to update state portal" });
+    }
+  });
+
+  // ====================================================================
+  // CREDENTIAL ROTATION ENDPOINTS (:id parameterized routes)
+  // ====================================================================
 
   // Rotate credentials for a state portal
   app.post("/api/admin/state-portals/:id/rotate", isAuthenticated, async (req: any, res) => {
