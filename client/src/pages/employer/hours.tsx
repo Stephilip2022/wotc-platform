@@ -9,13 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Upload, Plus, Edit, Trash2, Download } from "lucide-react";
+import { Upload, Plus, Edit, Trash2, Download, Wand2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import CSVImportWizard from "@/components/CSVImportWizard";
 
 const hoursFormSchema = z.object({
   employeeId: z.string().min(1, "Employee is required"),
@@ -32,6 +33,7 @@ export default function EmployerHoursPage() {
   const [addDialog, setAddDialog] = useState(false);
   const [editDialog, setEditDialog] = useState(false);
   const [importDialog, setImportDialog] = useState(false);
+  const [enhancedImportDialog, setEnhancedImportDialog] = useState(false);
   const [selectedHours, setSelectedHours] = useState<any>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
 
@@ -213,12 +215,20 @@ export default function EmployerHoursPage() {
         </div>
         <div className="flex gap-2">
           <Button
+            variant="default"
+            onClick={() => setEnhancedImportDialog(true)}
+            data-testid="button-smart-import"
+          >
+            <Wand2 className="h-4 w-4 mr-2" />
+            Smart Import
+          </Button>
+          <Button
             variant="outline"
             onClick={() => setImportDialog(true)}
             data-testid="button-import-csv"
           >
             <Upload className="h-4 w-4 mr-2" />
-            Import CSV
+            Quick Import
           </Button>
           <Button
             onClick={() => setAddDialog(true)}
@@ -551,6 +561,20 @@ export default function EmployerHoursPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Enhanced CSV Import Wizard */}
+      <CSVImportWizard
+        open={enhancedImportDialog}
+        onClose={() => setEnhancedImportDialog(false)}
+        onComplete={() => {
+          setEnhancedImportDialog(false);
+          queryClient.invalidateQueries({ queryKey: ["/api/employer/hours"] });
+          toast({
+            title: "Import Complete",
+            description: "Hours data has been imported successfully",
+          });
+        }}
+      />
     </div>
   );
 }

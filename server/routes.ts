@@ -2079,6 +2079,181 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Step 4: Process and preview import (with employee matching)
+  app.post("/api/employer/hours/import/:sessionId/preview", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const sessionId = req.params.sessionId;
+      
+      // Get session
+      const [session] = await db
+        .select()
+        .from(csvImportSessions)
+        .where(and(
+          eq(csvImportSessions.id, sessionId),
+          eq(csvImportSessions.employerId, user.employerId)
+        ));
+
+      if (!session || !session.columnMappings) {
+        return res.status(404).json({ error: "Import session not found or not configured" });
+      }
+
+      // Parse CSV again with mappings
+      const { parseAndDetectColumns } = await import('./utils/csvParser');
+      const csvContent = req.file.buffer.toString("utf-8");
+      const parsed = parseAndDetectColumns(csvContent);
+      
+      if (parsed.errors.length > 0) {
+        return res.status(400).json({ error: "Failed to parse CSV", details: parsed.errors });
+      }
+
+      // Import employee matching function
+      const { matchEmployee } = await import('./utils/employeeMatching');
+      
+      // Process rows with employee matching
+      const { parse } = await import('csv-parse/sync');
+      const records = parse(csvContent, {
+        columns: true,
+        skip_empty_lines: true,
+        trim: true,
+      });
+
+      const columnMappings = session.columnMappings as Record<string, string>;
+      const matchStrategy = (session.employeeMatchStrategy || 'auto') as any;
+      
+      const processedRows = [];
+      const validationErrors = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 0; i < records.length; i++) {
+        const rawRow = records[i];
+        const rowNum = i + 2; // +2 because row 1 is header, array is 0-indexed
+
+        try {
+          // Extract mapped fields
+          const mappedData: any = {};
+          for (const [csvCol, targetField] of Object.entries(columnMappings)) {
+            if (targetField && targetField !== '_ignore') {
+              mappedData[targetField] = rawRow[csvCol];
+            }
+          }
+
+          // Employee matching
+          const matchCriteria = {
+            employeeId: mappedData.employeeId,
+            ssn: mappedData.ssn,
+            email: mappedData.email,
+            firstName: mappedData.firstName,
+            lastName: mappedData.lastName,
+          };
+
+          const matchResult = await matchEmployee(user.employerId, matchCriteria, matchStrategy);
+
+          // Validate hours
+          const hours = parseFloat(mappedData.hours);
+          if (isNaN(hours) || hours <= 0) {
+            throw new Error("Invalid hours value");
+          }
+
+          // Validate dates
+          if (!mappedData.periodStart || !mappedData.periodEnd) {
+            throw new Error("Missing period dates");
+          }
+
+          const rowData = {
+            sessionId,
+            rowNumber: rowNum,
+            rawData: rawRow as any,
+            mappedData: mappedData as any,
+            employeeId: matchResult.employeeId,
+            matchConfidence: matchResult.confidence,
+            matchMethod: matchResult.matchMethod,
+            matchScore: matchResult.matchScore,
+            possibleMatches: matchResult.possibleMatches as any || null,
+            validationStatus: matchResult.employeeId ? 'valid' : 'no_match',
+            validationErrors: matchResult.employeeId ? null : ['Employee not found'] as any,
+          };
+
+          // Store row in database
+          const [storedRow] = await db.insert(csvImportRows).values(rowData).returning();
+          
+          processedRows.push({
+            ...storedRow,
+            employeeData: matchResult.employee,
+          });
+
+          if (matchResult.employeeId) {
+            successCount++;
+          } else {
+            errorCount++;
+            validationErrors.push({
+              row: rowNum,
+              error: "Employee not found",
+              data: mappedData,
+            });
+          }
+        } catch (error: any) {
+          errorCount++;
+          const errorMsg = error.message || "Processing error";
+          
+          validationErrors.push({
+            row: rowNum,
+            error: errorMsg,
+            data: rawRow,
+          });
+
+          // Store error row
+          await db.insert(csvImportRows).values({
+            sessionId,
+            rowNumber: rowNum,
+            rawData: rawRow as any,
+            mappedData: {} as any,
+            employeeId: null,
+            matchConfidence: 'none',
+            matchMethod: 'none',
+            matchScore: 0,
+            validationStatus: 'error',
+            validationErrors: [errorMsg] as any,
+          });
+        }
+      }
+
+      // Update session
+      await db
+        .update(csvImportSessions)
+        .set({
+          status: 'preview',
+          processedRows: successCount,
+          errorRows: errorCount,
+          updatedAt: new Date(),
+        })
+        .where(eq(csvImportSessions.id, sessionId));
+
+      res.json({
+        success: true,
+        totalRows: records.length,
+        successCount,
+        errorCount,
+        rows: processedRows,
+        validationErrors,
+      });
+    } catch (error) {
+      console.error("Error processing CSV import:", error);
+      res.status(500).json({ error: "Failed to process import" });
+    }
+  });
+
   // Save a new import template
   app.post("/api/employer/hours/import/templates", isAuthenticated, async (req: any, res) => {
     try {
