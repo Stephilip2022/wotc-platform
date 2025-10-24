@@ -12,6 +12,13 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+- **October 24, 2025 - Phase 3 Started (Billing & Automation)**:
+  - **Task 1 Complete**: Comprehensive billing database schema with 8 new tables for subscriptions, invoices, payments, and licensee revenue sharing
+  - **Subscription Plans**: 3 pricing tiers seeded (Starter, Professional, Enterprise) with feature limits and usage-based pricing
+  - **Initial API Routes**: Subscription plan listing and employer subscription status endpoints
+  - **Stripe Integration**: Keys configured, blueprint documentation reviewed, ready for checkout implementation
+  - **In Progress**: Subscription checkout flow, plan selection UI, webhook handlers
+
 - **October 24, 2025 - Phase 2 Complete (Determination Tracking, Credit Calculation & Analytics)**:
   - **Hours Tracking System**: Database schema with audit trails, employer UI for manual entry and bulk CSV imports from payroll systems
   - **Determination Tracking**: Admin interface to update screening status (certified/denied), upload determination letters, record certification numbers and dates

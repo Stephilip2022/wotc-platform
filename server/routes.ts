@@ -20,6 +20,8 @@ import {
   insertEtaForm9198Schema,
   hoursWorked,
   screeningStatusChanges,
+  subscriptionPlans,
+  subscriptions,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -2143,6 +2145,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error recalculating credits:", error);
       res.status(500).json({ error: "Failed to recalculate credits" });
+    }
+  });
+
+  // ============================================================================
+  // BILLING & SUBSCRIPTIONS
+  // ============================================================================
+
+  // Get all available subscription plans
+  app.get("/api/subscription-plans", async (req, res) => {
+    try {
+      const plans = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.isActive, true))
+        .orderBy(subscriptionPlans.sortOrder);
+
+      res.json(plans);
+    } catch (error) {
+      console.error("Error fetching subscription plans:", error);
+      res.status(500).json({ error: "Failed to fetch subscription plans" });
+    }
+  });
+
+  // Get employer's current subscription
+  app.get("/api/employer/subscription", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const [subscription] = await db
+        .select({
+          subscription: subscriptions,
+          plan: subscriptionPlans,
+        })
+        .from(subscriptions)
+        .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .where(eq(subscriptions.employerId, user.employerId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+
+      if (!subscription) {
+        return res.json(null);
+      }
+
+      res.json(subscription);
+    } catch (error) {
+      console.error("Error fetching subscription:", error);
+      res.status(500).json({ error: "Failed to fetch subscription" });
     }
   });
 
