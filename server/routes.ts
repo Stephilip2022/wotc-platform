@@ -3903,6 +3903,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Parse determination letter with OCR
+  app.post("/api/admin/determination-letters/parse", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { fileBase64, stateCode, mimeType } = req.body;
+      
+      if (!fileBase64 || !stateCode) {
+        return res.status(400).json({ error: "fileBase64 and stateCode required" });
+      }
+
+      const { parseDeterminationLetter, validateParsedLetter } = await import('./utils/ocrParser');
+      
+      const parsed = await parseDeterminationLetter(fileBase64, stateCode, mimeType || 'image/jpeg');
+      const validation = validateParsedLetter(parsed);
+
+      res.json({
+        parsed,
+        validation,
+      });
+    } catch (error) {
+      console.error("Error parsing determination letter:", error);
+      res.status(500).json({ error: "Failed to parse determination letter" });
+    }
+  });
+
+  // Store parsed determination letter
+  app.post("/api/admin/determination-letters", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employerId, employeeId, stateCode, parsedData, fileUrl, fileName } = req.body;
+      
+      if (!employerId || !stateCode || !parsedData) {
+        return res.status(400).json({ error: "employerId, stateCode, and parsedData required" });
+      }
+
+      const { determinationLetters } = await import("@shared/schema");
+      
+      const [letter] = await db
+        .insert(determinationLetters)
+        .values({
+          employerId,
+          employeeId: employeeId || null,
+          stateCode,
+          status: parsedData.determinationStatus || 'pending',
+          certificationNumber: parsedData.certificationNumber || null,
+          creditAmount: parsedData.creditAmount || null,
+          parsedData,
+          fileUrl: fileUrl || null,
+          fileName: fileName || null,
+          processedAt: new Date(),
+        })
+        .returning();
+
+      res.json(letter);
+    } catch (error) {
+      console.error("Error storing determination letter:", error);
+      res.status(500).json({ error: "Failed to store determination letter" });
+    }
+  });
+
+  // Get determination letters
+  app.get("/api/admin/determination-letters", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { determinationLetters } = await import("@shared/schema");
+      const letters = await db
+        .select()
+        .from(determinationLetters)
+        .orderBy(desc(determinationLetters.createdAt))
+        .limit(500);
+
+      res.json(letters);
+    } catch (error) {
+      console.error("Error fetching determination letters:", error);
+      res.status(500).json({ error: "Failed to fetch determination letters" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
