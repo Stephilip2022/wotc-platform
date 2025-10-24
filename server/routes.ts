@@ -15,6 +15,9 @@ import {
   documents,
   creditCalculations,
   invoices,
+  invoiceLineItems,
+  invoiceSequences,
+  payments,
   aiAssistanceLogs,
   etaForm9198,
   insertEtaForm9198Schema,
@@ -2418,6 +2421,396 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error processing webhook:", error);
       res.status(500).json({ error: "Webhook processing failed" });
+    }
+  });
+
+  // ============================================================================
+  // INVOICE MANAGEMENT
+  // ============================================================================
+
+  // Helper function to generate invoice number atomically using sequence table
+  // Uses two-step approach: ensure row exists, then atomic increment
+  async function generateInvoiceNumber(): Promise<string> {
+    const year = new Date().getFullYear();
+    const currentMonth = new Date().getMonth(); // 0-indexed
+    const month = String(currentMonth + 1).padStart(2, '0');
+    const yearMonth = `${year}-${month}`; // e.g., "2024-10"
+    
+    // Two-step atomic sequence generation:
+    // 1. Ensure row exists (safe for concurrent first-of-month requests)
+    // 2. Atomic UPDATE with increment and RETURNING (guaranteed post-update value)
+    const invoiceNumber = await db.transaction(async (tx) => {
+      // Step 1: Ensure sequence row exists for this month
+      // ON CONFLICT DO NOTHING means this is safe for concurrent requests
+      await tx
+        .insert(invoiceSequences)
+        .values({
+          yearMonth,
+          lastSequence: 0, // Start at 0, first UPDATE will make it 1
+        })
+        .onConflictDoNothing();
+      
+      // Step 2: Atomically increment and get new value
+      // UPDATE with RETURNING guarantees we get the post-increment value
+      const [result] = await tx
+        .update(invoiceSequences)
+        .set({
+          lastSequence: sql`${invoiceSequences.lastSequence} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(invoiceSequences.yearMonth, yearMonth))
+        .returning();
+      
+      const sequence = String(result.lastSequence).padStart(4, '0');
+      return `INV-${year}-${month}-${sequence}`;
+    });
+    
+    return invoiceNumber;
+  }
+
+  // Generate invoice for an employer's certified screenings
+  app.post("/api/admin/invoices/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employerId, periodStart, periodEnd } = req.body;
+
+      if (!employerId) {
+        return res.status(400).json({ error: "Employer ID is required" });
+      }
+
+      // Get employer and their active subscription
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      const [subscription] = await db
+        .select({
+          subscription: subscriptions,
+          plan: subscriptionPlans,
+        })
+        .from(subscriptions)
+        .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .where(
+          and(
+            eq(subscriptions.employerId, employerId),
+            eq(subscriptions.status, "active")
+          )
+        );
+
+      if (!subscription || !subscription.plan) {
+        return res.status(400).json({ error: "No active subscription found for this employer" });
+      }
+
+      // Define billing period
+      const start = periodStart ? new Date(periodStart) : subscription.subscription.currentPeriodStart || new Date();
+      const end = periodEnd ? new Date(periodEnd) : subscription.subscription.currentPeriodEnd || new Date();
+
+      // Get all certified screenings in this period
+      const certifiedScreenings = await db
+        .select({
+          screening: screenings,
+          employee: employees,
+          credit: creditCalculations,
+        })
+        .from(screenings)
+        .leftJoin(employees, eq(screenings.employeeId, employees.id))
+        .leftJoin(creditCalculations, eq(screenings.id, creditCalculations.screeningId))
+        .where(
+          and(
+            eq(screenings.employerId, employerId),
+            eq(screenings.status, "certified"),
+            sql`${screenings.statusUpdatedAt} >= ${start}`,
+            sql`${screenings.statusUpdatedAt} <= ${end}`
+          )
+        );
+
+      if (certifiedScreenings.length === 0) {
+        return res.status(200).json({ 
+          message: "No certified screenings found for this period",
+          invoice: null 
+        });
+      }
+
+      // Calculate fees
+      const perScreeningFee = Number(subscription.plan.perScreeningFee || 0);
+      const perCreditFeeRate = Number(subscription.plan.perCreditFee || 0) / 100; // Convert percentage to decimal
+
+      let subtotal = 0;
+      const lineItems: any[] = [];
+
+      // Add screening fees
+      const screeningFeeAmount = certifiedScreenings.length * perScreeningFee;
+      if (screeningFeeAmount > 0) {
+        lineItems.push({
+          description: `Screening fees for ${certifiedScreenings.length} certified employee(s)`,
+          itemType: "screening_fee",
+          quantity: certifiedScreenings.length,
+          unitPrice: perScreeningFee.toFixed(2),
+          amount: screeningFeeAmount.toFixed(2),
+          periodStart: start,
+          periodEnd: end,
+        });
+        subtotal += screeningFeeAmount;
+      }
+
+      // Add credit processing fees for each certified screening with calculated credits
+      for (const { screening, employee, credit } of certifiedScreenings) {
+        if (credit && credit.actualCredit) {
+          const creditAmount = Number(credit.actualCredit);
+          const processingFee = creditAmount * perCreditFeeRate;
+          
+          if (processingFee > 0) {
+            lineItems.push({
+              description: `Credit processing fee for ${employee?.firstName} ${employee?.lastName} - $${creditAmount.toLocaleString()} credit`,
+              itemType: "credit_processing_fee",
+              screeningId: screening.id,
+              employeeId: employee?.id,
+              quantity: 1,
+              unitPrice: processingFee.toFixed(2),
+              amount: processingFee.toFixed(2),
+              periodStart: start,
+              periodEnd: end,
+            });
+            subtotal += processingFee;
+          }
+        }
+      }
+
+      // Create invoice using atomic sequence generation
+      // SELECT ... FOR UPDATE ensures no race conditions
+      const invoiceNumber = await generateInvoiceNumber();
+      const dueDate = new Date();
+      dueDate.setDate(dueDate.getDate() + 30); // 30 days payment terms
+
+      const [invoice] = await db.insert(invoices).values({
+        employerId,
+        subscriptionId: subscription.subscription.id,
+        invoiceNumber,
+        subtotal: subtotal.toFixed(2),
+        taxAmount: "0.00",
+        totalAmount: subtotal.toFixed(2),
+        amountDue: subtotal.toFixed(2),
+        amountPaid: "0.00",
+        periodStart: start,
+        periodEnd: end,
+        status: "open",
+        dueDate,
+      }).returning();
+
+      // Insert line items
+      for (const item of lineItems) {
+        await db.insert(invoiceLineItems).values({
+          invoiceId: invoice.id,
+          ...item,
+        });
+      }
+
+      console.log(`Generated invoice ${invoice.invoiceNumber} for employer ${employerId}: $${subtotal.toFixed(2)}`);
+
+      res.json({
+        invoice,
+        lineItems,
+        message: `Invoice ${invoice.invoiceNumber} generated successfully for ${certifiedScreenings.length} certified screenings`,
+      });
+    } catch (error) {
+      console.error("Error generating invoice:", error);
+      res.status(500).json({ error: "Failed to generate invoice" });
+    }
+  });
+
+  // Get all invoices for employer
+  app.get("/api/employer/invoices", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || !user.employerId) {
+        return res.status(403).json({ error: "Employer access required" });
+      }
+
+      const employerInvoices = await db
+        .select({
+          invoice: invoices,
+          subscription: subscriptions,
+          plan: subscriptionPlans,
+        })
+        .from(invoices)
+        .leftJoin(subscriptions, eq(invoices.subscriptionId, subscriptions.id))
+        .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .where(eq(invoices.employerId, user.employerId))
+        .orderBy(desc(invoices.createdAt));
+
+      res.json(employerInvoices);
+    } catch (error) {
+      console.error("Error fetching employer invoices:", error);
+      res.status(500).json({ error: "Failed to fetch invoices" });
+    }
+  });
+
+  // Get invoice details
+  app.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const invoiceId = req.params.id;
+
+      const [invoice] = await db
+        .select({
+          invoice: invoices,
+          employer: employers,
+          subscription: subscriptions,
+          plan: subscriptionPlans,
+        })
+        .from(invoices)
+        .leftJoin(employers, eq(invoices.employerId, employers.id))
+        .leftJoin(subscriptions, eq(invoices.subscriptionId, subscriptions.id))
+        .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .where(eq(invoices.id, invoiceId));
+
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+
+      // Authorization: admin can see all, employer can see their own
+      if (user.role !== 'admin' && invoice.invoice.employerId !== user.employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Get line items
+      const items = await db
+        .select()
+        .from(invoiceLineItems)
+        .where(eq(invoiceLineItems.invoiceId, invoiceId));
+
+      // Get payment history
+      const paymentHistory = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.invoiceId, invoiceId))
+        .orderBy(desc(payments.createdAt));
+
+      res.json({
+        ...invoice,
+        lineItems: items,
+        payments: paymentHistory,
+      });
+    } catch (error) {
+      console.error("Error fetching invoice details:", error);
+      res.status(500).json({ error: "Failed to fetch invoice details" });
+    }
+  });
+
+  // Get all invoices (admin only)
+  app.get("/api/admin/invoices", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { status, employerId } = req.query;
+
+      let query = db
+        .select({
+          invoice: invoices,
+          employer: employers,
+          subscription: subscriptions,
+          plan: subscriptionPlans,
+        })
+        .from(invoices)
+        .leftJoin(employers, eq(invoices.employerId, employers.id))
+        .leftJoin(subscriptions, eq(invoices.subscriptionId, subscriptions.id))
+        .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id));
+
+      const conditions = [];
+      
+      if (status && status !== 'all') {
+        conditions.push(eq(invoices.status, status as string));
+      }
+      
+      if (employerId && employerId !== 'all') {
+        conditions.push(eq(invoices.employerId, employerId as string));
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+
+      const allInvoices = await query.orderBy(desc(invoices.createdAt));
+
+      res.json(allInvoices);
+    } catch (error) {
+      console.error("Error fetching admin invoices:", error);
+      res.status(500).json({ error: "Failed to fetch invoices" });
+    }
+  });
+
+  // Mark invoice as paid
+  app.post("/api/admin/invoices/:id/mark-paid", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const invoiceId = req.params.id;
+      const { paymentMethod, notes } = req.body;
+
+      const [invoice] = await db
+        .select()
+        .from(invoices)
+        .where(eq(invoices.id, invoiceId));
+
+      if (!invoice) {
+        return res.status(404).json({ error: "Invoice not found" });
+      }
+
+      // Create payment record
+      await db.insert(payments).values({
+        invoiceId: invoice.id,
+        employerId: invoice.employerId,
+        amount: invoice.amountDue,
+        currency: "usd",
+        paymentMethod: paymentMethod || "manual",
+        status: "succeeded",
+        paidAt: new Date(),
+      });
+
+      // Update invoice
+      const [updatedInvoice] = await db
+        .update(invoices)
+        .set({
+          status: "paid",
+          amountPaid: invoice.totalAmount,
+          amountDue: "0.00",
+          paidAt: new Date(),
+          notes: notes || invoice.notes,
+          updatedAt: new Date(),
+        })
+        .where(eq(invoices.id, invoiceId))
+        .returning();
+
+      console.log(`Invoice ${invoice.invoiceNumber} marked as paid`);
+
+      res.json(updatedInvoice);
+    } catch (error) {
+      console.error("Error marking invoice as paid:", error);
+      res.status(500).json({ error: "Failed to mark invoice as paid" });
     }
   });
 

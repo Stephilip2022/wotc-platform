@@ -694,6 +694,17 @@ export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).
 export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
 export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
 
+// Invoice sequence tracking for atomic number generation
+export const invoiceSequences = pgTable("invoice_sequences", {
+  yearMonth: text("year_month").primaryKey(), // Format: "2024-10"
+  lastSequence: integer("last_sequence").notNull().default(0),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertInvoiceSequenceSchema = createInsertSchema(invoiceSequences).omit({ updatedAt: true });
+export type InsertInvoiceSequence = z.infer<typeof insertInvoiceSequenceSchema>;
+export type InvoiceSequence = typeof invoiceSequences.$inferSelect;
+
 export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),

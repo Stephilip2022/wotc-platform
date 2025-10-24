@@ -4,11 +4,11 @@ import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Loader2, CreditCard, Calendar, Users, BarChart3, Headphones, Code, UserCheck, AlertCircle } from "lucide-react";
+import { Check, Loader2, CreditCard, Calendar, Users, BarChart3, Headphones, Code, UserCheck, AlertCircle, FileText, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { SubscriptionPlan, Subscription } from "@shared/schema";
+import type { SubscriptionPlan, Subscription, Invoice } from "@shared/schema";
 
 export default function BillingPage() {
   const [location, setLocation] = useLocation();
@@ -47,6 +47,15 @@ export default function BillingPage() {
     plan: SubscriptionPlan;
   } | null>({
     queryKey: ["/api/employer/subscription"],
+  });
+
+  // Fetch invoices
+  const { data: invoices, isLoading: invoicesLoading } = useQuery<Array<{
+    invoice: Invoice;
+    subscription: Subscription | null;
+    plan: SubscriptionPlan | null;
+  }>>({
+    queryKey: ["/api/employer/invoices"],
   });
 
   // Checkout mutation
@@ -278,6 +287,93 @@ export default function BillingPage() {
           </Card>
         </div>
       )}
+
+      {/* Invoice History */}
+      <Card data-testid="card-invoice-history">
+        <CardHeader>
+          <CardTitle>Invoice History</CardTitle>
+          <CardDescription>
+            View and download your past invoices
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {invoicesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !invoices || invoices.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>No invoices yet</p>
+              <p className="text-sm mt-1">Invoices will appear here after certifications are processed</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {invoices.map(({ invoice }) => {
+                const statusColor = invoice.status === "paid" 
+                  ? "default" 
+                  : invoice.status === "open" 
+                  ? "secondary" 
+                  : "destructive";
+
+                return (
+                  <div 
+                    key={invoice.id} 
+                    className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
+                    data-testid={`invoice-item-${invoice.invoiceNumber}`}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <h4 className="font-medium" data-testid={`text-invoice-number-${invoice.invoiceNumber}`}>
+                          {invoice.invoiceNumber}
+                        </h4>
+                        <Badge variant={statusColor} data-testid={`badge-invoice-status-${invoice.invoiceNumber}`}>
+                          {invoice.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <span data-testid={`text-invoice-date-${invoice.invoiceNumber}`}>
+                          {new Date(invoice.createdAt).toLocaleDateString()}
+                        </span>
+                        {invoice.periodStart && invoice.periodEnd && (
+                          <span>
+                            Period: {new Date(invoice.periodStart).toLocaleDateString()} - {new Date(invoice.periodEnd).toLocaleDateString()}
+                          </span>
+                        )}
+                        {invoice.dueDate && invoice.status !== "paid" && (
+                          <span className="text-orange-600 dark:text-orange-400">
+                            Due: {new Date(invoice.dueDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="font-bold text-lg" data-testid={`text-invoice-amount-${invoice.invoiceNumber}`}>
+                          ${Number(invoice.totalAmount).toLocaleString()}
+                        </div>
+                        {invoice.status === "open" && (
+                          <div className="text-sm text-muted-foreground">
+                            Due: ${Number(invoice.amountDue).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => setLocation(`/employer/invoice/${invoice.id}`)}
+                        data-testid={`button-view-invoice-${invoice.invoiceNumber}`}
+                      >
+                        <FileText className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
