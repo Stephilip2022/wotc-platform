@@ -18,6 +18,8 @@ import {
   aiAssistanceLogs,
   etaForm9198,
   insertEtaForm9198Schema,
+  hoursWorked,
+  screeningStatusChanges,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -1353,6 +1355,216 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting questionnaire:", error);
       res.status(500).json({ error: "Failed to delete questionnaire" });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN DETERMINATION TRACKING ROUTES (Phase 2)
+  // ============================================================================
+
+  // Get all screenings with filtering
+  app.get("/api/admin/screenings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { employerId, status, startDate, endDate } = req.query;
+
+      // Build query with filters
+      let query = db
+        .select({
+          screening: screenings,
+          employee: employees,
+          employer: employers,
+        })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .innerJoin(employers, eq(screenings.employerId, employers.id));
+
+      const conditions = [];
+      if (employerId) {
+        conditions.push(eq(screenings.employerId, employerId as string));
+      }
+      if (status) {
+        conditions.push(eq(screenings.status, status as string));
+      }
+      if (startDate) {
+        conditions.push(sql`${screenings.createdAt} >= ${startDate}`);
+      }
+      if (endDate) {
+        conditions.push(sql`${screenings.createdAt} <= ${endDate}`);
+      }
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as any;
+      }
+
+      const results = await query.orderBy(desc(screenings.createdAt));
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching screenings:", error);
+      res.status(500).json({ error: "Failed to fetch screenings" });
+    }
+  });
+
+  // Update screening status with audit trail
+  app.patch("/api/admin/screenings/:id/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const screeningId = req.params.id;
+      const { 
+        status, 
+        reason, 
+        notes, 
+        certificationNumber, 
+        certificationDate, 
+        certificationExpiresAt,
+        determinationLetterId 
+      } = req.body;
+
+      // Get current screening
+      const [currentScreening] = await db
+        .select()
+        .from(screenings)
+        .where(eq(screenings.id, screeningId));
+
+      if (!currentScreening) {
+        return res.status(404).json({ error: "Screening not found" });
+      }
+
+      // Update screening
+      const updateData: any = {
+        status,
+        updatedAt: new Date(),
+      };
+
+      if (status === "certified") {
+        updateData.certificationNumber = certificationNumber;
+        updateData.certifiedAt = certificationDate ? new Date(certificationDate) : new Date();
+        updateData.certificationExpiresAt = certificationExpiresAt ? new Date(certificationExpiresAt) : null;
+      }
+
+      const [updatedScreening] = await db
+        .update(screenings)
+        .set(updateData)
+        .where(eq(screenings.id, screeningId))
+        .returning();
+
+      // Create audit trail record
+      await db.insert(screeningStatusChanges).values({
+        screeningId,
+        fromStatus: currentScreening.status || "unknown",
+        toStatus: status,
+        reason,
+        notes,
+        certificationNumber,
+        certificationDate,
+        certificationExpiresAt,
+        determinationLetterId,
+        changedBy: userId,
+      });
+
+      res.json({ success: true, screening: updatedScreening });
+    } catch (error) {
+      console.error("Error updating screening status:", error);
+      res.status(500).json({ error: "Failed to update screening status" });
+    }
+  });
+
+  // Upload determination letter for a screening
+  app.post("/api/admin/screenings/:id/determination-letter", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const screeningId = req.params.id;
+
+      // Get screening
+      const [screening] = await db
+        .select()
+        .from(screenings)
+        .where(eq(screenings.id, screeningId));
+
+      if (!screening) {
+        return res.status(404).json({ error: "Screening not found" });
+      }
+
+      // Save file to private object storage
+      const privateDir = process.env.PRIVATE_OBJECT_DIR || "/.private";
+      const screeningsDir = path.join(privateDir, "determination-letters");
+      const fileName = `${screeningId}-${Date.now()}-${req.file.originalname}`;
+      const filePath = path.join(screeningsDir, fileName);
+
+      await fs.mkdir(screeningsDir, { recursive: true });
+      await fs.writeFile(filePath, req.file.buffer);
+
+      // Create document record
+      const [document] = await db.insert(documents).values({
+        employeeId: screening.employeeId,
+        employerId: screening.employerId,
+        screeningId: screening.id,
+        documentType: "determination_letter",
+        fileName: req.file.originalname,
+        fileUrl: filePath,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        verifiedBy: userId,
+        isVerified: true,
+        verifiedAt: new Date(),
+      }).returning();
+
+      res.json({ success: true, document });
+    } catch (error) {
+      console.error("Error uploading determination letter:", error);
+      res.status(500).json({ error: "Failed to upload determination letter" });
+    }
+  });
+
+  // Get screening history (audit trail)
+  app.get("/api/admin/screenings/:id/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const screeningId = req.params.id;
+
+      const history = await db
+        .select({
+          change: screeningStatusChanges,
+          changedByUser: users,
+        })
+        .from(screeningStatusChanges)
+        .leftJoin(users, eq(screeningStatusChanges.changedBy, users.id))
+        .where(eq(screeningStatusChanges.screeningId, screeningId))
+        .orderBy(desc(screeningStatusChanges.changedAt));
+
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching screening history:", error);
+      res.status(500).json({ error: "Failed to fetch screening history" });
     }
   });
 

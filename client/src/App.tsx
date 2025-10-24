@@ -16,6 +16,7 @@ import EmployeesPage from "@/pages/employer/employees";
 import ScreeningsPage from "@/pages/employer/screenings";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminEmployersPage from "@/pages/admin/employers";
+import AdminScreeningsPage from "@/pages/admin/screenings";
 import AdminQuestionnairesPage from "@/pages/admin/questionnaires";
 import EtaForm9198Page from "@/pages/admin/eta-form-9198";
 import EmployerSettingsPage from "@/pages/admin/employer-settings";
@@ -73,6 +74,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/employers" component={AdminEmployersPage} />
                   <Route path="/admin/employers/new" component={EtaForm9198Page} />
                   <Route path="/admin/employers/:id/settings" component={EmployerSettingsPage} />
+                  <Route path="/admin/screenings" component={AdminScreeningsPage} />
                   <Route path="/admin/questionnaires" component={AdminQuestionnairesPage} />
                   <Route path="/admin/export" component={WOTCExportPage} />
                   <Route component={NotFound} />
