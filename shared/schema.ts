@@ -257,41 +257,7 @@ export const insertCreditCalculationSchema = createInsertSchema(creditCalculatio
 export type InsertCreditCalculation = z.infer<typeof insertCreditCalculationSchema>;
 export type CreditCalculation = typeof creditCalculations.$inferSelect;
 
-// ============================================================================
-// BILLING & INVOICES
-// ============================================================================
-
-export const invoices = pgTable("invoices", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
-  
-  // Invoice details
-  invoiceNumber: text("invoice_number").notNull().unique(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  revenueSharePercentage: decimal("revenue_share_percentage", { precision: 5, scale: 2 }).notNull(),
-  totalCredits: decimal("total_credits", { precision: 10, scale: 2 }).notNull(),
-  
-  // Period
-  periodStart: text("period_start").notNull(),
-  periodEnd: text("period_end").notNull(),
-  
-  // Payment
-  status: text("status").default("pending"), // 'pending', 'paid', 'overdue', 'cancelled'
-  stripeInvoiceId: text("stripe_invoice_id"),
-  stripePaymentIntentId: text("stripe_payment_intent_id"),
-  paidAt: timestamp("paid_at"),
-  dueDate: text("due_date"),
-  
-  // Metadata
-  screeningIds: jsonb("screening_ids").default([]), // Array of screening IDs included
-  
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
-export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
-export type Invoice = typeof invoices.$inferSelect;
+// Note: Billing schema moved to end of file after Phase 3 implementation
 
 // ============================================================================
 // AI ASSISTANCE LOGS
@@ -582,3 +548,264 @@ export interface ResponseData {
   startedAt?: string;
   completedAt?: string;
 }
+
+// ============================================================================
+// BILLING & SUBSCRIPTIONS
+// ============================================================================
+
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(), // "Starter", "Professional", "Enterprise"
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  
+  // Pricing
+  monthlyPrice: decimal("monthly_price", { precision: 10, scale: 2 }).notNull(),
+  annualPrice: decimal("annual_price", { precision: 10, scale: 2 }), // Discounted annual rate
+  
+  // Stripe integration
+  stripeMonthlyPriceId: text("stripe_monthly_price_id"),
+  stripeAnnualPriceId: text("stripe_annual_price_id"),
+  stripeProductId: text("stripe_product_id"),
+  
+  // Feature limits
+  maxEmployees: integer("max_employees"), // null = unlimited
+  maxScreeningsPerMonth: integer("max_screenings_per_month"),
+  includeAnalytics: boolean("include_analytics").default(true),
+  includePrioritySupport: boolean("include_priority_support").default(false),
+  includeApiAccess: boolean("include_api_access").default(false),
+  includeDedicatedAccountManager: boolean("include_dedicated_account_manager").default(false),
+  
+  // Pricing model
+  perScreeningFee: decimal("per_screening_fee", { precision: 10, scale: 2 }), // Additional fee per screening
+  perCreditFee: decimal("per_credit_fee", { precision: 10, scale: 2 }), // Fee as % of credit earned
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSubscriptionPlanSchema = createInsertSchema(subscriptionPlans).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  planId: varchar("plan_id").notNull().references(() => subscriptionPlans.id),
+  
+  // Stripe integration
+  stripeSubscriptionId: text("stripe_subscription_id").unique(),
+  stripeCustomerId: text("stripe_customer_id"),
+  
+  // Billing cycle
+  billingCycle: text("billing_cycle").notNull().default("monthly"), // 'monthly', 'annual'
+  currentPeriodStart: timestamp("current_period_start"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  
+  // Status
+  status: text("status").notNull().default("active"), // 'active', 'canceled', 'past_due', 'trialing', 'paused'
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+  canceledAt: timestamp("canceled_at"),
+  trialEndsAt: timestamp("trial_ends_at"),
+  
+  // Usage tracking
+  screeningsThisPeriod: integer("screenings_this_period").default(0),
+  creditsEarnedThisPeriod: decimal("credits_earned_this_period", { precision: 10, scale: 2 }).default("0.00"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+
+export const invoices = pgTable("invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  subscriptionId: varchar("subscription_id").references(() => subscriptions.id, { onDelete: "set null" }),
+  
+  // Invoice details
+  invoiceNumber: text("invoice_number").notNull().unique(), // INV-2024-001234
+  
+  // Stripe integration
+  stripeInvoiceId: text("stripe_invoice_id").unique(),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  
+  // Amounts
+  subtotal: decimal("subtotal", { precision: 10, scale: 2 }).notNull(),
+  taxAmount: decimal("tax_amount", { precision: 10, scale: 2 }).default("0.00"),
+  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
+  amountPaid: decimal("amount_paid", { precision: 10, scale: 2 }).default("0.00"),
+  amountDue: decimal("amount_due", { precision: 10, scale: 2 }).notNull(),
+  
+  // Billing period
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  
+  // Status
+  status: text("status").notNull().default("draft"), // 'draft', 'open', 'paid', 'void', 'uncollectible'
+  
+  // Dates
+  dueDate: timestamp("due_date"),
+  paidAt: timestamp("paid_at"),
+  voidedAt: timestamp("voided_at"),
+  
+  // Additional info
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertInvoiceSchema = createInsertSchema(invoices).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertInvoice = z.infer<typeof insertInvoiceSchema>;
+export type Invoice = typeof invoices.$inferSelect;
+
+export const invoiceLineItems = pgTable("invoice_line_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  
+  // Line item details
+  description: text("description").notNull(),
+  itemType: text("item_type").notNull(), // 'subscription', 'screening_fee', 'credit_processing_fee', 'overage', 'one_time'
+  
+  // Related entities (optional)
+  screeningId: varchar("screening_id").references(() => screenings.id, { onDelete: "set null" }),
+  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  
+  // Pricing
+  quantity: integer("quantity").default(1),
+  unitPrice: decimal("unit_price", { precision: 10, scale: 2 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  
+  // Period (for subscription items)
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertInvoiceLineItemSchema = createInsertSchema(invoiceLineItems).omit({ id: true, createdAt: true });
+export type InsertInvoiceLineItem = z.infer<typeof insertInvoiceLineItemSchema>;
+export type InvoiceLineItem = typeof invoiceLineItems.$inferSelect;
+
+export const payments = pgTable("payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  invoiceId: varchar("invoice_id").notNull().references(() => invoices.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Stripe integration
+  stripePaymentIntentId: text("stripe_payment_intent_id").unique(),
+  stripeChargeId: text("stripe_charge_id"),
+  
+  // Payment details
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("usd"),
+  paymentMethod: text("payment_method"), // 'card', 'ach', 'wire'
+  
+  // Card details (last 4 digits only)
+  cardLast4: text("card_last4"),
+  cardBrand: text("card_brand"), // 'visa', 'mastercard', 'amex'
+  
+  // Status
+  status: text("status").notNull().default("pending"), // 'pending', 'succeeded', 'failed', 'refunded'
+  failureReason: text("failure_reason"),
+  
+  // Dates
+  paidAt: timestamp("paid_at"),
+  refundedAt: timestamp("refunded_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertPaymentSchema = createInsertSchema(payments).omit({ id: true, createdAt: true });
+export type InsertPayment = z.infer<typeof insertPaymentSchema>;
+export type Payment = typeof payments.$inferSelect;
+
+// ============================================================================
+// LICENSEE REVENUE SHARING
+// ============================================================================
+
+export const licensees = pgTable("licensees", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  
+  // Organization details
+  companyName: text("company_name").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  
+  // Commission structure
+  commissionPercentage: decimal("commission_percentage", { precision: 5, scale: 2 }).notNull().default("25.00"), // 25% default
+  commissionTier: text("commission_tier").default("standard"), // 'standard', 'premium', 'enterprise'
+  
+  // Payout details
+  payoutMethod: text("payout_method").default("stripe"), // 'stripe', 'ach', 'wire', 'check'
+  stripeAccountId: text("stripe_account_id"),
+  
+  // Status
+  status: text("status").notNull().default("active"), // 'active', 'inactive', 'suspended'
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertLicenseeSchema = createInsertSchema(licensees).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLicensee = z.infer<typeof insertLicenseeSchema>;
+export type Licensee = typeof licensees.$inferSelect;
+
+export const licenseePayouts = pgTable("licensee_payouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  licenseeId: varchar("licensee_id").notNull().references(() => licensees.id, { onDelete: "cascade" }),
+  
+  // Payout period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Amounts
+  totalRevenue: decimal("total_revenue", { precision: 10, scale: 2 }).notNull(), // Total revenue generated
+  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }).notNull(), // Commission owed
+  
+  // Stripe integration
+  stripeTransferId: text("stripe_transfer_id"),
+  stripePayoutId: text("stripe_payout_id"),
+  
+  // Status
+  status: text("status").notNull().default("pending"), // 'pending', 'processing', 'paid', 'failed'
+  
+  // Dates
+  scheduledPayoutDate: timestamp("scheduled_payout_date"),
+  paidAt: timestamp("paid_at"),
+  
+  // Additional info
+  notes: text("notes"),
+  invoiceUrl: text("invoice_url"), // PDF invoice for payout
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertLicenseePayoutSchema = createInsertSchema(licenseePayouts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertLicenseePayout = z.infer<typeof insertLicenseePayoutSchema>;
+export type LicenseePayout = typeof licenseePayouts.$inferSelect;
+
+// Link table: which employers are managed by which licensees
+export const licenseeEmployers = pgTable("licensee_employers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  licenseeId: varchar("licensee_id").notNull().references(() => licensees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Commission override (if different from licensee's default)
+  customCommissionPercentage: decimal("custom_commission_percentage", { precision: 5, scale: 2 }),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertLicenseeEmployerSchema = createInsertSchema(licenseeEmployers).omit({ id: true, createdAt: true });
+export type InsertLicenseeEmployer = z.infer<typeof insertLicenseeEmployerSchema>;
+export type LicenseeEmployer = typeof licenseeEmployers.$inferSelect;
