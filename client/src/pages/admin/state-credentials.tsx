@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -82,11 +82,8 @@ export default function StateCredentialsPage() {
       delete apiData.userId;
       delete apiData.password;
 
-      return await apiRequest(`/api/admin/state-portals/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(apiData),
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const response = await apiRequest('PATCH', `/api/admin/state-portals/${id}`, apiData);
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/state-portals'] });
@@ -323,11 +320,17 @@ export default function StateCredentialsPage() {
                         Enable OCR for determination letter processing
                       </p>
                     </div>
-                    <Switch
-                      id="ocrEnabled"
-                      checked={form.watch('ocrEnabled')}
-                      onCheckedChange={(checked) => form.setValue('ocrEnabled', checked)}
-                      data-testid="switch-ocr-enabled"
+                    <Controller
+                      name="ocrEnabled"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Switch
+                          id="ocrEnabled"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-ocr-enabled"
+                        />
+                      )}
                     />
                   </div>
 
@@ -338,11 +341,17 @@ export default function StateCredentialsPage() {
                         Enable automated bulk submissions
                       </p>
                     </div>
-                    <Switch
-                      id="automationEnabled"
-                      checked={form.watch('automationEnabled')}
-                      onCheckedChange={(checked) => form.setValue('automationEnabled', checked)}
-                      data-testid="switch-automation-enabled"
+                    <Controller
+                      name="automationEnabled"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Switch
+                          id="automationEnabled"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-automation-enabled"
+                        />
+                      )}
                     />
                   </div>
 
@@ -353,11 +362,17 @@ export default function StateCredentialsPage() {
                         State requires manual submission (no electronic portal)
                       </p>
                     </div>
-                    <Switch
-                      id="missingElectronicSubmittals"
-                      checked={form.watch('missingElectronicSubmittals')}
-                      onCheckedChange={(checked) => form.setValue('missingElectronicSubmittals', checked)}
-                      data-testid="switch-missing-electronic"
+                    <Controller
+                      name="missingElectronicSubmittals"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Switch
+                          id="missingElectronicSubmittals"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-missing-electronic"
+                        />
+                      )}
                     />
                   </div>
 
@@ -368,11 +383,17 @@ export default function StateCredentialsPage() {
                         State has extended processing times for POA approvals
                       </p>
                     </div>
-                    <Switch
-                      id="longPoaApprovalDuration"
-                      checked={form.watch('longPoaApprovalDuration')}
-                      onCheckedChange={(checked) => form.setValue('longPoaApprovalDuration', checked)}
-                      data-testid="switch-long-poa"
+                    <Controller
+                      name="longPoaApprovalDuration"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Switch
+                          id="longPoaApprovalDuration"
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-long-poa"
+                        />
+                      )}
                     />
                   </div>
 
