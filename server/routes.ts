@@ -2160,6 +2160,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get admin revenue dashboard metrics
+  app.get("/api/admin/revenue/dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Calculate MRR (Monthly Recurring Revenue)
+      const mrrData = await db
+        .select({
+          monthlyRevenue: sql<number>`COALESCE(SUM(CASE WHEN ${subscriptions.billingCycle} = 'monthly' THEN CAST(${subscriptionPlans.monthlyPrice} AS DOUBLE PRECISION) ELSE CAST(${subscriptionPlans.annualPrice} AS DOUBLE PRECISION) / 12 END), 0)`,
+        })
+        .from(subscriptions)
+        .leftJoin(subscriptionPlans, eq(subscriptions.planId, subscriptionPlans.id))
+        .where(eq(subscriptions.status, "active"));
+
+      const mrr = Number(mrrData[0]?.monthlyRevenue || 0);
+      const arr = mrr * 12;
+
+      // Get total subscriptions by status
+      const subsByStatus = await db
+        .select({
+          status: subscriptions.status,
+          count: sql<number>`COUNT(*)`,
+        })
+        .from(subscriptions)
+        .groupBy(subscriptions.status);
+
+      // Get subscription plan distribution
+      const planDistribution = await db
+        .select({
+          planId: subscriptionPlans.id,
+          planName: subscriptionPlans.displayName,
+          count: sql<number>`COUNT(${subscriptions.id})`,
+          revenue: sql<number>`COALESCE(SUM(CASE WHEN ${subscriptions.billingCycle} = 'monthly' THEN CAST(${subscriptionPlans.monthlyPrice} AS DOUBLE PRECISION) ELSE CAST(${subscriptionPlans.annualPrice} AS DOUBLE PRECISION) / 12 END), 0)`,
+        })
+        .from(subscriptionPlans)
+        .leftJoin(subscriptions, and(
+          eq(subscriptions.planId, subscriptionPlans.id),
+          eq(subscriptions.status, "active")
+        ))
+        .groupBy(subscriptionPlans.id, subscriptionPlans.displayName);
+
+      // Get outstanding invoices
+      const outstandingInvoices = await db
+        .select({
+          count: sql<number>`COUNT(*)`,
+          totalAmount: sql<number>`COALESCE(SUM(CAST(${invoices.amountDue} AS DOUBLE PRECISION)), 0)`,
+        })
+        .from(invoices)
+        .where(eq(invoices.status, "open"));
+
+      // Get total revenue (paid invoices)
+      const totalRevenue = await db
+        .select({
+          total: sql<number>`COALESCE(SUM(CAST(${invoices.totalAmount} AS DOUBLE PRECISION)), 0)`,
+        })
+        .from(invoices)
+        .where(eq(invoices.status, "paid"));
+
+      // Calculate churn rate (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const canceledSubs = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(subscriptions)
+        .where(
+          and(
+            eq(subscriptions.status, "canceled"),
+            sql`${subscriptions.canceledAt} >= ${thirtyDaysAgo}`
+          )
+        );
+
+      const totalActiveSubs = subsByStatus.find(s => s.status === "active")?.count || 0;
+      const recentCancellations = Number(canceledSubs[0]?.count || 0);
+      const churnRate = totalActiveSubs > 0 ? (recentCancellations / totalActiveSubs) * 100 : 0;
+
+      // Get monthly revenue trend (last 6 months)
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const revenueTrend = await db
+        .select({
+          month: sql<string>`TO_CHAR(${invoices.createdAt}, 'YYYY-MM')`,
+          revenue: sql<number>`COALESCE(SUM(CAST(${invoices.totalAmount} AS DOUBLE PRECISION)), 0)`,
+          invoiceCount: sql<number>`COUNT(*)`,
+        })
+        .from(invoices)
+        .where(
+          and(
+            eq(invoices.status, "paid"),
+            sql`${invoices.createdAt} >= ${sixMonthsAgo}`
+          )
+        )
+        .groupBy(sql`TO_CHAR(${invoices.createdAt}, 'YYYY-MM')`)
+        .orderBy(sql`TO_CHAR(${invoices.createdAt}, 'YYYY-MM')`);
+
+      res.json({
+        mrr: mrr,
+        arr: arr,
+        totalRevenue: Number(totalRevenue[0]?.total || 0),
+        subscriptionsByStatus: subsByStatus.map(s => ({
+          status: s.status,
+          count: Number(s.count),
+        })),
+        planDistribution: planDistribution.map(p => ({
+          planId: p.planId,
+          planName: p.planName,
+          count: Number(p.count),
+          monthlyRevenue: Number(p.revenue || 0),
+        })),
+        outstandingInvoices: {
+          count: Number(outstandingInvoices[0]?.count || 0),
+          totalAmount: Number(outstandingInvoices[0]?.totalAmount || 0),
+        },
+        churnRate: churnRate,
+        revenueTrend: revenueTrend.map(r => ({
+          month: r.month,
+          revenue: Number(r.revenue || 0),
+          invoiceCount: Number(r.invoiceCount),
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching revenue dashboard:", error);
+      res.status(500).json({ error: "Failed to fetch revenue dashboard" });
+    }
+  });
+
   // ============================================================================
   // BILLING & SUBSCRIPTIONS
   // ============================================================================

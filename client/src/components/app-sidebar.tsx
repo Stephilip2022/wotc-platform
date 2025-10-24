@@ -34,12 +34,11 @@ export function AppSidebar({ role }: AppSidebarProps) {
 
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { title: "Revenue", url: "/admin/revenue", icon: DollarSign },
     { title: "Employers", url: "/admin/employers", icon: Building2 },
     { title: "Screenings", url: "/admin/screenings", icon: CheckSquare },
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
     { title: "CSV Export", url: "/admin/export", icon: Download },
-    { title: "Analytics", url: "/admin/analytics", icon: FileText },
-    { title: "Billing", url: "/admin/billing", icon: DollarSign },
     { title: "Settings", url: "/admin/settings", icon: Settings },
   ];
 
@@ -50,6 +49,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Hours", url: "/employer/hours", icon: Clock },
     { title: "Documents", url: "/employer/documents", icon: FolderOpen },
     { title: "Credits", url: "/employer/credits", icon: DollarSign },
+    { title: "Billing", url: "/employer/billing", icon: DollarSign },
     { title: "Settings", url: "/employer/settings", icon: Settings },
   ];
 
