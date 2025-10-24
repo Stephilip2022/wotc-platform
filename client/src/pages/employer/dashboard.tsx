@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, ClipboardCheck, DollarSign, TrendingUp, FileText } from "lucide-react";
+import { Users, ClipboardCheck, DollarSign, TrendingUp, FileText, Target, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Link } from "wouter";
 import {
   Table,
   TableBody,
@@ -11,7 +13,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Employee, Screening, CreditCalculation } from "@shared/schema";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  Cell,
+} from "recharts";
 
 interface DashboardStats {
   totalEmployees: number;
@@ -29,6 +41,28 @@ interface RecentActivity {
   date: string;
 }
 
+interface EmployeeWithCredit {
+  employee: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+  screening: {
+    id: string;
+    status: string;
+    targetGroups: string[];
+  } | null;
+  credit: {
+    id: string;
+    maxCreditAmount: string;
+    projectedCreditAmount: string;
+    actualCreditAmount: string;
+    hoursWorked: number;
+    status: string;
+  } | null;
+}
+
 export default function EmployerDashboard() {
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/employer/stats"],
@@ -38,38 +72,74 @@ export default function EmployerDashboard() {
     queryKey: ["/api/employer/recent-activity"],
   });
 
+  const { data: screenings, isLoading: screeningsLoading } = useQuery<any[]>({
+    queryKey: ["/api/employer/screenings"],
+  });
+
+  const { data: employeesWithCredits, isLoading: creditsLoading } = useQuery<EmployeeWithCredit[]>({
+    queryKey: ["/api/employer/credits"],
+  });
+
+  // Calculate pipeline distribution
+  const pipelineData = (screenings || []).reduce((acc: any, s: any) => {
+    const status = s.status;
+    const existing = acc.find((item: any) => item.status === status);
+    if (existing) {
+      existing.count++;
+    } else {
+      acc.push({ status, count: 1 });
+    }
+    return acc;
+  }, []) || [];
+
+  // Prepare chart data for credits comparison
+  const creditChartData = [
+    {
+      name: "Projected",
+      amount: Number((stats?.projectedCredits || "$0").replace(/[$,]/g, "")),
+    },
+    {
+      name: "Actual",
+      amount: Number((stats?.actualCredits || "$0").replace(/[$,]/g, "")),
+    },
+  ];
+
   const StatCard = ({ 
     title, 
     value, 
     icon: Icon, 
     description, 
-    trend 
+    trend,
+    link 
   }: { 
     title: string; 
     value: string | number; 
     icon: any; 
     description?: string;
     trend?: string;
+    link?: string;
   }) => (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold" data-testid={`text-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-          {statsLoading ? <Skeleton className="h-8 w-24" /> : value}
-        </div>
-        {description && (
-          <p className="text-xs text-muted-foreground mt-1">{description}</p>
-        )}
-        {trend && (
-          <div className="flex items-center gap-1 mt-2">
-            <TrendingUp className="h-3 w-3 text-green-600" />
-            <span className="text-xs text-green-600">{trend}</span>
+    <Card className={link ? "hover-elevate cursor-pointer" : ""}>
+      <Link href={link || "#"}>
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+          <Icon className="h-4 w-4 text-muted-foreground" />
+        </CardHeader>
+        <CardContent>
+          <div className="text-2xl font-bold" data-testid={`text-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+            {statsLoading ? <Skeleton className="h-8 w-24" /> : value}
           </div>
-        )}
-      </CardContent>
+          {description && (
+            <p className="text-xs text-muted-foreground mt-1">{description}</p>
+          )}
+          {trend && (
+            <div className="flex items-center gap-1 mt-2">
+              <TrendingUp className="h-3 w-3 text-green-600" />
+              <span className="text-xs text-green-600">{trend}</span>
+            </div>
+          )}
+        </CardContent>
+      </Link>
     </Card>
   );
 
@@ -79,6 +149,7 @@ export default function EmployerDashboard() {
       pending: "secondary",
       eligible: "default",
       not_eligible: "destructive",
+      denied: "destructive",
     };
     return (
       <Badge variant={variants[status] || "secondary"}>
@@ -87,44 +158,191 @@ export default function EmployerDashboard() {
     );
   };
 
+  const STATUS_COLORS: Record<string, string> = {
+    pending: "#94a3b8",
+    eligible: "#3b82f6",
+    certified: "#22c55e",
+    denied: "#ef4444",
+    not_eligible: "#f97316",
+  };
+
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Overview of your WOTC screening and credit tracking
-        </p>
+    <div className="container mx-auto p-6 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
+          <p className="text-muted-foreground">
+            Overview of your WOTC screening and credit tracking
+          </p>
+        </div>
+        <Link href="/employer/employees">
+          <Button data-testid="button-view-employees">
+            View All Employees
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </Link>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Employees"
           value={stats?.totalEmployees || 0}
           icon={Users}
           description="Employees in system"
+          link="/employer/employees"
         />
         <StatCard
           title="Active Screenings"
           value={stats?.activeScreenings || 0}
           icon={ClipboardCheck}
           description="In-progress screenings"
+          link="/employer/screenings"
         />
         <StatCard
           title="Certified"
           value={stats?.certifiedEmployees || 0}
           icon={FileText}
           description="WOTC certified employees"
-          trend="+12% this month"
+          link="/employer/screenings"
         />
         <StatCard
-          title="Projected Credits"
-          value={stats?.projectedCredits || "$0"}
+          title="Actual Credits"
+          value={stats?.actualCredits || "$0"}
           icon={DollarSign}
-          description="Estimated tax credits"
-          trend="+8% this quarter"
+          description="Tax credits earned"
+          link="/employer/credits"
         />
       </div>
 
+      {/* Pipeline & Credits Comparison */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Pipeline Visualization */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Screening Pipeline</CardTitle>
+            <CardDescription>Distribution of screening statuses</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {screeningsLoading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : pipelineData.length === 0 ? (
+              <div className="flex items-center justify-center h-64 text-muted-foreground">
+                <div className="text-center">
+                  <Target className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No screening data yet</p>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={pipelineData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="status" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" radius={[8, 8, 0, 0]}>
+                    {pipelineData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.status] || "#94a3b8"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Credits Comparison */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Credit Projections vs Actuals</CardTitle>
+            <CardDescription>Comparison of projected and actual tax credits</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={creditChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip
+                    formatter={(value: any) => `$${Number(value).toLocaleString()}`}
+                  />
+                  <Legend />
+                  <Bar dataKey="amount" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Top Employees by Credit */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Top Employees by Tax Credit</CardTitle>
+              <CardDescription>Employees with the highest actual credit amounts</CardDescription>
+            </div>
+            <Link href="/employer/credits">
+              <Button variant="outline" size="sm" data-testid="button-view-all-credits">
+                View All Credits
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {creditsLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : !employeesWithCredits || employeesWithCredits.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <DollarSign className="h-12 w-12 mx-auto mb-2 opacity-50" />
+              <p>No credit data available yet</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Hours</TableHead>
+                  <TableHead className="text-right">Actual Credit</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employeesWithCredits
+                  .filter(e => e.credit)
+                  .sort((a, b) => Number(b.credit?.actualCreditAmount || 0) - Number(a.credit?.actualCreditAmount || 0))
+                  .slice(0, 5)
+                  .map((emp) => (
+                    <TableRow key={emp.employee.id} data-testid={`row-employee-${emp.employee.id}`}>
+                      <TableCell className="font-medium">
+                        {emp.employee.firstName} {emp.employee.lastName}
+                      </TableCell>
+                      <TableCell>
+                        {emp.credit && getStatusBadge(emp.credit.status)}
+                      </TableCell>
+                      <TableCell>
+                        {emp.credit?.hoursWorked || 0} hours
+                      </TableCell>
+                      <TableCell className="text-right font-semibold">
+                        ${Number(emp.credit?.actualCreditAmount || 0).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Recent Activity */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Activity</CardTitle>
