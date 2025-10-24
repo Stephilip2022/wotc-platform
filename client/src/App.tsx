@@ -15,6 +15,7 @@ import EmployerDashboard from "@/pages/employer/dashboard";
 import EmployeesPage from "@/pages/employer/employees";
 import ScreeningsPage from "@/pages/employer/screenings";
 import EmployerHoursPage from "@/pages/employer/hours";
+import EmployerCreditsPage from "@/pages/employer/credits";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminEmployersPage from "@/pages/admin/employers";
 import AdminScreeningsPage from "@/pages/admin/screenings";
@@ -86,6 +87,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/employer/employees" component={EmployeesPage} />
                   <Route path="/employer/screenings" component={ScreeningsPage} />
                   <Route path="/employer/hours" component={EmployerHoursPage} />
+                  <Route path="/employer/credits" component={EmployerCreditsPage} />
                   <Route component={NotFound} />
                 </>
               )}

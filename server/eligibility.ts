@@ -198,6 +198,10 @@ function calculateAge(dob: string): number {
 
 /**
  * Calculate actual WOTC credit based on hours worked and wages
+ * WOTC has two tier thresholds:
+ * - 120-399 hours: 25% of qualified wages
+ * - 400+ hours: 40% of qualified wages
+ * - < 120 hours: No credit
  */
 export function calculateCredit(
   targetGroupCode: string,
@@ -209,15 +213,15 @@ export function calculateCredit(
     return 0;
   }
 
-  // Must meet minimum hours requirement
-  if (hoursWorked < targetGroup.hoursRequired) {
+  // Must meet minimum 120-hour threshold for any credit
+  if (hoursWorked < 120) {
     return 0;
   }
 
-  // Credit calculation rules
-  let creditPercentage = 0.40; // 40% for 400+ hours
-  if (hoursWorked >= 120 && hoursWorked < 400) {
-    creditPercentage = 0.25; // 25% for 120-399 hours
+  // Credit calculation rules based on tier
+  let creditPercentage = 0.25; // Default 25% for 120-399 hours
+  if (hoursWorked >= 400) {
+    creditPercentage = 0.40; // 40% for 400+ hours
   }
 
   const calculatedCredit = wagesEarned * creditPercentage;

@@ -24,7 +24,7 @@ import {
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import OpenAI from "openai";
-import { determineEligibility, calculateCredit } from "./eligibility";
+import { determineEligibility, calculateCredit, TARGET_GROUPS } from "./eligibility";
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
 
 const openai = new OpenAI({
@@ -1812,6 +1812,186 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting hours:", error);
       res.status(500).json({ error: "Failed to delete hours" });
+    }
+  });
+
+  // ============================================================================
+  // CREDIT CALCULATION ENGINE
+  // ============================================================================
+
+  // Recalculate credit for a specific screening
+  app.post("/api/employer/credits/calculate/:screeningId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || (user.role !== "employer" && user.role !== "admin") || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const screeningId = req.params.screeningId;
+
+      // Get screening with employee data
+      const [screening] = await db
+        .select({
+          screening: screenings,
+          employee: employees,
+        })
+        .from(screenings)
+        .leftJoin(employees, eq(screenings.employeeId, employees.id))
+        .where(eq(screenings.id, screeningId));
+
+      if (!screening) {
+        return res.status(404).json({ error: "Screening not found" });
+      }
+
+      // Only calculate for certified screenings
+      if (screening.screening.status !== "certified") {
+        return res.status(400).json({ error: "Screening must be certified to calculate credits" });
+      }
+
+      // Get total hours worked for this employee
+      const hoursResults = await db
+        .select({
+          totalHours: sql<number>`COALESCE(SUM(CAST(${hoursWorked.hours} AS DECIMAL)), 0)`,
+        })
+        .from(hoursWorked)
+        .where(eq(hoursWorked.employeeId, screening.screening.employeeId));
+
+      const totalHours = Number(hoursResults[0]?.totalHours || 0);
+
+      // For now, we'll estimate wages based on hours (can be updated to use actual wage data)
+      // Assuming $15/hour as a default (this should come from employee/employer data in real use)
+      const estimatedWages = totalHours * 15;
+
+      const targetGroup = screening.screening.primaryTargetGroup;
+      if (!targetGroup) {
+        return res.status(400).json({ error: "No target group assigned" });
+      }
+
+      // Calculate credit using the eligibility engine
+      const actualCredit = calculateCredit(targetGroup, totalHours, estimatedWages);
+
+      // Get target group info
+      const targetGroupInfo = TARGET_GROUPS[targetGroup];
+      if (!targetGroupInfo) {
+        return res.status(400).json({ error: "Invalid target group" });
+      }
+
+      // Check if credit calculation already exists
+      const [existingCalc] = await db
+        .select()
+        .from(creditCalculations)
+        .where(eq(creditCalculations.screeningId, screeningId));
+
+      let creditCalc;
+      if (existingCalc) {
+        // Update existing calculation
+        [creditCalc] = await db
+          .update(creditCalculations)
+          .set({
+            hoursWorked: Math.floor(totalHours),
+            wagesEarned: estimatedWages.toFixed(2),
+            actualCreditAmount: actualCredit.toFixed(2),
+            minimumHoursRequired: 120, // WOTC minimum is 120 hours for any credit
+            status: totalHours >= 120 ? "in_progress" : "projected",
+            updatedAt: new Date(),
+          })
+          .where(eq(creditCalculations.id, existingCalc.id))
+          .returning();
+      } else {
+        // Create new calculation
+        [creditCalc] = await db.insert(creditCalculations).values({
+          screeningId,
+          employerId: screening.screening.employerId,
+          employeeId: screening.screening.employeeId,
+          targetGroup,
+          maxCreditAmount: targetGroupInfo.maxCredit.toFixed(2),
+          projectedCreditAmount: actualCredit.toFixed(2),
+          actualCreditAmount: actualCredit.toFixed(2),
+          hoursWorked: Math.floor(totalHours),
+          wagesEarned: estimatedWages.toFixed(2),
+          minimumHoursRequired: 120, // WOTC minimum is 120 hours for any credit
+          status: totalHours >= 120 ? "in_progress" : "projected",
+        }).returning();
+      }
+
+      res.json(creditCalc);
+    } catch (error) {
+      console.error("Error calculating credit:", error);
+      res.status(500).json({ error: "Failed to calculate credit" });
+    }
+  });
+
+  // Get all credit calculations for employer
+  app.get("/api/employer/credits", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const credits = await db
+        .select({
+          credit: creditCalculations,
+          employee: employees,
+          screening: screenings,
+        })
+        .from(creditCalculations)
+        .leftJoin(employees, eq(creditCalculations.employeeId, employees.id))
+        .leftJoin(screenings, eq(creditCalculations.screeningId, screenings.id))
+        .where(eq(creditCalculations.employerId, user.employerId))
+        .orderBy(desc(creditCalculations.calculatedAt));
+
+      res.json(credits);
+    } catch (error) {
+      console.error("Error fetching credits:", error);
+      res.status(500).json({ error: "Failed to fetch credits" });
+    }
+  });
+
+  // Auto-recalculate all credits for an employer
+  app.post("/api/employer/credits/recalculate-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Get all certified screenings for this employer
+      const certifiedScreenings = await db
+        .select()
+        .from(screenings)
+        .where(
+          and(
+            eq(screenings.employerId, user.employerId),
+            eq(screenings.status, "certified")
+          )
+        );
+
+      let recalculated = 0;
+      for (const screening of certifiedScreenings) {
+        // Trigger calculation for each screening
+        const response = await fetch(`http://localhost:${process.env.PORT || 5000}/api/employer/credits/calculate/${screening.id}`, {
+          method: "POST",
+          headers: {
+            cookie: req.headers.cookie || "",
+          },
+        });
+
+        if (response.ok) {
+          recalculated++;
+        }
+      }
+
+      res.json({ success: true, recalculated });
+    } catch (error) {
+      console.error("Error recalculating credits:", error);
+      res.status(500).json({ error: "Failed to recalculate credits" });
     }
   });
 
