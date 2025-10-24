@@ -947,28 +947,42 @@ export const statePortalConfigs = pgTable("state_portal_configs", {
   stateCode: text("state_code").notNull().unique(), // 'CA', 'NY', 'TX', etc.
   stateName: text("state_name").notNull(), // 'California', 'New York', etc.
   
-  // Portal details
+  // Portal URLs
   portalUrl: text("portal_url").notNull(), // State WOTC portal login URL
+  bulkUploadUrl: text("bulk_upload_url"), // Bulk upload URL (if different from portalUrl)
   submissionUrl: text("submission_url"), // Direct CSV upload URL if different
   
-  // Authentication
+  // Credentials & Authentication
   authType: text("auth_type").notNull().default("credentials"), // 'credentials', 'oauth', 'api_key'
+  credentials: jsonb("credentials"), // { userId: string, password: string }
+  challengeQuestions: jsonb("challenge_questions"), // Array of { question: string, answer: string }
   loginFieldSelectors: jsonb("login_field_selectors"), // Playwright selectors for login fields
   
   // CSV format requirements
   requiredColumns: text("required_columns").array(), // Required CSV columns for this state
   optionalColumns: text("optional_columns").array(), // Optional columns
   dateFormat: text("date_format").default("YYYY-MM-DD"), // Expected date format
+  bulkUploadInput: text("bulk_upload_input"), // Additional notes/requirements for bulk uploads
   
   // Automation configuration
   maxBatchSize: integer("max_batch_size").default(100), // Max records per submission
   submissionFrequency: text("submission_frequency").default("daily"), // 'daily', 'weekly', 'manual'
   automationEnabled: boolean("automation_enabled").default(false),
+  ocrEnabled: boolean("ocr_enabled").default(false), // OCR capability for determination letters
   
-  // Processing times
+  // Processing times & requirements
   expectedProcessingDays: integer("expected_processing_days").default(30), // Avg days for determination
+  missingElectronicSubmittals: boolean("missing_electronic_submittals").default(false),
+  signatureRequirement: text("signature_requirement").default("electronic"), // 'electronic', 'wet', 'both'
+  longPoaApprovalDuration: boolean("long_poa_approval_duration").default(false),
   
-  // Contact info
+  // State Contacts (up to 3 contacts)
+  stateContacts: jsonb("state_contacts"), // Array of { name, title, email, phone }
+  
+  // Follow-ups & Reminders
+  followUps: jsonb("follow_ups"), // Array of { date, description, completed }
+  
+  // Legacy contact info (kept for backwards compatibility)
   supportEmail: text("support_email"),
   supportPhone: text("support_phone"),
   

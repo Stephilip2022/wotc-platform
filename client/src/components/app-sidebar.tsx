@@ -22,6 +22,7 @@ import {
   Download,
   CheckSquare,
   Clock,
+  KeyRound,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -40,6 +41,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
     { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "State Automation", url: "/admin/automation", icon: Settings },
+    { title: "State Credentials", url: "/admin/state-credentials", icon: KeyRound },
     { title: "Settings", url: "/admin/settings", icon: Settings },
   ];
 
