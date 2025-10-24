@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Edit, Plus, Trash2, Eye, EyeOff, Save } from "lucide-react";
+import { Edit, Plus, Trash2, Eye, EyeOff, Save, AlertTriangle, History, RefreshCw, Calendar } from "lucide-react";
 
 // Form schema for state portal credentials
 const stateCredentialsSchema = z.object({
@@ -61,10 +62,19 @@ export default function StateCredentialsPage() {
   const [editingState, setEditingState] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [rotatingPortal, setRotatingPortal] = useState<any>(null);
+  const [viewingHistory, setViewingHistory] = useState<any>(null);
+  const [rotationDialogOpen, setRotationDialogOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
 
   // Fetch state portal configurations
   const { data: statePortals, isLoading } = useQuery<any[]>({
     queryKey: ['/api/admin/state-portals'],
+  });
+
+  // Fetch portals due for rotation
+  const { data: rotationDueData } = useQuery<{ count: number; portals: any[] }>({
+    queryKey: ['/api/admin/state-portals/rotation-due'],
   });
 
   // Update mutation
@@ -110,6 +120,53 @@ export default function StateCredentialsPage() {
         description: error.message || "Failed to update credentials",
         variant: "destructive",
       });
+    },
+  });
+
+  // Rotate credentials mutation
+  const [newUserId, setNewUserId] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [rotationReason, setRotationReason] = useState('');
+
+  const rotateMutation = useMutation({
+    mutationFn: async ({ id, newCredentials, reason }: { id: string; newCredentials: { userId: string; password: string }; reason?: string }) => {
+      const response = await apiRequest('POST', `/api/admin/state-portals/${id}/rotate`, {
+        newCredentials,
+        rotationType: 'manual',
+        reason,
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/state-portals'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/state-portals/rotation-due'] });
+      toast({
+        title: "Success",
+        description: "Credentials rotated successfully",
+      });
+      setRotationDialogOpen(false);
+      setRotatingPortal(null);
+      setNewUserId('');
+      setNewPassword('');
+      setRotationReason('');
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to rotate credentials",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Fetch rotation history for viewing
+  const { data: rotationHistory, isLoading: isLoadingHistory } = useQuery<any[]>({
+    queryKey: ['/api/admin/state-portals', viewingHistory?.id, 'rotation-history'],
+    enabled: !!viewingHistory,
+    queryFn: async () => {
+      if (!viewingHistory) return [];
+      const response = await apiRequest('GET', `/api/admin/state-portals/${viewingHistory.id}/rotation-history`);
+      return await response.json();
     },
   });
 
@@ -176,13 +233,25 @@ export default function StateCredentialsPage() {
         </p>
       </div>
 
+      {/* Rotation Alert Banner */}
+      {rotationDueData && rotationDueData.count > 0 && (
+        <Alert variant="destructive" className="mb-6" data-testid="alert-rotation-due">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Credential Rotation Required</AlertTitle>
+          <AlertDescription>
+            {rotationDueData.count} state portal{rotationDueData.count > 1 ? 's' : ''} {rotationDueData.count > 1 ? 'need' : 'needs'} credential rotation.
+            Review and rotate credentials to maintain security compliance.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-4">
         {statePortals?.map((state) => (
           <Card key={state.id} data-testid={`card-state-${state.stateCode}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="flex items-center gap-3">
+                  <CardTitle className="flex items-center gap-3 flex-wrap">
                     <span className="text-2xl font-bold">{state.stateCode}</span>
                     <span>{state.stateName}</span>
                     {state.automationEnabled && (
@@ -191,19 +260,57 @@ export default function StateCredentialsPage() {
                     {state.ocrEnabled && (
                       <Badge variant="secondary">OCR Enabled</Badge>
                     )}
+                    {state.nextRotationDue && new Date(state.nextRotationDue) < new Date() && (
+                      <Badge variant="destructive" data-testid={`badge-rotation-overdue-${state.stateCode}`}>
+                        <AlertTriangle className="w-3 h-3 mr-1" />
+                        Rotation Overdue
+                      </Badge>
+                    )}
+                    {state.nextRotationDue && new Date(state.nextRotationDue) > new Date() && (
+                      <Badge variant="outline" data-testid={`badge-rotation-scheduled-${state.stateCode}`}>
+                        <Calendar className="w-3 h-3 mr-1" />
+                        Next: {new Date(state.nextRotationDue).toLocaleDateString()}
+                      </Badge>
+                    )}
                   </CardTitle>
                   <CardDescription className="mt-2">
                     {state.portalUrl}
                   </CardDescription>
                 </div>
-                <Button
-                  onClick={() => openEditDialog(state)}
-                  size="sm"
-                  data-testid={`button-edit-${state.stateCode}`}
-                >
-                  <Edit className="w-4 h-4 mr-2" />
-                  Edit Credentials
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      setRotatingPortal(state);
+                      setRotationDialogOpen(true);
+                    }}
+                    size="sm"
+                    variant="outline"
+                    data-testid={`button-rotate-${state.stateCode}`}
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Rotate
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setViewingHistory(state);
+                      setHistoryDialogOpen(true);
+                    }}
+                    size="sm"
+                    variant="ghost"
+                    data-testid={`button-history-${state.stateCode}`}
+                  >
+                    <History className="w-4 h-4 mr-2" />
+                    History
+                  </Button>
+                  <Button
+                    onClick={() => openEditDialog(state)}
+                    size="sm"
+                    data-testid={`button-edit-${state.stateCode}`}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -563,6 +670,175 @@ export default function StateCredentialsPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rotate Credentials Dialog */}
+      <Dialog open={rotationDialogOpen} onOpenChange={setRotationDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rotate Credentials - {rotatingPortal?.stateCode}</DialogTitle>
+            <DialogDescription>
+              Enter new credentials for {rotatingPortal?.stateName}. Old credentials will be securely logged for audit purposes.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="newUserId">New User ID</Label>
+              <Input
+                id="newUserId"
+                value={newUserId}
+                onChange={(e) => setNewUserId(e.target.value)}
+                placeholder="Enter new user ID"
+                data-testid="input-new-userid"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password"
+                data-testid="input-new-password"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="rotationReason">Reason (Optional)</Label>
+              <Textarea
+                id="rotationReason"
+                value={rotationReason}
+                onChange={(e) => setRotationReason(e.target.value)}
+                placeholder="Scheduled rotation, security incident, etc."
+                rows={2}
+                data-testid="textarea-rotation-reason"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4 border-t">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRotationDialogOpen(false);
+                  setNewUserId('');
+                  setNewPassword('');
+                  setRotationReason('');
+                }}
+                data-testid="button-cancel-rotation"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  // Trim and validate inputs
+                  const trimmedUserId = newUserId.trim();
+                  const trimmedPassword = newPassword.trim();
+                  
+                  if (!trimmedUserId || !trimmedPassword) {
+                    toast({
+                      title: "Validation Error",
+                      description: "User ID and password are required and cannot be empty or whitespace only",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  if (trimmedUserId.length < 3) {
+                    toast({
+                      title: "Validation Error",
+                      description: "User ID must be at least 3 characters long",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  if (trimmedPassword.length < 6) {
+                    toast({
+                      title: "Validation Error",
+                      description: "Password must be at least 6 characters long",
+                      variant: "destructive",
+                    });
+                    return;
+                  }
+                  
+                  rotateMutation.mutate({
+                    id: rotatingPortal.id,
+                    newCredentials: { userId: trimmedUserId, password: trimmedPassword },
+                    reason: rotationReason?.trim() || undefined,
+                  });
+                }}
+                disabled={rotateMutation.isPending || !newUserId.trim() || !newPassword.trim()}
+                data-testid="button-confirm-rotation"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                {rotateMutation.isPending ? 'Rotating...' : 'Rotate Credentials'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rotation History Dialog */}
+      <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Rotation History - {viewingHistory?.stateCode}</DialogTitle>
+            <DialogDescription>
+              View credential rotation history for {viewingHistory?.stateName}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {isLoadingHistory ? (
+              <div className="text-center text-muted-foreground py-8">
+                Loading rotation history...
+              </div>
+            ) : rotationHistory && rotationHistory.length > 0 ? (
+              rotationHistory.map((entry: any) => (
+                <Card key={entry.id}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm">
+                        {new Date(entry.rotatedAt).toLocaleString()}
+                      </CardTitle>
+                      <Badge variant={entry.rotationType === 'security_incident' ? 'destructive' : 'outline'}>
+                        {entry.rotationType}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm">
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-muted-foreground">Rotated by:</span>{' '}
+                        <span className="font-medium">
+                          {entry.rotatedByUser?.firstName} {entry.rotatedByUser?.lastName} ({entry.rotatedByUser?.email})
+                        </span>
+                      </div>
+                      {entry.reason && (
+                        <div>
+                          <span className="text-muted-foreground">Reason:</span>{' '}
+                          <span className="font-medium">{entry.reason}</span>
+                        </div>
+                      )}
+                      {entry.mfaChanged && (
+                        <Badge variant="secondary" className="mt-2">
+                          MFA Configuration Changed
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                No rotation history available for this portal.
+              </p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

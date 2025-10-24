@@ -3977,9 +3977,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { newCredentials, rotationType, reason } = req.body;
       
+      // Validate and trim credentials
       if (!newCredentials || !newCredentials.userId || !newCredentials.password) {
         return res.status(400).json({ error: "New credentials (userId, password) required" });
       }
+      
+      const trimmedUserId = newCredentials.userId.trim();
+      const trimmedPassword = newCredentials.password.trim();
+      
+      if (!trimmedUserId || !trimmedPassword) {
+        return res.status(400).json({ error: "User ID and password cannot be empty or whitespace only" });
+      }
+      
+      if (trimmedUserId.length < 3) {
+        return res.status(400).json({ error: "User ID must be at least 3 characters long" });
+      }
+      
+      if (trimmedPassword.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters long" });
+      }
+      
+      // Use trimmed values
+      newCredentials.userId = trimmedUserId;
+      newCredentials.password = trimmedPassword;
 
       // Get existing portal config
       const [portal] = await db
