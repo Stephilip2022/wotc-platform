@@ -3805,6 +3805,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Trigger automated bulk submission for employer
+  app.post("/api/admin/submissions/trigger", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employerId, stateCode } = req.body;
+      
+      if (!employerId || !stateCode) {
+        return res.status(400).json({ error: "employerId and stateCode required" });
+      }
+
+      const { stateSubmissionJobs } = await import("@shared/schema");
+      
+      // Create new submission job
+      const [job] = await db
+        .insert(stateSubmissionJobs)
+        .values({
+          employerId,
+          stateCode: stateCode.toUpperCase(),
+          status: 'pending',
+          totalRecords: 0,
+          submittedRecords: 0,
+        })
+        .returning();
+
+      // Note: Actual processing would happen in a background worker
+      // For now, return the job ID for status tracking
+      res.json({
+        success: true,
+        message: 'Submission job queued',
+        jobId: job.id,
+      });
+    } catch (error) {
+      console.error("Error triggering submission:", error);
+      res.status(500).json({ error: "Failed to trigger submission" });
+    }
+  });
+
+  // Get submission job status
+  app.get("/api/admin/submissions/:jobId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateSubmissionJobs } = await import("@shared/schema");
+      const [job] = await db
+        .select()
+        .from(stateSubmissionJobs)
+        .where(eq(stateSubmissionJobs.id, req.params.jobId));
+
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+
+      res.json(job);
+    } catch (error) {
+      console.error("Error fetching job:", error);
+      res.status(500).json({ error: "Failed to fetch job" });
+    }
+  });
+
   // Get all submission jobs (admin)
   app.get("/api/admin/submissions", isAuthenticated, async (req: any, res) => {
     try {
