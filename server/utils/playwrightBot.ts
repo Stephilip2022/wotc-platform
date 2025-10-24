@@ -106,7 +106,7 @@ export class StatePortalBot {
         throw new Error('Login form not found - portal structure may have changed');
       }
 
-      await usernameInput.fill(credentials.username || '');
+      await usernameInput.fill(credentials.userId || credentials.username || '');
       await passwordInput.fill(credentials.password || '');
       
       const submitButton = await this.page.waitForSelector('button[type="submit"], input[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
@@ -268,7 +268,7 @@ export class StatePortalBot {
       screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
 
       // Login (Arizona-specific selectors would go here)
-      await this.page.fill('#username', credentials.username || '');
+      await this.page.fill('#username', credentials.userId || credentials.username || '');
       await this.page.fill('#password', credentials.password || '');
       await this.page.click('button[type="submit"]');
       await this.page.waitForNavigation({ timeout: 30000 });
@@ -332,7 +332,7 @@ export class StatePortalBot {
       const credentials = config.credentials as any;
       
       await this.page.goto(config.portalUrl);
-      await this.page.fill('input[name="username"]', credentials.username || '');
+      await this.page.fill('input[name="username"]', credentials.userId || credentials.username || '');
       await this.page.fill('input[name="password"]', credentials.password || '');
       await this.page.click('button[type="submit"]');
       
