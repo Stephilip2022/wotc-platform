@@ -308,6 +308,119 @@ export type InsertHoursWorked = z.infer<typeof insertHoursWorkedSchema>;
 export type HoursWorked = typeof hoursWorked.$inferSelect;
 
 // ============================================================================
+// CSV IMPORT TEMPLATES (Field Mapping Templates)
+// ============================================================================
+
+export const csvImportTemplates = pgTable("csv_import_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), // "ADP Payroll Export", "QuickBooks Hours", etc.
+  description: text("description"),
+  
+  // Template configuration
+  importType: text("import_type").notNull().default("hours"), // 'hours', 'employees', etc.
+  columnMappings: jsonb("column_mappings").notNull(), // { "Employee ID": "employeeId", "Total Hours": "hours" }
+  
+  // Matching configuration
+  employeeMatchStrategy: text("employee_match_strategy").default("id"), // 'id', 'ssn', 'email', 'name'
+  dateFormat: text("date_format").default("YYYY-MM-DD"), // Date parsing format
+  
+  // Usage tracking
+  lastUsedAt: timestamp("last_used_at"),
+  useCount: integer("use_count").default(0),
+  
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCsvImportTemplateSchema = createInsertSchema(csvImportTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCsvImportTemplate = z.infer<typeof insertCsvImportTemplateSchema>;
+export type CsvImportTemplate = typeof csvImportTemplates.$inferSelect;
+
+// ============================================================================
+// CSV IMPORT SESSIONS (Track import process)
+// ============================================================================
+
+export const csvImportSessions = pgTable("csv_import_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  templateId: varchar("template_id").references(() => csvImportTemplates.id, { onDelete: "set null" }),
+  
+  // File information
+  fileName: text("file_name").notNull(),
+  fileSize: integer("file_size"),
+  rowCount: integer("row_count").default(0),
+  
+  // Import status
+  status: text("status").default("parsing"), // 'parsing', 'mapping', 'preview', 'importing', 'completed', 'failed'
+  importType: text("import_type").notNull().default("hours"),
+  
+  // Column detection
+  detectedColumns: jsonb("detected_columns"), // Array of column headers detected
+  columnMappings: jsonb("column_mappings"), // Final column to field mappings
+  
+  // Employee matching config
+  employeeMatchStrategy: text("employee_match_strategy").default("id"),
+  
+  // Results
+  totalRows: integer("total_rows").default(0),
+  successfulRows: integer("successful_rows").default(0),
+  failedRows: integer("failed_rows").default(0),
+  warningRows: integer("warning_rows").default(0),
+  
+  // Error tracking
+  errors: jsonb("errors"), // Array of error objects with row numbers
+  warnings: jsonb("warnings"), // Array of warning objects
+  
+  // Completion
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCsvImportSessionSchema = createInsertSchema(csvImportSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCsvImportSession = z.infer<typeof insertCsvImportSessionSchema>;
+export type CsvImportSession = typeof csvImportSessions.$inferSelect;
+
+// ============================================================================
+// CSV IMPORT ROWS (Preview and validation)
+// ============================================================================
+
+export const csvImportRows = pgTable("csv_import_rows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => csvImportSessions.id, { onDelete: "cascade" }),
+  
+  // Row information
+  rowNumber: integer("row_number").notNull(),
+  rawData: jsonb("raw_data").notNull(), // Original CSV row data
+  mappedData: jsonb("mapped_data"), // Data after field mapping
+  
+  // Employee matching
+  matchedEmployeeId: varchar("matched_employee_id").references(() => employees.id, { onDelete: "set null" }),
+  matchConfidence: text("match_confidence"), // 'exact', 'high', 'medium', 'low', 'none'
+  matchMethod: text("match_method"), // 'id', 'ssn', 'email', 'name'
+  
+  // Validation
+  status: text("status").default("pending"), // 'pending', 'valid', 'warning', 'error', 'imported'
+  validationErrors: jsonb("validation_errors"), // Array of error messages
+  validationWarnings: jsonb("validation_warnings"), // Array of warning messages
+  
+  // Import result
+  importedRecordId: varchar("imported_record_id"), // ID of created hours_worked record
+  importedAt: timestamp("imported_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCsvImportRowSchema = createInsertSchema(csvImportRows).omit({ id: true, createdAt: true });
+export type InsertCsvImportRow = z.infer<typeof insertCsvImportRowSchema>;
+export type CsvImportRow = typeof csvImportRows.$inferSelect;
+
+// ============================================================================
 // SCREENING STATUS CHANGES (Audit Trail)
 // ============================================================================
 
