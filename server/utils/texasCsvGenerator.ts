@@ -1,8 +1,8 @@
 /**
  * Texas WOTC OLS Bulk Upload CSV Generator
  * 
- * Generates CSV files compliant with Texas Workforce Commission requirements
- * Based on Texas OLS bulk upload specifications and Form 8850/9061 fields
+ * Generates CSV files with EXACT headers required by Texas Workforce Commission
+ * Format matches Texas portal bulk upload template specification
  */
 
 import type { Employee, Screening } from "@shared/schema";
@@ -16,42 +16,33 @@ interface EmployeeWithScreening {
   employerCity?: string;
   employerState?: string;
   employerZip?: string;
-  employerPhone?: string;
+  startingWage?: number;
+  jobOnetCode?: string;
 }
 
 /**
- * Format date for Texas portal (M/D/YYYY format)
+ * Format date for Texas portal (YYYY-MM-DD format)
  */
 function formatDateTexas(dateString: string | null | undefined): string {
   if (!dateString) return '';
   
   try {
     const date = new Date(dateString);
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
     const year = date.getFullYear();
-    return `${month}/${day}/${year}`;
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   } catch {
     return '';
   }
 }
 
 /**
- * Clean field - remove commas and quotes (Texas requirement: NO COMMAS)
+ * Clean field - remove commas, quotes, and newlines
  */
 function cleanField(value: string | null | undefined): string {
   if (!value) return '';
-  return value.replace(/,/g, '').replace(/"/g, '').trim();
-}
-
-/**
- * Format as TEXT for CSV (preserves leading zeros in Excel)
- * Texas requires columns A, B, C, L to be TEXT format
- */
-function formatAsText(value: string | null | undefined): string {
-  if (!value) return '';
-  // Use ="value" format to force Excel to treat as text
-  return `="${cleanField(value)}"`;
+  return value.replace(/[,"\n\r]/g, '').trim();
 }
 
 /**
@@ -70,65 +61,90 @@ function hasTargetGroup(targetGroups: any, ...groups: string[]): boolean {
 }
 
 /**
- * Texas Column Definitions
- * Based on standard WOTC Form 8850 and 9061 requirements
+ * Extract questionnaire responses for specific questions
  */
-export interface TexasCSVRow {
-  // Required Columns A-L
-  consultantEIN: string;           // A - Leave blank if employer direct
-  employerEIN: string;              // B - TEXT format
-  employeeSSN: string;              // C - TEXT format
-  employeeFirstName: string;        // D
-  employeeMiddleName: string;       // E
-  employeeLastName: string;         // F
-  employeeSuffix: string;           // G
-  employeeAddress: string;          // H
-  employeeCity: string;             // I
-  employeeState: string;            // J
-  employeeZip: string;              // K
-  employeeDOB: string;              // L - TEXT format (M/D/YYYY)
+function getQuestionResponse(screening: Screening, questionKey: string): string {
+  // Placeholder - in production, we'd extract from screening.responses or related questionnaire_responses
+  // For now, derive from target groups
+  const targetGroups = Array.isArray(screening.targetGroups) ? screening.targetGroups : [];
   
-  // Optional Columns M-AS (Form 8850 questions)
-  employeePhone: string;            // M
-  hireDate: string;                 // N - (M/D/YYYY)
-  startDate: string;                // O - (M/D/YYYY)
-  employerName: string;             // P
-  employerAddress: string;          // Q
-  employerCity: string;             // R
-  employerState: string;            // S
-  employerZip: string;              // T
-  employerPhone: string;            // U
-  
-  // Target Group Indicators (Form 8850 checkboxes)
-  snap: string;                     // V - SNAP recipient (Y/N)
-  snapState: string;                // W - State code for OOS SNAP
-  tanf: string;                     // X - TANF recipient (Y/N)
-  tanfState: string;                // Y - State code for OOS TANF
-  veteranUnemployed: string;        // Z - Unemployed veteran
-  disabledVeteran: string;          // AA - Disabled veteran
-  veteranFoodStamps: string;        // AB - Veteran on SNAP
-  veteranUnemployed6Months: string; // AC - Unemployed 6+ months
-  exFelon: string;                  // AD - Ex-felon (Y/N)
-  dcr: string;                      // AE - Designated Community Resident
-  vr: string;                       // AF - Vocational Rehab referral (Y/N)
-  summerYouth: string;              // AG - Summer Youth (Y/N)
-  summerYouthEmpZone: string;       // AH - In empowerment zone
-  ssi: string;                      // AI - SSI recipient (Y/N)
-  ssiState: string;                 // AJ - State code for OOS SSI
-  ltfar: string;                    // AK - Long-term TANF (Y/N)
-  ltfarState: string;               // AL - State code for OOS LTFAR
-  
-  // Additional veteran fields
-  dd214Branch: string;              // AM - Military branch
-  dd214DischargeDate: string;       // AN - Discharge date
-  dd214ServiceDates: string;        // AO - Service dates
-  disabilityRating: string;         // AP - VA disability %
-  
-  // Source documents
-  sourceDocs: string;               // AQ - Has source docs (Y/N)
-  dd214Attached: string;            // AR - DD214 attached
-  disabilityLetter: string;         // AS - Disability letter attached
+  switch (questionKey) {
+    case 'q1_condCert':
+      // Conditional certification - typically relates to DCR, IV-A, TANF
+      return formatYN(hasTargetGroup(targetGroups, 'DCR', 'IVA', 'TANF'));
+    case 'q2_metConditions':
+      // Met conditional certification conditions
+      return formatYN(hasTargetGroup(targetGroups, 'DCR', 'IVA', 'TANF'));
+    case 'q3_uVet6':
+      // Unemployed veteran 6+ months
+      return formatYN(hasTargetGroup(targetGroups, 'VETERAN_UNEMPLOYED'));
+    case 'q4_dVet':
+      // Disabled veteran
+      return formatYN(hasTargetGroup(targetGroups, 'VETERAN_DISABLED'));
+    case 'q5_dUVet6':
+      // Disabled unemployed veteran 6+ months
+      return formatYN(hasTargetGroup(targetGroups, 'VETERAN_DISABLED', 'VETERAN_UNEMPLOYED'));
+    case 'q6_tanfPayments':
+      // Receiving TANF payments
+      return formatYN(hasTargetGroup(targetGroups, 'TANF', 'LTFAR'));
+    case 'q7_u27':
+      // Unemployed 27 weeks
+      return formatYN(hasTargetGroup(targetGroups, 'LTUR'));
+    default:
+      return '';
+  }
 }
+
+/**
+ * Texas Column Headers (EXACT format required by portal)
+ */
+const TEXAS_CSV_HEADERS = [
+  'cein',                 // Consultant EIN (blank for direct employers)
+  'ein',                  // Employer EIN
+  'ssn',                  // Employee SSN
+  'dob',                  // Date of birth (YYYY-MM-DD)
+  'hiredDate',            // Hire date (YYYY-MM-DD)
+  'startDate',            // Start date (YYYY-MM-DD)
+  'lastName',             // Last name
+  'firstName',            // First name
+  'address',              // Street address
+  'city',                 // City
+  'state',                // State (2-letter code)
+  'zip',                  // ZIP code
+  'startingWage',         // Starting hourly wage
+  'jobOnetCode',          // O*NET job classification code
+  'q1_condCert',          // Question 1: Conditional certification (Y/N)
+  'q2_metConditions',     // Question 2: Met conditions (Y/N)
+  'q3_uVet6',             // Question 3: Unemployed veteran 6+ months (Y/N)
+  'q4_dVet',              // Question 4: Disabled veteran (Y/N)
+  'q5_dUVet6',            // Question 5: Disabled unemployed vet 6+ months (Y/N)
+  'q6_tanfPayments',      // Question 6: TANF payments (Y/N)
+  'q7_u27',               // Question 7: Unemployed 27+ weeks (Y/N)
+  'qualifiedIva',         // Qualified IV-A recipient (Y/N)
+  'qualifiedIvaState',    // State code for out-of-state IV-A
+  'qualifiedVet',         // Qualified veteran (Y/N)
+  'qualifiedVetState',    // State code for out-of-state veteran
+  'uVet4Weeks',           // Unemployed veteran 4+ weeks (Y/N)
+  'uVet6Months',          // Unemployed veteran 6+ months (Y/N)
+  'dVet',                 // Disabled veteran (Y/N)
+  'dUVet6Months',         // Disabled unemployed vet 6+ months (Y/N)
+  'exFelon',              // Ex-felon (Y/N)
+  'exFelonTypeFederal',   // Federal conviction (Y/N)
+  'exFelonTypeState',     // State conviction (Y/N)
+  'dcr',                  // Designated Community Resident (Y/N)
+  'dcrResidesInRRC',      // DCR resides in Rural Renewal County (Y/N)
+  'dcrResidesInEZ',       // DCR resides in Empowerment Zone (Y/N)
+  'vocRehab',             // Vocational Rehab referral (Y/N)
+  'summerYouth',          // Summer Youth (Y/N)
+  'snap',                 // SNAP recipient (Y/N)
+  'snapState',            // State code for out-of-state SNAP
+  'ssi',                  // SSI recipient (Y/N)
+  'ltfar',                // Long-term family assistance (Y/N)
+  'ltfarState',           // State code for out-of-state LTFAR
+  'ltur',                 // Long-term unemployment (Y/N)
+  'lturState',            // State code for out-of-state LTUR
+  'sourceDocs',           // Source documents available (Y/N)
+];
 
 /**
  * Generate Texas CSV from employee/screening data
@@ -139,121 +155,83 @@ export function generateTexasCSV(records: EmployeeWithScreening[]): string {
     throw new Error('Texas bulk upload limited to 998 records per file (plus header)');
   }
 
-  // Define header row
-  const header = [
-    'Consultant EIN',           // A
-    'Employer EIN',             // B
-    'Employee SSN',             // C
-    'First Name',               // D
-    'Middle Name',              // E
-    'Last Name',                // F
-    'Suffix',                   // G
-    'Address',                  // H
-    'City',                     // I
-    'State',                    // J
-    'ZIP',                      // K
-    'Date of Birth',            // L
-    'Phone',                    // M
-    'Hire Date',                // N
-    'Start Date',               // O
-    'Employer Name',            // P
-    'Employer Address',         // Q
-    'Employer City',            // R
-    'Employer State',           // S
-    'Employer ZIP',             // T
-    'Employer Phone',           // U
-    'SNAP',                     // V
-    'SNAP State',               // W
-    'TANF',                     // X
-    'TANF State',               // Y
-    'Veteran Unemployed',       // Z
-    'Disabled Veteran',         // AA
-    'Veteran SNAP',             // AB
-    'Veteran Unemployed 6Mo',   // AC
-    'Ex-Felon',                 // AD
-    'DCR',                      // AE
-    'VR Referral',              // AF
-    'Summer Youth',             // AG
-    'Summer Youth EZ',          // AH
-    'SSI',                      // AI
-    'SSI State',                // AJ
-    'LTFAR',                    // AK
-    'LTFAR State',              // AL
-    'DD214 Branch',             // AM
-    'DD214 Discharge Date',     // AN
-    'DD214 Service Dates',      // AO
-    'Disability Rating',        // AP
-    'Source Docs',              // AQ
-    'DD214 Attached',           // AR
-    'Disability Letter',        // AS
-  ].join(',');
+  // Generate CSV rows
+  const rows: string[] = [];
+  
+  // Header row
+  rows.push(TEXAS_CSV_HEADERS.join(','));
 
-  // Generate data rows
-  const dataRows = records.map(record => {
-    const { employee, screening, employerEin, employerName } = record;
+  // Data rows
+  for (const record of records) {
+    const { employee, screening, employerEin, startingWage, jobOnetCode } = record;
     const targetGroups = screening.targetGroups || [];
 
     // Determine target group flags
-    const isSnap = hasTargetGroup(targetGroups, 'SNAP');
-    const isTanf = hasTargetGroup(targetGroups, 'TANF');
-    const isLtfar = hasTargetGroup(targetGroups, 'LTFAR');
+    const isIva = hasTargetGroup(targetGroups, 'IVA', 'TANF');
     const isVeteran = hasTargetGroup(targetGroups, 'VETERAN', 'VETERAN_DISABLED', 'VETERAN_UNEMPLOYED');
+    const isVeteranUnemployed = hasTargetGroup(targetGroups, 'VETERAN_UNEMPLOYED');
+    const isVeteranDisabled = hasTargetGroup(targetGroups, 'VETERAN_DISABLED');
     const isExFelon = hasTargetGroup(targetGroups, 'EXFELON');
     const isDcr = hasTargetGroup(targetGroups, 'DCR');
-    const isVr = hasTargetGroup(targetGroups, 'VR');
+    const isVocRehab = hasTargetGroup(targetGroups, 'VR');
     const isSummerYouth = hasTargetGroup(targetGroups, 'SUMMER_YOUTH');
+    const isSnap = hasTargetGroup(targetGroups, 'SNAP');
     const isSsi = hasTargetGroup(targetGroups, 'SSI');
+    const isLtfar = hasTargetGroup(targetGroups, 'LTFAR');
+    const isLtur = hasTargetGroup(targetGroups, 'LTUR');
 
-    return [
-      '',                                           // A - No consultant (employer direct)
-      formatAsText(employerEin),                    // B - TEXT format
-      formatAsText(employee.ssn?.replace(/-/g, '')), // C - TEXT format, no dashes
-      cleanField(employee.firstName),               // D
-      '',                                           // E - Middle name
-      cleanField(employee.lastName),                // F
-      '',                                           // G - Suffix
-      cleanField(employee.address),                 // H
-      cleanField(employee.city),                    // I
-      cleanField(employee.state),                   // J
-      cleanField(employee.zipCode),                 // K
-      formatAsText(formatDateTexas(employee.dateOfBirth)), // L - TEXT format
-      cleanField(employee.phone?.replace(/\D/g, '')), // M - digits only
-      formatDateTexas(employee.hireDate),           // N
-      formatDateTexas(employee.startDate || employee.hireDate), // O
-      cleanField(employerName),                     // P
-      cleanField(record.employerAddress),           // Q
-      cleanField(record.employerCity),              // R
-      cleanField(record.employerState),             // S
-      cleanField(record.employerZip),               // T
-      cleanField(record.employerPhone?.replace(/\D/g, '')), // U
-      formatYN(isSnap),                             // V
-      '',                                           // W - State for OOS (TX automatic)
-      formatYN(isTanf),                             // X
-      '',                                           // Y - State for OOS (TX automatic)
-      formatYN(isVeteran),                          // Z
-      formatYN(hasTargetGroup(targetGroups, 'VETERAN_DISABLED')), // AA
-      formatYN(isVeteran && isSnap),                // AB
-      formatYN(hasTargetGroup(targetGroups, 'VETERAN_UNEMPLOYED')), // AC
-      formatYN(isExFelon),                          // AD
-      formatYN(isDcr),                              // AE
-      formatYN(isVr),                               // AF
-      formatYN(isSummerYouth),                      // AG
-      'N',                                          // AH - Empowerment zone
-      formatYN(isSsi),                              // AI
-      '',                                           // AJ - State for OOS SSI
-      formatYN(isLtfar),                            // AK
-      '',                                           // AL - State for OOS LTFAR
-      '',                                           // AM - DD214 branch
-      '',                                           // AN - Discharge date
-      '',                                           // AO - Service dates
-      '',                                           // AP - Disability rating
-      formatYN(true),                               // AQ - Source docs (assume Y)
-      formatYN(isVeteran),                          // AR - DD214 if veteran
-      formatYN(hasTargetGroup(targetGroups, 'VETERAN_DISABLED')), // AS
-    ].join(',');
-  });
+    const rowData = [
+      '',                                                 // cein - Consultant EIN (blank for direct)
+      cleanField(employerEin),                            // ein
+      cleanField(employee.ssn?.replace(/[^0-9]/g, '')),   // ssn - digits only
+      formatDateTexas(employee.dateOfBirth),              // dob
+      formatDateTexas(employee.hireDate),                 // hiredDate
+      formatDateTexas(employee.startDate || employee.hireDate), // startDate
+      cleanField(employee.lastName),                      // lastName
+      cleanField(employee.firstName),                     // firstName
+      cleanField(employee.address),                       // address
+      cleanField(employee.city),                          // city
+      cleanField(employee.state),                         // state
+      cleanField(employee.zipCode),                       // zip
+      startingWage?.toString() || '',                     // startingWage
+      cleanField(jobOnetCode) || '',                      // jobOnetCode
+      getQuestionResponse(screening, 'q1_condCert'),      // q1_condCert
+      getQuestionResponse(screening, 'q2_metConditions'), // q2_metConditions
+      getQuestionResponse(screening, 'q3_uVet6'),         // q3_uVet6
+      getQuestionResponse(screening, 'q4_dVet'),          // q4_dVet
+      getQuestionResponse(screening, 'q5_dUVet6'),        // q5_dUVet6
+      getQuestionResponse(screening, 'q6_tanfPayments'),  // q6_tanfPayments
+      getQuestionResponse(screening, 'q7_u27'),           // q7_u27
+      formatYN(isIva),                                    // qualifiedIva
+      '',                                                 // qualifiedIvaState (TX default)
+      formatYN(isVeteran),                                // qualifiedVet
+      '',                                                 // qualifiedVetState (TX default)
+      formatYN(isVeteranUnemployed),                      // uVet4Weeks
+      formatYN(isVeteranUnemployed),                      // uVet6Months
+      formatYN(isVeteranDisabled),                        // dVet
+      formatYN(isVeteranDisabled && isVeteranUnemployed), // dUVet6Months
+      formatYN(isExFelon),                                // exFelon
+      'N',                                                // exFelonTypeFederal
+      formatYN(isExFelon),                                // exFelonTypeState
+      formatYN(isDcr),                                    // dcr
+      'N',                                                // dcrResidesInRRC
+      'N',                                                // dcrResidesInEZ
+      formatYN(isVocRehab),                               // vocRehab
+      formatYN(isSummerYouth),                            // summerYouth
+      formatYN(isSnap),                                   // snap
+      '',                                                 // snapState (TX default)
+      formatYN(isSsi),                                    // ssi
+      formatYN(isLtfar),                                  // ltfar
+      '',                                                 // ltfarState (TX default)
+      formatYN(isLtur),                                   // ltur
+      '',                                                 // lturState (TX default)
+      'Y',                                                // sourceDocs (assume yes)
+    ];
 
-  return [header, ...dataRows].join('\n');
+    rows.push(rowData.join(','));
+  }
+
+  return rows.join('\n');
 }
 
 /**
