@@ -1,0 +1,71 @@
+Section,Topic,Details,Example
+OVERVIEW,What is MFA?,Multi-Factor Authentication adds an extra security layer to state portal logins. You'll need to collect MFA information from each state portal and add it to the WOTC platform.,
+OVERVIEW,Why Collect MFA Info?,The automation bot needs MFA credentials to log into state portals and submit WOTC forms on your behalf. Without MFA info the bot cannot complete automated submissions.,
+,,,
+MFA TYPES,TOTP (Authenticator),Time-based One-Time Password - uses an authenticator app like Google Authenticator or Authy. Most common type.,"Secret Key: JBSWY3DPEHPK3PXP"
+MFA TYPES,SMS,Text message codes sent to your phone number. Bot intercepts SMS messages.,"Phone: +1-555-123-4567"
+MFA TYPES,Email,Codes sent to your email address. Requires email integration.,"Email: wotc@yourcompany.com"
+MFA TYPES,Backup Codes,"One-time use codes (usually 10-12) provided when you first set up MFA. Save these!","1234-5678, 9876-5432, 4567-1234"
+,,,
+STEP-BY-STEP,Step 1: Log Into State Portal,"Go to the state's WOTC portal URL and log in with your existing credentials","For Texas: https://www.twc.texas.gov/wotc"
+STEP-BY-STEP,Step 2: Find Security Settings,"Look for menu options like: Account Settings, Security, Two-Factor Authentication, or Multi-Factor Authentication","Usually found in: Profile → Security or Account → Settings"
+STEP-BY-STEP,Step 3: Enable MFA (if not enabled),"Click 'Enable Two-Factor Authentication' or similar button. Portal will ask you to choose a method (TOTP/SMS/Email)","Choose: Authenticator App (TOTP) - most reliable"
+STEP-BY-STEP,Step 4A: For TOTP - Get Secret Key,"Portal shows a QR code. Look for text that says 'Can't scan? Enter this code manually' - that's your secret key. Copy it!","Secret Key shown: ABCD1234EFGH5678IJKL (16-32 characters)"
+STEP-BY-STEP,Step 4B: For SMS - Get Phone Number,"Portal asks for phone number. Note which number you provided.","Phone: +1-555-555-1234"
+STEP-BY-STEP,Step 4C: For Email - Get Email Address,"Portal asks for email address. Note which email you provided.","Email: admin@yourcompany.com"
+STEP-BY-STEP,Step 5: Save Backup Codes,"Portal displays backup codes (usually once). Download or copy them immediately!","Example codes: 1234-5678, 9876-5432, 4567-1234, 8901-2345"
+STEP-BY-STEP,Step 6: Add to WOTC Platform,"Go to Admin → State Credentials, click Edit on the state, scroll to MFA section, enter the info, and Save",
+,,,
+TOTP DETAILS,What is a TOTP Secret?,"A 16-32 character string that generates time-based codes. This is what you'll enter into our platform - NOT the 6-digit codes.","Example: JBSWY3DPEHPK3PXP or ABCD1234EFGH5678"
+TOTP DETAILS,Where to Find It?,Under the QR code during MFA setup. Look for 'Manual entry' or 'Can't scan?' link,"Text usually says: 'Enter this key manually: JBSWY3DPEHPK3PXP'"
+TOTP DETAILS,Common Mistakes,"DON'T: Scan QR code with authenticator app. DON'T: Enter the 6-digit code. DO: Copy the secret key text.","Wrong: 123456 (that's a code, not the secret)"
+TOTP DETAILS,How Our Bot Uses It,The bot uses the secret to generate fresh 6-digit codes automatically whenever it needs to log in,"Bot calculates: 123456 (valid for 30 seconds)"
+,,,
+SMS DETAILS,What Phone Number?,The phone number that receives SMS codes from the state portal,"Example: +1-555-123-4567 or (555) 123-4567"
+SMS DETAILS,How Our Bot Uses It?,Bot intercepts SMS messages sent to this number and extracts the verification code,"Bot receives: 'Your verification code is 123456'"
+,,,
+EMAIL DETAILS,What Email Address?,The email address that receives verification codes from the state portal,"Example: wotc@yourcompany.com"
+EMAIL DETAILS,How Our Bot Uses It?,Bot checks this email inbox and extracts codes from state portal emails,"Email subject: 'Your WOTC Portal Verification Code: 123456'"
+,,,
+BACKUP CODES,What Are They?,"One-time use codes provided when you first enable MFA. Each can only be used once.","Example: 1234-5678, 9876-5432, 4567-1234"
+BACKUP CODES,When Are They Shown?,Only ONCE when you first set up MFA. Portal won't show them again.,"Portal says: 'Save these codes now. You won't see them again.'"
+BACKUP CODES,How Many?,"Usually 10-12 codes provided","Example: 10 codes like 1234-5678"
+BACKUP CODES,How Our Bot Uses Them?,If primary MFA fails the bot can use a backup code as fallback,"Bot uses: 1234-5678 (then marks it as used)"
+,,,
+ADDING TO PLATFORM,Navigate to State Credentials,"Admin Portal → State Credentials → Click 'Edit' on any state",
+ADDING TO PLATFORM,MFA Configuration Section,"Scroll down to find 'MFA Configuration' section in the edit dialog",
+ADDING TO PLATFORM,Select MFA Type,"Choose: TOTP, SMS, or Email from dropdown",
+ADDING TO PLATFORM,Enter Secret/Phone/Email,"For TOTP: Paste the secret key. For SMS: Enter phone number. For Email: Enter email address","TOTP example: JBSWY3DPEHPK3PXP"
+ADDING TO PLATFORM,Add Backup Codes (Optional),"Enter backup codes separated by commas or one per line","1234-5678, 9876-5432, 4567-1234"
+ADDING TO PLATFORM,Save,"Click Save - everything is encrypted with AES-256-GCM immediately",
+,,,
+TEXAS EXAMPLE,Portal URL,https://www.twc.texas.gov/wotc,
+TEXAS EXAMPLE,Step 1: Login,"Go to TWC portal and log in with your credentials",
+TEXAS EXAMPLE,Step 2: Security Settings,"Click Account → Security Settings → Enable Two-Factor Authentication",
+TEXAS EXAMPLE,Step 3: Choose Method,"Select 'Authenticator App' (TOTP recommended)",
+TEXAS EXAMPLE,Step 4: Get Secret,"Portal shows QR code. Look below it for: 'Enter this key: JBSWY3DPEHPK3PXP'","Copy: JBSWY3DPEHPK3PXP"
+TEXAS EXAMPLE,Step 5: Backup Codes,"Portal shows 10 codes. Save them: 1234-5678, 9876-5432, etc.","Download or screenshot these codes"
+TEXAS EXAMPLE,Step 6: Add to Platform,"In WOTC platform: Edit Texas → MFA Type: TOTP → Secret: JBSWY3DPEHPK3PXP → Save",
+,,,
+TIPS,Start with High-Volume States,"Begin with states where you process the most WOTC claims","Priority: CA, TX, FL, NY, OH"
+TIPS,Do One State at a Time,Don't try to set up all 50 states at once. Take breaks to avoid confusion.,"Monday: 5 states, Tuesday: 5 states, etc."
+TIPS,Automation-Enabled States First,"Focus on states with automation enabled (CA, FL, GA, MI, NY, OH, TX) for immediate ROI","These states have Playwright bots ready"
+TIPS,Keep a Spreadsheet,"Use the State MFA Tracking Checklist CSV to track your progress","Mark each state as: Not Started, In Progress, or Complete"
+TIPS,Store Backup Codes Safely,"Save backup codes in a password manager or secure document. Each can only be used once.","Use: LastPass, 1Password, or encrypted file"
+TIPS,Test After Setup,"After adding credentials for a state, test a submission to verify everything works","Submit a test WOTC form through the automation"
+,,,
+TROUBLESHOOTING,Can't Find MFA Settings,"Look for: Security, Account Settings, Two-Factor Auth, Login Security, Advanced Security","Try searching portal help docs for 'MFA' or '2FA'"
+TROUBLESHOOTING,QR Code but No Secret,"Look for links like: 'Can't scan?', 'Manual entry', 'Enter code manually', or 'Trouble scanning?'","These reveal the text secret key"
+TROUBLESHOOTING,MFA Not Offered,"Some states may not require MFA yet. Mark as 'N/A' and just enter User ID/Password","Status: No MFA Required"
+TROUBLESHOOTING,Forgot to Save Backup Codes,"Most portals let you regenerate backup codes in Security Settings. Old codes become invalid.","Generate new set: Security → Regenerate Backup Codes"
+TROUBLESHOOTING,Wrong Secret Key Format,"Secret should be 16-32 alphanumeric characters (no spaces). If it has spaces, remove them.","Wrong: JBSW Y3DP EHPK 3PXP, Right: JBSWY3DPEHPK3PXP"
+,,,
+CHECKLIST,Before You Start,"Have: 1) Login credentials ready, 2) Password manager open, 3) Tracking spreadsheet, 4) Time (2-3 min per state)",
+CHECKLIST,During Setup,"Do: 1) Log into state portal, 2) Enable MFA, 3) Copy secret key, 4) Save backup codes, 5) Update spreadsheet",
+CHECKLIST,After Setup,"Verify: 1) Secret key saved, 2) Backup codes saved, 3) Spreadsheet updated, 4) Credentials added to platform, 5) Test submission",
+,,,
+QUESTIONS,How long does this take?,"2-3 minutes per state. About 2-3 hours total for all 50 states if done in one sitting (not recommended - do in batches)","Recommended: 10 states per day over 5 days"
+QUESTIONS,Do all states require MFA?,"No, many states don't require MFA yet. You'll discover this as you log into each portal.","Estimate: 20-30% of states have MFA enabled"
+QUESTIONS,What if I make a mistake?,"You can always edit credentials in the platform. Go to State Credentials → Edit → Update MFA info → Save",
+QUESTIONS,Is my MFA info secure?,"Yes, all credentials and MFA secrets are encrypted with AES-256-GCM before storage. Even admins can't see the decrypted values in the database.",
+QUESTIONS,Can I bulk upload credentials?,"Not currently. Each state must be entered individually through the State Credentials interface for security reasons.",
