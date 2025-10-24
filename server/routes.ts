@@ -3903,6 +3903,238 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ====================================================================
+  // CREDENTIAL ROTATION ENDPOINTS
+  // ====================================================================
+
+  // Get state portals that are due for credential rotation
+  app.get("/api/admin/state-portals/rotation-due", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const { sql } = await import("drizzle-orm");
+      
+      const now = new Date();
+      
+      // Get portals that:
+      // 1. Have credentials set
+      // 2. Either have passed their expiry date OR next rotation is due
+      const duePortals = await db
+        .select()
+        .from(statePortalConfigs)
+        .where(
+          sql`${statePortalConfigs.credentials} IS NOT NULL 
+          AND (
+            ${statePortalConfigs.credentialExpiryDate} < ${now}
+            OR ${statePortalConfigs.nextRotationDue} < ${now}
+          )`
+        )
+        .orderBy(statePortalConfigs.credentialExpiryDate);
+
+      // Calculate days overdue for each
+      const portalsWithStatus = duePortals.map(portal => {
+        const expiryDate = portal.credentialExpiryDate || portal.nextRotationDue;
+        const daysOverdue = expiryDate 
+          ? Math.floor((now.getTime() - new Date(expiryDate).getTime()) / (1000 * 60 * 60 * 24))
+          : 0;
+        
+        return {
+          ...portal,
+          daysOverdue,
+          urgency: daysOverdue > 30 ? 'critical' : daysOverdue > 14 ? 'high' : 'medium'
+        };
+      });
+
+      res.json({
+        count: portalsWithStatus.length,
+        portals: portalsWithStatus
+      });
+    } catch (error) {
+      console.error("Error fetching rotation-due portals:", error);
+      res.status(500).json({ error: "Failed to fetch rotation-due portals" });
+    }
+  });
+
+  // Rotate credentials for a state portal
+  app.post("/api/admin/state-portals/:id/rotate", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs, credentialRotationHistory } = await import("@shared/schema");
+      const { encryptCredentials, decryptCredentials } = await import("./utils/encryption");
+      const crypto = await import("crypto");
+      
+      const { newCredentials, rotationType, reason } = req.body;
+      
+      if (!newCredentials || !newCredentials.userId || !newCredentials.password) {
+        return res.status(400).json({ error: "New credentials (userId, password) required" });
+      }
+
+      // Get existing portal config
+      const [portal] = await db
+        .select()
+        .from(statePortalConfigs)
+        .where(eq(statePortalConfigs.id, req.params.id));
+
+      if (!portal) {
+        return res.status(404).json({ error: "State portal not found" });
+      }
+
+      // Hash old and new credentials for audit trail (never store plaintext)
+      const oldHash = portal.credentials 
+        ? crypto.createHash('sha256').update(JSON.stringify(portal.credentials)).digest('hex')
+        : null;
+      const newHash = crypto.createHash('sha256').update(JSON.stringify(newCredentials)).digest('hex');
+
+      // Encrypt new credentials
+      const encryptedCredentials = encryptCredentials(newCredentials);
+
+      // Calculate next rotation date
+      const rotationFrequencyDays = portal.rotationFrequencyDays || 90;
+      const nextRotationDue = new Date();
+      nextRotationDue.setDate(nextRotationDue.getDate() + rotationFrequencyDays);
+
+      // Update portal config
+      const [updated] = await db
+        .update(statePortalConfigs)
+        .set({
+          credentials: encryptedCredentials,
+          lastRotatedAt: new Date(),
+          nextRotationDue,
+          credentialExpiryDate: nextRotationDue,
+          rotationReminderSentAt: null, // Reset reminder
+          updatedAt: new Date(),
+        })
+        .where(eq(statePortalConfigs.id, req.params.id))
+        .returning();
+
+      // Log rotation in history
+      await db.insert(credentialRotationHistory).values({
+        portalConfigId: req.params.id,
+        rotatedBy: userId,
+        rotationType: rotationType || 'manual',
+        reason: reason || null,
+        previousCredentialsHash: oldHash,
+        newCredentialsHash: newHash,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      res.json({
+        success: true,
+        portal: updated,
+        nextRotationDue,
+        message: `Credentials rotated successfully. Next rotation due: ${nextRotationDue.toLocaleDateString()}`
+      });
+    } catch (error) {
+      console.error("Error rotating credentials:", error);
+      res.status(500).json({ error: "Failed to rotate credentials" });
+    }
+  });
+
+  // Get rotation history for a state portal
+  app.get("/api/admin/state-portals/:id/rotation-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { credentialRotationHistory, users: usersTable } = await import("@shared/schema");
+      const { desc } = await import("drizzle-orm");
+      
+      const history = await db
+        .select({
+          id: credentialRotationHistory.id,
+          rotatedAt: credentialRotationHistory.rotatedAt,
+          rotationType: credentialRotationHistory.rotationType,
+          reason: credentialRotationHistory.reason,
+          mfaChanged: credentialRotationHistory.mfaChanged,
+          rotatedByUser: {
+            id: usersTable.id,
+            email: usersTable.email,
+            firstName: usersTable.firstName,
+            lastName: usersTable.lastName,
+          }
+        })
+        .from(credentialRotationHistory)
+        .leftJoin(usersTable, eq(credentialRotationHistory.rotatedBy, usersTable.id))
+        .where(eq(credentialRotationHistory.portalConfigId, req.params.id))
+        .orderBy(desc(credentialRotationHistory.rotatedAt))
+        .limit(50);
+
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching rotation history:", error);
+      res.status(500).json({ error: "Failed to fetch rotation history" });
+    }
+  });
+
+  // Set rotation schedule for a state portal
+  app.post("/api/admin/state-portals/:id/set-rotation-schedule", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const { rotationFrequencyDays, credentialExpiryDate } = req.body;
+      
+      if (!rotationFrequencyDays || rotationFrequencyDays < 1 || rotationFrequencyDays > 365) {
+        return res.status(400).json({ error: "Rotation frequency must be between 1 and 365 days" });
+      }
+
+      // Calculate next rotation date if not manually set
+      let nextRotationDue = credentialExpiryDate ? new Date(credentialExpiryDate) : null;
+      if (!nextRotationDue) {
+        const [portal] = await db
+          .select()
+          .from(statePortalConfigs)
+          .where(eq(statePortalConfigs.id, req.params.id));
+        
+        const lastRotation = portal.lastRotatedAt || portal.createdAt || new Date();
+        nextRotationDue = new Date(lastRotation);
+        nextRotationDue.setDate(nextRotationDue.getDate() + rotationFrequencyDays);
+      }
+
+      const [updated] = await db
+        .update(statePortalConfigs)
+        .set({
+          rotationFrequencyDays,
+          credentialExpiryDate,
+          nextRotationDue,
+          updatedAt: new Date(),
+        })
+        .where(eq(statePortalConfigs.id, req.params.id))
+        .returning();
+
+      res.json({
+        success: true,
+        portal: updated,
+        message: `Rotation schedule updated. Next rotation: ${nextRotationDue.toLocaleDateString()}`
+      });
+    } catch (error) {
+      console.error("Error setting rotation schedule:", error);
+      res.status(500).json({ error: "Failed to set rotation schedule" });
+    }
+  });
+
   // Get state submission jobs for employer
   app.get("/api/employer/submissions", isAuthenticated, async (req: any, res) => {
     try {
