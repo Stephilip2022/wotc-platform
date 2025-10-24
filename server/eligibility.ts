@@ -80,6 +80,65 @@ export const TARGET_GROUPS: Record<string, TargetGroup> = {
   },
 };
 
+/**
+ * Helper function to normalize target group names to their codes
+ * Handles various display formats and returns the correct TARGET_GROUPS key
+ */
+export function normalizeTargetGroup(targetGroup: string): string | null {
+  if (!targetGroup) return null;
+  
+  // If it's already a valid code, return it
+  if (TARGET_GROUPS[targetGroup]) {
+    return targetGroup;
+  }
+  
+  // Normalize the string for comparison
+  const normalized = targetGroup.toLowerCase().trim();
+  
+  // Map common variations to codes
+  const mappings: Record<string, string> = {
+    "tanf": "IV-B", // Default to short-term
+    "tanf recipient": "IV-B",
+    "tanf recipients": "IV-B",
+    "tanf recipient (short-term)": "IV-B",
+    "tanf recipient (long-term)": "IV-A",
+    "veteran": "V",
+    "veterans": "V",
+    "qualified veteran": "V",
+    "qualified veterans": "V",
+    "ex-felon": "VI",
+    "ex-felons": "VI",
+    "felon": "VI",
+    "designated community resident": "VII",
+    "community resident": "VII",
+    "vocational rehabilitation": "VIII",
+    "vocational rehabilitation referral": "VIII",
+    "snap": "IX",
+    "snap recipient": "IX",
+    "snap recipients": "IX",
+    "food stamps": "IX",
+    "ssi": "X",
+    "ssi recipient": "X",
+    "ssi recipients": "X",
+    "summer youth": "XI",
+    "summer youth employee": "XI",
+  };
+  
+  const code = mappings[normalized];
+  if (code) {
+    return code;
+  }
+  
+  // Try to find by matching against official names
+  for (const [code, info] of Object.entries(TARGET_GROUPS)) {
+    if (info.name.toLowerCase() === normalized) {
+      return code;
+    }
+  }
+  
+  return null;
+}
+
 export interface EligibilityResult {
   isEligible: boolean;
   targetGroups: string[];

@@ -16,8 +16,8 @@ import { format } from "date-fns";
 export default function AdminScreeningsPage() {
   const { toast } = useToast();
   const [filters, setFilters] = useState({
-    employerId: "",
-    status: "",
+    employerId: "all",
+    status: "all",
   });
   const [selectedScreening, setSelectedScreening] = useState<any>(null);
   const [statusDialog, setStatusDialog] = useState(false);
@@ -29,8 +29,8 @@ export default function AdminScreeningsPage() {
     queryKey: ["/api/admin/screenings", filters],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (filters.employerId) params.append("employerId", filters.employerId);
-      if (filters.status) params.append("status", filters.status);
+      if (filters.employerId && filters.employerId !== "all") params.append("employerId", filters.employerId);
+      if (filters.status && filters.status !== "all") params.append("status", filters.status);
       
       const response = await fetch(`/api/admin/screenings?${params}`);
       return response.json();
@@ -170,7 +170,7 @@ export default function AdminScreeningsPage() {
                 <SelectValue placeholder="All Employers" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Employers</SelectItem>
+                <SelectItem value="all">All Employers</SelectItem>
                 {employers?.map((emp: any) => (
                   <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
                 ))}
@@ -188,7 +188,7 @@ export default function AdminScreeningsPage() {
                 <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All Statuses</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="eligible">Eligible</SelectItem>
                 <SelectItem value="certified">Certified</SelectItem>

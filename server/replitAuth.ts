@@ -62,44 +62,69 @@ async function upsertUser(claims: any) {
   // Check if user exists by ID
   const [existingUserById] = await db.select().from(users).where(eq(users.id, userId));
   
-  if (existingUserById) {
-    // Update existing user (preserve role unless claims specify it)
-    const [updatedUser] = await db
-      .update(users)
-      .set({
-        email: userEmail,
-        firstName: claims["first_name"],
-        lastName: claims["last_name"],
-        profileImageUrl: claims["profile_image_url"],
-        ...(claims["role"] && { role: claims["role"] }), // Update role if provided in claims
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, userId))
-      .returning();
-    return updatedUser;
-  }
-  
-  // Check if email already exists with different ID
+  // Check if email already exists (potentially with different ID)
   const [existingUserByEmail] = await db.select().from(users).where(eq(users.email, userEmail));
   
+  if (existingUserById) {
+    // User exists by ID - check if email is changing
+    if (existingUserByEmail && existingUserByEmail.id !== userId) {
+      // Email is taken by a different user - don't update email, just update other fields
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          firstName: claims["first_name"],
+          lastName: claims["last_name"],
+          profileImageUrl: claims["profile_image_url"],
+          ...(claims["role"] && { role: claims["role"] }),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      return updatedUser;
+    } else {
+      // Email is not taken or is the same user - safe to update
+      const [updatedUser] = await db
+        .update(users)
+        .set({
+          email: userEmail,
+          firstName: claims["first_name"],
+          lastName: claims["last_name"],
+          profileImageUrl: claims["profile_image_url"],
+          ...(claims["role"] && { role: claims["role"] }),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId))
+        .returning();
+      return updatedUser;
+    }
+  }
+  
   if (existingUserByEmail) {
-    // Email exists but different sub - update user fields but preserve existing ID
-    // to avoid breaking foreign key constraints
+    // Email exists but user doesn't exist by ID
+    // This is a returning user with a new OIDC sub (e.g., after account migration)
+    // We can't safely update the primary key due to FK constraints,
+    // so we update the profile and return the existing user
+    // The session will use the existing user's ID, preserving FK relationships
+    console.log(`Email ${userEmail} already exists with ID ${existingUserByEmail.id}, reusing for new sub ${userId}`);
+    
+    // Update profile fields (but not the ID to avoid FK violations)
     const [updatedUser] = await db
       .update(users)
       .set({
         firstName: claims["first_name"],
         lastName: claims["last_name"],
         profileImageUrl: claims["profile_image_url"],
-        ...(claims["role"] && { role: claims["role"] }), // Update role if provided in claims
+        ...(claims["role"] && { role: claims["role"] }),
         updatedAt: new Date(),
       })
       .where(eq(users.email, userEmail))
       .returning();
+    
+    // Return the existing user (with their original ID) so session lookups work
     return updatedUser;
   }
   
-  // Create new user with role from claims or default to employee
+  // Create new user
   const [newUser] = await db
     .insert(users)
     .values({
@@ -162,8 +187,17 @@ export async function setupAuth(app: Express) {
       // After successful auth, redirect based on user role
       try {
         const userId = (req.user as any)?.claims?.sub;
-        if (userId) {
-          const [user] = await db.select().from(users).where(eq(users.id, userId));
+        const userEmail = (req.user as any)?.claims?.email;
+        
+        if (userId || userEmail) {
+          // Try to find user by ID first, then by email as fallback
+          let [user] = userId ? await db.select().from(users).where(eq(users.id, userId)) : [null];
+          
+          // If not found by ID, try email (handles email conflicts where sub changed)
+          if (!user && userEmail) {
+            [user] = await db.select().from(users).where(eq(users.email, userEmail));
+          }
+          
           if (user) {
             const redirectMap: Record<string, string> = {
               admin: "/admin",
@@ -201,23 +235,53 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (now <= user.expires_at) {
-    return next();
+  if (now > user.expires_at) {
+    const refreshToken = user.refresh_token;
+    if (!refreshToken) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const config = await getOidcConfig();
+      const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
+      updateUserSession(user, tokenResponse);
+    } catch (error) {
+      res.status(401).json({ message: "Unauthorized" });
+      return;
+    }
   }
 
-  const refreshToken = user.refresh_token;
-  if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
+  // Resolve canonical user ID with email fallback
+  // This handles cases where OIDC sub changed but email stayed the same
+  if (!user.canonicalSubResolved) {
+    const originalSub = user.claims.sub;
+    const userEmail = user.claims.email;
+    
+    // Try to find user by ID first
+    let [dbUser] = await db.select().from(users).where(eq(users.id, originalSub));
+    
+    // If not found by ID, try email as fallback
+    if (!dbUser && userEmail) {
+      [dbUser] = await db.select().from(users).where(eq(users.email, userEmail));
+      
+      if (dbUser) {
+        // Sub changed but email matches - use the database user's ID as the canonical sub
+        console.log(`Resolved user by email fallback: ${userEmail} → ${dbUser.id} (original sub: ${originalSub})`);
+        user.claims.sub = dbUser.id; // Overwrite sub with canonical database ID
+      }
+    }
+    
+    if (!dbUser) {
+      // User not found in database - this shouldn't happen after upsert
+      console.error(`User not found: sub=${originalSub}, email=${userEmail}`);
+      res.status(401).json({ message: "User not found in database" });
+      return;
+    }
+    
+    // Mark as resolved so we don't repeat this lookup on every request
+    user.canonicalSubResolved = true;
   }
 
-  try {
-    const config = await getOidcConfig();
-    const tokenResponse = await client.refreshTokenGrant(config, refreshToken);
-    updateUserSession(user, tokenResponse);
-    return next();
-  } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
-    return;
-  }
+  return next();
 };

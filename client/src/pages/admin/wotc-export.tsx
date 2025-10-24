@@ -73,7 +73,7 @@ const US_STATES = [
 export default function WOTCExportPage() {
   const { toast } = useToast();
   const [selectedState, setSelectedState] = useState<string>("");
-  const [selectedEmployer, setSelectedEmployer] = useState<string>("");
+  const [selectedEmployer, setSelectedEmployer] = useState<string>("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -89,7 +89,7 @@ export default function WOTCExportPage() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (selectedState) params.append("state", selectedState);
-      if (selectedEmployer) params.append("employerId", selectedEmployer);
+      if (selectedEmployer && selectedEmployer !== "all") params.append("employerId", selectedEmployer);
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
       if (statusFilter !== "all") params.append("status", statusFilter);
@@ -122,7 +122,7 @@ export default function WOTCExportPage() {
       const params = new URLSearchParams();
       params.append("state", selectedState);
       
-      if (selectedEmployer) {
+      if (selectedEmployer && selectedEmployer !== "all") {
         params.append("employerId", selectedEmployer);
       }
       if (startDate) {
@@ -241,7 +241,7 @@ export default function WOTCExportPage() {
                   <SelectValue placeholder="All employers" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Employers</SelectItem>
+                  <SelectItem value="all">All Employers</SelectItem>
                   {employers?.map((employer) => (
                     <SelectItem key={employer.id} value={employer.id}>
                       {employer.name}
@@ -307,7 +307,7 @@ export default function WOTCExportPage() {
                     <strong>Export Configuration:</strong>
                     <ul className="mt-2 space-y-1 text-sm">
                       <li>• State: <span className="font-medium">{selectedStateName}</span> ({selectedState === "TX" ? "20-column simplified format" : "37-column universal format"})</li>
-                      {selectedEmployer && (
+                      {selectedEmployer && selectedEmployer !== "all" && (
                         <li>• Employer: <span className="font-medium">{selectedEmployerName}</span></li>
                       )}
                       {startDate && (

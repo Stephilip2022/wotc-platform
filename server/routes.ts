@@ -24,7 +24,7 @@ import {
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import OpenAI from "openai";
-import { determineEligibility, calculateCredit, TARGET_GROUPS } from "./eligibility";
+import { determineEligibility, calculateCredit, TARGET_GROUPS, normalizeTargetGroup } from "./eligibility";
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
 
 const openai = new OpenAI({
@@ -81,7 +81,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const userEmail = req.user.claims.email;
+      
+      // Try to find user by ID first
+      let [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      // If not found by ID, try email as fallback (handles email conflicts where sub changed)
+      if (!user && userEmail) {
+        [user] = await db.select().from(users).where(eq(users.email, userEmail));
+      }
       
       if (!user) {
         return res.status(404).json({ error: "User not found" });
@@ -811,18 +819,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
-      // Get monthly certification trends for the last 12 months (SQLite compatible)
+      // Get monthly certification trends for the last 12 months (PostgreSQL)
       const trends = await db
         .select({
-          month: sql<string>`strftime('%Y-%m', ${screenings.updatedAt})`,
+          month: sql<string>`TO_CHAR(${screenings.updatedAt}, 'YYYY-MM')`,
           certified: sql<number>`SUM(CASE WHEN ${screenings.status} = 'certified' THEN 1 ELSE 0 END)`,
           denied: sql<number>`SUM(CASE WHEN ${screenings.status} = 'denied' THEN 1 ELSE 0 END)`,
           pending: sql<number>`SUM(CASE WHEN ${screenings.status} = 'pending' THEN 1 ELSE 0 END)`,
         })
         .from(screenings)
-        .where(sql`${screenings.updatedAt} >= date('now', '-12 months')`)
-        .groupBy(sql`strftime('%Y-%m', ${screenings.updatedAt})`)
-        .orderBy(sql`strftime('%Y-%m', ${screenings.updatedAt})`);
+        .where(sql`${screenings.updatedAt} >= CURRENT_DATE - INTERVAL '12 months'`)
+        .groupBy(sql`TO_CHAR(${screenings.updatedAt}, 'YYYY-MM')`)
+        .orderBy(sql`TO_CHAR(${screenings.updatedAt}, 'YYYY-MM')`);
 
       res.json(trends);
     } catch (error) {
@@ -1997,9 +2005,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Assuming $15/hour as a default (this should come from employee/employer data in real use)
       const estimatedWages = totalHours * 15;
 
-      const targetGroup = screening.screening.primaryTargetGroup;
-      if (!targetGroup) {
+      const rawTargetGroup = screening.screening.primaryTargetGroup;
+      if (!rawTargetGroup) {
         return res.status(400).json({ error: "No target group assigned" });
+      }
+
+      // Normalize the target group name to get the correct code
+      const targetGroup = normalizeTargetGroup(rawTargetGroup);
+      if (!targetGroup) {
+        console.error(`Failed to normalize target group: "${rawTargetGroup}"`);
+        return res.status(400).json({ 
+          error: "Invalid target group", 
+          details: `Could not map "${rawTargetGroup}" to a valid target group code` 
+        });
       }
 
       // Calculate credit using the eligibility engine
