@@ -966,6 +966,13 @@ export const statePortalConfigs = pgTable("state_portal_configs", {
   mfaEmail: text("mfa_email"), // Email for email-based MFA
   mfaBackupCodes: jsonb("mfa_backup_codes"), // Array of encrypted backup codes
   
+  // Credential Rotation
+  credentialExpiryDate: timestamp("credential_expiry_date"), // When credentials expire
+  lastRotatedAt: timestamp("last_rotated_at"), // Last rotation timestamp
+  rotationFrequencyDays: integer("rotation_frequency_days").default(90), // Rotate every N days (default 90)
+  rotationReminderSentAt: timestamp("rotation_reminder_sent_at"), // Last reminder sent
+  nextRotationDue: timestamp("next_rotation_due"), // Calculated next rotation date
+  
   // CSV format requirements
   requiredColumns: text("required_columns").array(), // Required CSV columns for this state
   optionalColumns: text("optional_columns").array(), // Optional columns
@@ -1010,6 +1017,43 @@ export const updateStatePortalConfigSchema = insertStatePortalConfigSchema.parti
 export type InsertStatePortalConfig = z.infer<typeof insertStatePortalConfigSchema>;
 export type UpdateStatePortalConfig = z.infer<typeof updateStatePortalConfigSchema>;
 export type StatePortalConfig = typeof statePortalConfigs.$inferSelect;
+
+// ============================================================================
+// CREDENTIAL ROTATION HISTORY
+// ============================================================================
+
+export const credentialRotationHistory = pgTable("credential_rotation_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  portalConfigId: varchar("portal_config_id").notNull().references(() => statePortalConfigs.id, { onDelete: "cascade" }),
+  
+  // Rotation details
+  rotatedAt: timestamp("rotated_at").notNull().defaultNow(),
+  rotatedBy: varchar("rotated_by").notNull().references(() => users.id), // Admin who rotated
+  rotationType: text("rotation_type").notNull().default("manual"), // 'manual', 'scheduled', 'security_incident', 'expired'
+  reason: text("reason"), // Optional reason/notes
+  
+  // Audit trail (NO actual credentials stored)
+  previousCredentialsHash: text("previous_credentials_hash"), // SHA-256 hash of old credentials for verification
+  newCredentialsHash: text("new_credentials_hash"), // SHA-256 hash of new credentials
+  
+  // MFA changes
+  mfaChanged: boolean("mfa_changed").default(false),
+  mfaTypeChanged: text("mfa_type_changed"), // Old -> New type if changed
+  
+  // Notification
+  notificationSent: boolean("notification_sent").default(false),
+  notifiedUsers: text("notified_users").array(), // Array of user IDs notified
+  
+  // Metadata
+  ipAddress: text("ip_address"), // IP of admin who rotated
+  userAgent: text("user_agent"), // Browser/client info
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertCredentialRotationHistorySchema = createInsertSchema(credentialRotationHistory).omit({ id: true, createdAt: true });
+export type InsertCredentialRotationHistory = z.infer<typeof insertCredentialRotationHistorySchema>;
+export type CredentialRotationHistory = typeof credentialRotationHistory.$inferSelect;
 
 // ============================================================================
 // STATE SUBMISSION JOBS (Automation Runs)
