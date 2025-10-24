@@ -3639,7 +3639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PHASE 4: STATE AUTOMATION & INTELLIGENCE API ROUTES
   // ============================================================================
 
-  // Get all state portal configurations
+  // Get all state portal configurations (with decryption for admin UI)
   app.get("/api/admin/state-portals", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -3650,16 +3650,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs } = await import("@shared/schema");
+      const { decryptCredentials, decryptChallengeQuestions } = await import("./utils/encryption");
+      
       const configs = await db.select().from(statePortalConfigs).orderBy(statePortalConfigs.stateName);
       
-      res.json(configs);
+      // Decrypt sensitive fields for admin viewing
+      const decryptedConfigs = configs.map(config => ({
+        ...config,
+        credentials: decryptCredentials(config.credentials as any),
+        challengeQuestions: decryptChallengeQuestions(config.challengeQuestions as any),
+      }));
+      
+      res.json(decryptedConfigs);
     } catch (error) {
       console.error("Error fetching state portals:", error);
       res.status(500).json({ error: "Failed to fetch state portals" });
     }
   });
 
-  // Get single state portal configuration
+  // Get single state portal configuration (with decryption for bot use)
   app.get("/api/admin/state-portals/:stateCode", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -3670,6 +3679,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs } = await import("@shared/schema");
+      const { decryptCredentials, decryptChallengeQuestions } = await import("./utils/encryption");
+      
       const [config] = await db
         .select()
         .from(statePortalConfigs)
@@ -3679,7 +3690,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "State portal not found" });
       }
 
-      res.json(config);
+      // Decrypt for bot/admin use
+      const decrypted = {
+        ...config,
+        credentials: decryptCredentials(config.credentials as any),
+        challengeQuestions: decryptChallengeQuestions(config.challengeQuestions as any),
+      };
+
+      res.json(decrypted);
     } catch (error) {
       console.error("Error fetching state portal:", error);
       res.status(500).json({ error: "Failed to fetch state portal" });
@@ -3697,6 +3715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { statePortalConfigs, updateStatePortalConfigSchema } = await import("@shared/schema");
+      const { encryptCredentials, encryptChallengeQuestions } = await import("./utils/encryption");
       
       // Validate input
       const validated = updateStatePortalConfigSchema.safeParse(req.body);
@@ -3707,10 +3726,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Encrypt sensitive fields before storage
+      const dataToUpdate = { ...validated.data };
+      if (dataToUpdate.credentials) {
+        dataToUpdate.credentials = encryptCredentials(dataToUpdate.credentials);
+      }
+      if (dataToUpdate.challengeQuestions) {
+        dataToUpdate.challengeQuestions = encryptChallengeQuestions(dataToUpdate.challengeQuestions);
+      }
+
       const [updated] = await db
         .update(statePortalConfigs)
         .set({
-          ...validated.data,
+          ...dataToUpdate,
           updatedAt: new Date(),
         })
         .where(eq(statePortalConfigs.id, req.params.id))
