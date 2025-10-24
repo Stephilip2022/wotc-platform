@@ -12,6 +12,11 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+- **October 24, 2025 - Phase 3 Tasks 6 & 8 Complete (Revenue Dashboard & Email Notifications)**:
+  - **Task 6 Complete - Admin Revenue Dashboard**: Comprehensive SaaS analytics with MRR/ARR tracking, subscription health monitoring, outstanding invoices, churn rate (30-day rolling), revenue trends (6-month history), plan distribution charts using Recharts, proper DOUBLE PRECISION casting for numeric accuracy
+  - **Task 8 Complete - Email Notification System**: Resend integration with 5 transactional email types (screening invites, status updates, invoice notifications, determination results, welcome emails), HTML email templates with responsive design and employer branding, automatic triggers on key events (screening reminders, determination updates, invoice payments, employer onboarding)
+  - **Email Infrastructure**: Reusable Resend client with OAuth token rotation, type-safe template rendering system, comprehensive error handling and logging, integration points in existing routes (screening reminders, determination status changes, Stripe webhooks, employer welcome flow)
+
 - **October 24, 2025 - Phase 3 Started (Billing & Automation)**:
   - **Task 1 Complete**: Comprehensive billing database schema with 8 new tables for subscriptions, invoices, payments, and licensee revenue sharing
   - **Subscription Plans**: 3 pricing tiers seeded (Starter, Professional, Enterprise) with feature limits and usage-based pricing

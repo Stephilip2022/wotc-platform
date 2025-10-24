@@ -687,9 +687,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employer/employees/:id/remind", isAuthenticated, async (req: any, res) => {
     try {
-      // TODO: Implement email/SMS reminder
-      res.json({ success: true });
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employeeId = req.params.id;
+      
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(and(eq(employees.id, employeeId), eq(employees.employerId, user.employerId)));
+
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, user.employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      // Generate questionnaire URL
+      const baseUrl = process.env.REPLIT_DEPLOYMENT 
+        ? `https://${process.env.REPLIT_DEPLOYMENT}` 
+        : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+      const questionnaireUrl = `${baseUrl}/questionnaire/${employer.qrToken}?employee=${employee.id}`;
+
+      // Send screening invitation email
+      const { sendScreeningInvite } = await import('./email/notifications');
+      const result = await sendScreeningInvite(employee.email, {
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        employerName: employer.companyName,
+        questionnaireUrl,
+        employerLogoUrl: employer.logoUrl || undefined,
+        employerBrandColor: employer.brandColor || undefined,
+      });
+
+      if (!result.success) {
+        console.error('Failed to send screening invite:', result.error);
+        return res.status(500).json({ error: 'Failed to send email reminder' });
+      }
+
+      res.json({ success: true, messageId: result.messageId });
     } catch (error) {
+      console.error("Error sending reminder:", error);
       res.status(500).json({ error: "Failed to send reminder" });
     }
   });
@@ -1386,10 +1434,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("✅ Database insert successful. New form:", JSON.stringify(newForm, null, 2));
 
-      // TODO: If status is "sent", trigger email to contactEmail with e-signature request
-      if (newForm.status === "sent") {
-        console.log(`📧 E-signature request would be sent to: ${newForm.contactEmail}`);
-        // Future: Integrate with DocuSign, HelloSign, or build custom e-signature flow
+      // Send welcome email if form is approved
+      if (newForm.status === "approved") {
+        try {
+          const baseUrl = process.env.REPLIT_DEPLOYMENT 
+            ? `https://${process.env.REPLIT_DEPLOYMENT}` 
+            : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+          
+          const { sendWelcomeEmail } = await import('./email/notifications');
+          await sendWelcomeEmail(newForm.contactEmail, {
+            employerName: newForm.legalName,
+            contactName: newForm.contactName,
+            dashboardUrl: `${baseUrl}/employer`,
+            questionnaireUrl: `${baseUrl}/questionnaire/preview`,
+          });
+          console.log(`📧 Welcome email sent to: ${newForm.contactEmail}`);
+        } catch (emailError) {
+          console.error('Failed to send welcome email:', emailError);
+        }
       }
 
       console.log("📤 Sending response...");
@@ -1648,6 +1710,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         determinationLetterId,
         changedBy: userId,
       });
+
+      // Send determination result email if status changed to certified or denied
+      if ((status === "certified" || status === "denied") && status !== currentScreening.status) {
+        try {
+          const [employee] = await db
+            .select()
+            .from(employees)
+            .where(eq(employees.id, currentScreening.employeeId));
+
+          const [employer] = await db
+            .select()
+            .from(employers)
+            .where(eq(employers.id, currentScreening.employerId));
+
+          if (employee && employer) {
+            const { sendDeterminationResult } = await import('./email/notifications');
+            
+            let creditAmount: string | undefined;
+            if (status === "certified") {
+              const credits = await db
+                .select()
+                .from(creditCalculations)
+                .where(eq(creditCalculations.screeningId, screeningId))
+                .orderBy(desc(creditCalculations.updatedAt))
+                .limit(1);
+              
+              if (credits.length > 0) {
+                creditAmount = `$${Number(credits[0].totalCredit).toLocaleString()}`;
+              }
+            }
+
+            await sendDeterminationResult(employee.email, {
+              employeeName: `${employee.firstName} ${employee.lastName}`,
+              employerName: employer.companyName,
+              status,
+              targetGroup: currentScreening.targetGroup || undefined,
+              certificationNumber: certificationNumber || undefined,
+              certificationDate: certificationDate ? new Date(certificationDate).toLocaleDateString() : undefined,
+              denialReason: status === "denied" ? reason : undefined,
+              creditAmount,
+            });
+
+            console.log(`📧 Determination result email sent to ${employee.email}`);
+          }
+        } catch (emailError) {
+          console.error('Failed to send determination result email:', emailError);
+        }
+      }
 
       res.json({ success: true, screening: updatedScreening });
     } catch (error) {
@@ -2542,6 +2652,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
 
           console.log(`Canceled subscription: ${subscription.id}`);
+          break;
+        }
+
+        case "invoice.payment_succeeded": {
+          const invoice = event.data.object as Stripe.Invoice;
+          
+          // Find invoice in database
+          const invoiceNumber = invoice.number || `draft-${invoice.id}`;
+          const [dbInvoice] = await db
+            .select()
+            .from(invoices)
+            .where(eq(invoices.invoiceNumber, invoiceNumber))
+            .limit(1);
+
+          if (dbInvoice) {
+            // Update invoice status
+            await db
+              .update(invoices)
+              .set({
+                status: "paid",
+                paidAt: new Date(invoice.status_transitions.paid_at! * 1000),
+                updatedAt: new Date(),
+              })
+              .where(eq(invoices.id, dbInvoice.id));
+
+            // Send invoice notification email
+            try {
+              const [employer] = await db
+                .select()
+                .from(employers)
+                .where(eq(employers.id, dbInvoice.employerId));
+
+              if (employer && employer.billingEmail) {
+                const baseUrl = process.env.REPLIT_DEPLOYMENT 
+                  ? `https://${process.env.REPLIT_DEPLOYMENT}` 
+                  : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+
+                const { sendInvoiceNotification } = await import('./email/notifications');
+                await sendInvoiceNotification(employer.billingEmail, {
+                  employerName: employer.companyName,
+                  invoiceNumber: dbInvoice.invoiceNumber,
+                  invoiceDate: new Date(dbInvoice.issuedAt).toLocaleDateString(),
+                  dueDate: new Date(dbInvoice.dueDate).toLocaleDateString(),
+                  totalAmount: `$${Number(dbInvoice.totalAmount).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                  amountDue: `$${Number(dbInvoice.amountDue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                  invoiceUrl: `${baseUrl}/employer/billing`,
+                });
+
+                console.log(`📧 Invoice notification sent to ${employer.billingEmail}`);
+              }
+            } catch (emailError) {
+              console.error('Failed to send invoice notification:', emailError);
+            }
+          }
+          
+          console.log(`Invoice payment succeeded: ${invoice.number}`);
           break;
         }
 

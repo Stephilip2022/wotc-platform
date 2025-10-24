@@ -23,6 +23,10 @@ localPort = 38141
 externalPort = 3003
 
 [[ports]]
+localPort = 41231
+externalPort = 3001
+
+[[ports]]
 localPort = 46759
 externalPort = 3002
 
@@ -51,4 +55,4 @@ args = "npm run dev"
 waitForPort = 5000
 
 [agent]
-integrations = ["javascript_openai_ai_integrations:1.0.0", "javascript_object_storage:1.0.0", "javascript_stripe:1.0.0", "javascript_log_in_with_replit:1.0.0", "javascript_database:1.0.0"]
+integrations = ["javascript_openai_ai_integrations:1.0.0", "javascript_object_storage:1.0.0", "javascript_stripe:1.0.0", "javascript_log_in_with_replit:1.0.0", "javascript_database:1.0.0", "resend:1.0.0"]
