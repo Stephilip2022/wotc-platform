@@ -1047,13 +1047,20 @@ export type StateSubmissionJob = typeof stateSubmissionJobs.$inferSelect;
 export const determinationLetters = pgTable("determination_letters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").references(() => employees.id), // Matched employee ID
   stateCode: text("state_code").notNull(),
   
   // Document metadata
-  fileName: text("file_name").notNull(),
-  fileUrl: text("file_url").notNull(), // Object storage URL
+  fileName: text("file_name"),
+  fileUrl: text("file_url"), // Object storage URL
   fileSize: integer("file_size"), // Bytes
   fileType: text("file_type").default("pdf"), // 'pdf', 'image', 'email'
+  
+  // Simple status tracking (for MVP)
+  status: text("status").default("pending"), // 'pending', 'processed', 'needs_review', 'error'
+  certificationNumber: text("certification_number"),
+  creditAmount: decimal("credit_amount", { precision: 10, scale: 2 }),
+  processedAt: timestamp("processed_at"),
   
   // Source
   source: text("source").default("manual"), // 'manual', 'sftp', 'email', 'api'
@@ -1089,7 +1096,7 @@ export const determinationLetters = pgTable("determination_letters", {
   errorDetails: jsonb("error_details"),
   
   // Audit
-  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
   
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

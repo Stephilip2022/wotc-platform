@@ -3830,8 +3830,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           employerId,
           stateCode: stateCode.toUpperCase(),
           status: 'pending',
-          totalRecords: 0,
-          submittedRecords: 0,
+          recordCount: 0,
+          submittedBy: userId,
         })
         .returning();
 
