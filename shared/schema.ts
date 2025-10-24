@@ -933,3 +933,281 @@ export const licenseeEmployers = pgTable("licensee_employers", {
 export const insertLicenseeEmployerSchema = createInsertSchema(licenseeEmployers).omit({ id: true, createdAt: true });
 export type InsertLicenseeEmployer = z.infer<typeof insertLicenseeEmployerSchema>;
 export type LicenseeEmployer = typeof licenseeEmployers.$inferSelect;
+
+// ============================================================================
+// PHASE 4: STATE AUTOMATION & INTELLIGENCE
+// ============================================================================
+
+// ============================================================================
+// STATE PORTAL CONFIGURATIONS
+// ============================================================================
+
+export const statePortalConfigs = pgTable("state_portal_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  stateCode: text("state_code").notNull().unique(), // 'CA', 'NY', 'TX', etc.
+  stateName: text("state_name").notNull(), // 'California', 'New York', etc.
+  
+  // Portal details
+  portalUrl: text("portal_url").notNull(), // State WOTC portal login URL
+  submissionUrl: text("submission_url"), // Direct CSV upload URL if different
+  
+  // Authentication
+  authType: text("auth_type").notNull().default("credentials"), // 'credentials', 'oauth', 'api_key'
+  loginFieldSelectors: jsonb("login_field_selectors"), // Playwright selectors for login fields
+  
+  // CSV format requirements
+  requiredColumns: text("required_columns").array(), // Required CSV columns for this state
+  optionalColumns: text("optional_columns").array(), // Optional columns
+  dateFormat: text("date_format").default("YYYY-MM-DD"), // Expected date format
+  
+  // Automation configuration
+  maxBatchSize: integer("max_batch_size").default(100), // Max records per submission
+  submissionFrequency: text("submission_frequency").default("daily"), // 'daily', 'weekly', 'manual'
+  automationEnabled: boolean("automation_enabled").default(false),
+  
+  // Processing times
+  expectedProcessingDays: integer("expected_processing_days").default(30), // Avg days for determination
+  
+  // Contact info
+  supportEmail: text("support_email"),
+  supportPhone: text("support_phone"),
+  
+  // Status
+  status: text("status").default("active"), // 'active', 'maintenance', 'disabled'
+  lastVerified: timestamp("last_verified"), // Last time we verified portal is working
+  
+  // Metadata
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertStatePortalConfigSchema = createInsertSchema(statePortalConfigs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertStatePortalConfig = z.infer<typeof insertStatePortalConfigSchema>;
+export type StatePortalConfig = typeof statePortalConfigs.$inferSelect;
+
+// ============================================================================
+// STATE SUBMISSION JOBS (Automation Runs)
+// ============================================================================
+
+export const stateSubmissionJobs = pgTable("state_submission_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  stateCode: text("state_code").notNull(),
+  
+  // Job details
+  jobType: text("job_type").notNull().default("auto"), // 'auto', 'manual', 'scheduled'
+  batchId: varchar("batch_id"), // Groups related submissions
+  
+  // Submission data
+  screeningIds: text("screening_ids").array(), // IDs of screenings being submitted
+  recordCount: integer("record_count").notNull().default(0),
+  csvUrl: text("csv_url"), // Object storage URL of generated CSV
+  
+  // Automation execution
+  status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'failed', 'partial'
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  
+  // Results
+  successCount: integer("success_count").default(0),
+  failureCount: integer("failure_count").default(0),
+  confirmationNumber: text("confirmation_number"), // State portal confirmation
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  errorDetails: jsonb("error_details"), // Detailed error info for debugging
+  screenshotUrl: text("screenshot_url"), // Screenshot if automation failed
+  
+  // Retry logic
+  retryCount: integer("retry_count").default(0),
+  maxRetries: integer("max_retries").default(3),
+  nextRetryAt: timestamp("next_retry_at"),
+  
+  // Audit
+  submittedBy: varchar("submitted_by").notNull().references(() => users.id),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertStateSubmissionJobSchema = createInsertSchema(stateSubmissionJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertStateSubmissionJob = z.infer<typeof insertStateSubmissionJobSchema>;
+export type StateSubmissionJob = typeof stateSubmissionJobs.$inferSelect;
+
+// ============================================================================
+// DETERMINATION LETTERS (OCR Parsed Documents)
+// ============================================================================
+
+export const determinationLetters = pgTable("determination_letters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  stateCode: text("state_code").notNull(),
+  
+  // Document metadata
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(), // Object storage URL
+  fileSize: integer("file_size"), // Bytes
+  fileType: text("file_type").default("pdf"), // 'pdf', 'image', 'email'
+  
+  // Source
+  source: text("source").default("manual"), // 'manual', 'sftp', 'email', 'api'
+  receivedDate: timestamp("received_date").notNull().defaultNow(),
+  
+  // OCR processing
+  ocrStatus: text("ocr_status").default("pending"), // 'pending', 'processing', 'completed', 'failed'
+  ocrProcessedAt: timestamp("ocr_processed_at"),
+  ocrProvider: text("ocr_provider").default("openai-vision"), // 'openai-vision', 'tesseract', 'manual'
+  
+  // Parsed data
+  parsedData: jsonb("parsed_data"), // Full OCR extraction
+  employeeData: jsonb("employee_data").array(), // Array of { name, ssn, status, certificationDate, etc }
+  
+  // Auto-matching
+  matchedScreenings: jsonb("matched_screenings").array(), // [{ screeningId, confidence, matchedBy }]
+  unmatchedRecords: integer("unmatched_records").default(0),
+  
+  // Status updates applied
+  updatesApplied: boolean("updates_applied").default(false),
+  updatesAppliedAt: timestamp("updates_applied_at"),
+  updatedScreeningIds: text("updated_screening_ids").array(),
+  
+  // Review
+  requiresReview: boolean("requires_review").default(false),
+  reviewStatus: text("review_status").default("pending"), // 'pending', 'approved', 'rejected'
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  // Error handling
+  errorMessage: text("error_message"),
+  errorDetails: jsonb("error_details"),
+  
+  // Audit
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertDeterminationLetterSchema = createInsertSchema(determinationLetters).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDeterminationLetter = z.infer<typeof insertDeterminationLetterSchema>;
+export type DeterminationLetter = typeof determinationLetters.$inferSelect;
+
+// ============================================================================
+// PAYROLL API CONNECTIONS
+// ============================================================================
+
+export const payrollConnections = pgTable("payroll_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Provider details
+  provider: text("provider").notNull(), // 'adp', 'paychex', 'paycor', 'quickbooks', 'gusto', etc.
+  providerName: text("provider_name").notNull(), // Display name
+  
+  // Authentication
+  authType: text("auth_type").notNull().default("oauth"), // 'oauth', 'api_key', 'credentials'
+  accessToken: text("access_token"), // Encrypted in production
+  refreshToken: text("refresh_token"), // Encrypted
+  tokenExpiresAt: timestamp("token_expires_at"),
+  apiKey: text("api_key"), // For API key auth
+  clientId: text("client_id"), // For OAuth
+  
+  // Company identification in payroll system
+  companyId: text("company_id"), // Employer's ID in the payroll system
+  companyName: text("company_name"),
+  
+  // Sync configuration
+  syncEnabled: boolean("sync_enabled").default(true),
+  syncFrequency: text("sync_frequency").default("daily"), // 'hourly', 'daily', 'weekly', 'manual'
+  lastSyncAt: timestamp("last_sync_at"),
+  nextSyncAt: timestamp("next_sync_at"),
+  
+  // Sync scope
+  syncEmployees: boolean("sync_employees").default(true), // Import employee master data
+  syncHours: boolean("sync_hours").default(true), // Import hours worked
+  syncPayPeriods: boolean("sync_pay_periods").default(true), // Import pay period dates
+  
+  // Field mapping
+  fieldMappings: jsonb("field_mappings"), // Custom field mapping config
+  
+  // Status
+  status: text("status").default("active"), // 'active', 'paused', 'error', 'expired'
+  connectionHealth: text("connection_health").default("healthy"), // 'healthy', 'degraded', 'failing'
+  lastHealthCheckAt: timestamp("last_health_check_at"),
+  
+  // Error tracking
+  lastError: text("last_error"),
+  errorCount: integer("error_count").default(0),
+  lastErrorAt: timestamp("last_error_at"),
+  
+  // Audit
+  connectedBy: varchar("connected_by").notNull().references(() => users.id),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPayrollConnectionSchema = createInsertSchema(payrollConnections).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPayrollConnection = z.infer<typeof insertPayrollConnectionSchema>;
+export type PayrollConnection = typeof payrollConnections.$inferSelect;
+
+// ============================================================================
+// PAYROLL SYNC JOBS (Continuous Sync Tracking)
+// ============================================================================
+
+export const payrollSyncJobs = pgTable("payroll_sync_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  connectionId: varchar("connection_id").notNull().references(() => payrollConnections.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Job details
+  jobType: text("job_type").notNull().default("scheduled"), // 'scheduled', 'manual', 'webhook'
+  syncType: text("sync_type").notNull().default("incremental"), // 'full', 'incremental'
+  
+  // Sync period
+  periodStart: text("period_start"), // YYYY-MM-DD
+  periodEnd: text("period_end"), // YYYY-MM-DD
+  
+  // Execution
+  status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'failed'
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  
+  // Results - Employees
+  employeesProcessed: integer("employees_processed").default(0),
+  employeesCreated: integer("employees_created").default(0),
+  employeesUpdated: integer("employees_updated").default(0),
+  employeesSkipped: integer("employees_skipped").default(0),
+  
+  // Results - Hours
+  hoursRecordsProcessed: integer("hours_records_processed").default(0),
+  hoursRecordsCreated: integer("hours_records_created").default(0),
+  hoursRecordsUpdated: integer("hours_records_updated").default(0),
+  hoursRecordsSkipped: integer("hours_records_skipped").default(0),
+  
+  // Credit recalculation
+  creditRecalculationsTriggered: integer("credit_recalculations_triggered").default(0),
+  totalCreditsUpdated: decimal("total_credits_updated", { precision: 10, scale: 2 }).default("0"),
+  
+  // Data snapshot
+  syncSummary: jsonb("sync_summary"), // Detailed sync results
+  changes: jsonb("changes").array(), // [{ type, entityId, changes }]
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  errorDetails: jsonb("error_details"),
+  retryCount: integer("retry_count").default(0),
+  
+  // Audit
+  triggeredBy: varchar("triggered_by").references(() => users.id), // null for automated
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPayrollSyncJobSchema = createInsertSchema(payrollSyncJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPayrollSyncJob = z.infer<typeof insertPayrollSyncJobSchema>;
+export type PayrollSyncJob = typeof payrollSyncJobs.$inferSelect;
