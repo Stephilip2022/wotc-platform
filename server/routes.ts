@@ -2424,6 +2424,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Create Stripe Billing Portal session (for payment method updates)
+  app.post("/api/employer/subscription/portal", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, user.employerId));
+
+      if (!employer || !employer.stripeCustomerId) {
+        return res.status(400).json({ error: "No Stripe customer found. Please subscribe first." });
+      }
+
+      // Create Stripe billing portal session
+      const session = await stripe.billingPortal.sessions.create({
+        customer: employer.stripeCustomerId,
+        return_url: `${req.protocol}://${req.get('host')}/employer/billing`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error) {
+      console.error("Error creating billing portal session:", error);
+      res.status(500).json({ error: "Failed to create billing portal session" });
+    }
+  });
+
+  // Cancel subscription
+  app.post("/api/employer/subscription/cancel", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Get current subscription
+      const [subscription] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.employerId, user.employerId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+
+      if (!subscription || !subscription.stripeSubscriptionId) {
+        return res.status(404).json({ error: "No active subscription found" });
+      }
+
+      // Cancel at period end (let them use it until the end of billing cycle)
+      const updated = await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+        cancel_at_period_end: true,
+      });
+
+      // Update in database
+      await db
+        .update(subscriptions)
+        .set({
+          cancelAtPeriodEnd: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, subscription.id));
+
+      res.json({ 
+        success: true,
+        message: "Subscription will be canceled at the end of the current billing period",
+        cancelAt: new Date(updated.current_period_end * 1000)
+      });
+    } catch (error) {
+      console.error("Error canceling subscription:", error);
+      res.status(500).json({ error: "Failed to cancel subscription" });
+    }
+  });
+
+  // Change subscription plan (upgrade/downgrade)
+  app.post("/api/employer/subscription/change-plan", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { planId, billingCycle } = req.body;
+
+      if (!planId || !billingCycle || !["monthly", "annual"].includes(billingCycle)) {
+        return res.status(400).json({ error: "Invalid plan or billing cycle" });
+      }
+
+      // Get the new plan
+      const [newPlan] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, planId));
+
+      if (!newPlan) {
+        return res.status(404).json({ error: "Plan not found" });
+      }
+
+      // Get current subscription
+      const [currentSub] = await db
+        .select()
+        .from(subscriptions)
+        .where(eq(subscriptions.employerId, user.employerId))
+        .orderBy(desc(subscriptions.createdAt))
+        .limit(1);
+
+      if (!currentSub || !currentSub.stripeSubscriptionId) {
+        return res.status(404).json({ error: "No active subscription found" });
+      }
+
+      // Get the Stripe subscription
+      const stripeSubscription = await stripe.subscriptions.retrieve(currentSub.stripeSubscriptionId);
+
+      // Get the price amount
+      const priceAmount = billingCycle === "monthly" ? newPlan.monthlyPrice : newPlan.annualPrice;
+
+      // Create new price or get existing one
+      // For simplicity, we'll create a new checkout session instead of updating in-place
+      // This ensures proper prorating and avoids Stripe API complexity
+      
+      // Update existing subscription with new plan
+      const updated = await stripe.subscriptions.update(currentSub.stripeSubscriptionId, {
+        items: [{
+          id: stripeSubscription.items.data[0].id,
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `${newPlan.displayName} - ${billingCycle === "monthly" ? "Monthly" : "Annual"}`,
+              description: newPlan.description || undefined,
+            },
+            recurring: {
+              interval: billingCycle === "monthly" ? "month" : "year",
+            },
+            unit_amount: Math.round(Number(priceAmount) * 100),
+          },
+        }],
+        proration_behavior: "create_prorations", // Prorate the difference
+      });
+
+      // Update in database
+      await db
+        .update(subscriptions)
+        .set({
+          planId: newPlan.id,
+          billingCycle,
+          updatedAt: new Date(),
+        })
+        .where(eq(subscriptions.id, currentSub.id));
+
+      res.json({ 
+        success: true,
+        message: "Subscription plan updated successfully",
+        subscription: updated
+      });
+    } catch (error) {
+      console.error("Error changing subscription plan:", error);
+      res.status(500).json({ error: "Failed to change subscription plan" });
+    }
+  });
+
   // ============================================================================
   // INVOICE MANAGEMENT
   // ============================================================================
