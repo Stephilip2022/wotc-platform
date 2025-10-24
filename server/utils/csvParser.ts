@@ -7,6 +7,7 @@ export interface DetectedColumn {
   sampleValues: string[];
   nullCount: number;
   suggestedMapping?: string; // Suggested field based on column name analysis
+  confidence?: number; // Confidence score for suggested mapping (0-1)
 }
 
 export interface ParsedCSV {
@@ -42,6 +43,7 @@ export function parseAndDetectColumns(csvContent: string, maxSampleRows: number 
     for (let i = 0; i < headers.length; i++) {
       const columnName = headers[i];
       const values = records.map(row => row[columnName] || '');
+      const suggestedField = suggestFieldMapping(columnName);
       
       const column: DetectedColumn = {
         name: columnName,
@@ -49,7 +51,8 @@ export function parseAndDetectColumns(csvContent: string, maxSampleRows: number 
         dataType: detectDataType(values),
         sampleValues: getSampleValues(values, Math.min(maxSampleRows, 5)),
         nullCount: values.filter(v => !v || v.trim() === '').length,
-        suggestedMapping: suggestFieldMapping(columnName),
+        suggestedMapping: suggestedField,
+        confidence: suggestedField ? 0.9 : 0, // High confidence if we have a suggestion
       };
       
       columns.push(column);
