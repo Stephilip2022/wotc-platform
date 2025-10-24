@@ -232,13 +232,17 @@ export const creditCalculations = pgTable("credit_calculations", {
   employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
   employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   
+  // Target group (which WOTC category)
+  targetGroup: text("target_group"), // 'IV-A', 'V-Disability', etc.
+  
   // Credit amounts
   maxCreditAmount: decimal("max_credit_amount", { precision: 10, scale: 2 }).notNull(),
   projectedCreditAmount: decimal("projected_credit_amount", { precision: 10, scale: 2 }).notNull(),
   actualCreditAmount: decimal("actual_credit_amount", { precision: 10, scale: 2 }),
   
-  // Work hours tracking
+  // Work hours and wages tracking
   hoursWorked: integer("hours_worked").default(0),
+  wagesEarned: decimal("wages_earned", { precision: 10, scale: 2 }).default("0"),
   minimumHoursRequired: integer("minimum_hours_required").default(120),
   
   // Status
@@ -306,6 +310,67 @@ export const aiAssistanceLogs = pgTable("ai_assistance_logs", {
 export const insertAiAssistanceLogSchema = createInsertSchema(aiAssistanceLogs).omit({ id: true, createdAt: true });
 export type InsertAiAssistanceLog = z.infer<typeof insertAiAssistanceLogSchema>;
 export type AiAssistanceLog = typeof aiAssistanceLogs.$inferSelect;
+
+// ============================================================================
+// HOURS TRACKING (Audit Trail)
+// ============================================================================
+
+export const hoursWorked = pgTable("hours_worked", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  creditCalculationId: varchar("credit_calculation_id").references(() => creditCalculations.id, { onDelete: "cascade" }),
+  
+  // Hours details
+  hours: decimal("hours", { precision: 10, scale: 2 }).notNull(),
+  periodStart: text("period_start").notNull(), // YYYY-MM-DD
+  periodEnd: text("period_end").notNull(), // YYYY-MM-DD
+  source: text("source").default("manual"), // 'manual', 'csv_import', 'api', 'payroll_system'
+  
+  // Metadata
+  notes: text("notes"),
+  batchId: varchar("batch_id"), // For grouping bulk imports
+  
+  // Audit
+  enteredBy: varchar("entered_by").notNull().references(() => users.id),
+  enteredAt: timestamp("entered_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertHoursWorkedSchema = createInsertSchema(hoursWorked).omit({ id: true, enteredAt: true, updatedAt: true });
+export type InsertHoursWorked = z.infer<typeof insertHoursWorkedSchema>;
+export type HoursWorked = typeof hoursWorked.$inferSelect;
+
+// ============================================================================
+// SCREENING STATUS CHANGES (Audit Trail)
+// ============================================================================
+
+export const screeningStatusChanges = pgTable("screening_status_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  screeningId: varchar("screening_id").notNull().references(() => screenings.id, { onDelete: "cascade" }),
+  
+  // Status change
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  reason: text("reason"), // Why was the status changed?
+  notes: text("notes"), // Additional admin notes
+  
+  // Certification details (when status changes to "certified")
+  certificationNumber: text("certification_number"),
+  certificationDate: text("certification_date"),
+  certificationExpiresAt: text("certification_expires_at"),
+  
+  // Determination letter reference
+  determinationLetterId: varchar("determination_letter_id").references(() => documents.id),
+  
+  // Audit
+  changedBy: varchar("changed_by").notNull().references(() => users.id),
+  changedAt: timestamp("changed_at").notNull().defaultNow(),
+});
+
+export const insertScreeningStatusChangeSchema = createInsertSchema(screeningStatusChanges).omit({ id: true, changedAt: true });
+export type InsertScreeningStatusChange = z.infer<typeof insertScreeningStatusChangeSchema>;
+export type ScreeningStatusChange = typeof screeningStatusChanges.$inferSelect;
 
 // ============================================================================
 // ETA FORM 9198 (EMPLOYER INTAKE & ONBOARDING)
