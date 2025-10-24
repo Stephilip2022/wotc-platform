@@ -81,6 +81,7 @@ export class StatePortalBot {
 
   /**
    * Texas WOTC OLS Portal automation
+   * Updated with resilient selectors and explicit waits
    */
   private async submitTexasPortal(
     config: StatePortalConfig,
@@ -93,25 +94,46 @@ export class StatePortalBot {
     const credentials = config.credentials as any;
 
     try {
-      // Navigate to portal
-      await this.page.goto(config.portalUrl);
+      // Navigate to portal with wait for network idle
+      await this.page.goto(config.portalUrl, { waitUntil: 'networkidle' });
       screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
 
-      // Login
-      await this.page.fill('input[name="username"]', credentials.username || '');
-      await this.page.fill('input[name="password"]', credentials.password || '');
-      await this.page.click('button[type="submit"]');
-      await this.page.waitForNavigation({ timeout: 30000 });
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
-
-      // Navigate to bulk upload
-      await this.page.click('text=Submit a Bulk File');
-      await this.page.waitForTimeout(2000);
-
-      // Upload CSV file
-      const fileInput = await this.page.locator('input[type="file"]');
+      // Login with explicit waits
+      const usernameInput = await this.page.waitForSelector('input[name="username"], input[id="username"], #loginUsername', { timeout: 10000 });
+      const passwordInput = await this.page.waitForSelector('input[name="password"], input[id="password"], #loginPassword', { timeout: 10000 });
       
-      // Create a temporary file buffer for upload
+      if (!usernameInput || !passwordInput) {
+        throw new Error('Login form not found - portal structure may have changed');
+      }
+
+      await usernameInput.fill(credentials.username || '');
+      await passwordInput.fill(credentials.password || '');
+      
+      const submitButton = await this.page.waitForSelector('button[type="submit"], input[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
+      await submitButton?.click();
+      
+      // Wait for navigation and check for login errors
+      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
+      
+      const loginError = await this.page.locator('text=/invalid.*credentials|incorrect.*password|login.*failed/i').count();
+      if (loginError > 0) {
+        throw new Error('Invalid credentials - login failed');
+      }
+      
+      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+
+      // Navigate to bulk upload with resilient selector
+      const bulkUploadLink = await this.page.waitForSelector('a:has-text("Submit a Bulk File"), button:has-text("Bulk Upload"), [data-testid="bulk-upload"]', { timeout: 15000 });
+      await bulkUploadLink?.click();
+      await this.page.waitForLoadState('networkidle');
+
+      // Upload CSV file with explicit wait for file input
+      const fileInput = await this.page.waitForSelector('input[type="file"]', { timeout: 10000 });
+      
+      if (!fileInput) {
+        throw new Error('File upload input not found');
+      }
+      
       const buffer = Buffer.from(csvContent, 'utf-8');
       await fileInput.setInputFiles({
         name: `wotc_bulk_${Date.now()}.csv`,
@@ -119,58 +141,99 @@ export class StatePortalBot {
         buffer,
       });
 
-      // Wait for file processing
-      await this.page.waitForTimeout(5000);
+      // Wait for file to be processed (look for next button to become enabled)
+      await this.page.waitForSelector('button:has-text("NEXT"):not([disabled])', { timeout: 15000 });
       screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
 
       // Click Next button
-      await this.page.click('button:has-text("NEXT")');
+      const nextButton = await this.page.waitForSelector('button:has-text("NEXT"), button:has-text("Next")');
+      await nextButton?.click();
       
-      // Wait for processing (Texas processes in batches of 200)
-      const estimatedSeconds = Math.ceil(employerCount / 200) * 10;
-      await this.page.waitForTimeout(estimatedSeconds * 1000);
+      // Wait for processing page to load (Texas processes in batches of 200)
+      await this.page.waitForLoadState('networkidle');
+      
+      // Wait for processing indicator to disappear or results to appear
+      try {
+        await this.page.waitForSelector('.processing, [data-loading="true"]', { state: 'hidden', timeout: Math.ceil(employerCount / 200) * 10000 });
+      } catch {
+        // Processing indicator may not exist, continue
+      }
 
-      // Check for incomplete applications
-      const incompleteSection = await this.page.locator('.incomplete-applications, [class*="incomplete"]').count();
+      // Check for incomplete applications section
+      const incompleteSection = await this.page.locator('.incomplete-applications, [data-section="incomplete"], text=/incomplete.*applications/i').count();
       if (incompleteSection > 0) {
-        // Download incomplete applications report
-        const downloadPromise = this.page.waitForEvent('download');
-        await this.page.click('text=GENERATE EXCEL FILE');
-        const download = await downloadPromise;
+        screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+        
+        // Try to download incomplete applications report
+        try {
+          const downloadPromise = this.page.waitForEvent('download', { timeout: 5000 });
+          const generateButton = await this.page.waitForSelector('button:has-text("GENERATE EXCEL FILE"), button:has-text("Download")');
+          await generateButton?.click();
+          await downloadPromise;
+        } catch {
+          // Download may not be available
+        }
         
         return {
           success: false,
-          message: 'Some applications were incomplete',
-          errors: ['Incomplete applications detected - review downloaded Excel file'],
+          message: 'Some applications were incomplete - review incomplete applications section',
+          errors: ['Incomplete applications detected'],
           screenshots,
         };
       }
 
-      // Accept electronic agreement
-      await this.page.check('input[type="checkbox"]:nth-of-type(1)');
-      await this.page.check('input[type="checkbox"]:nth-of-type(2)');
+      // Accept electronic agreement checkboxes
+      const checkboxes = await this.page.locator('input[type="checkbox"]').all();
+      if (checkboxes.length >= 2) {
+        await checkboxes[0].check();
+        await checkboxes[1].check();
+      } else {
+        throw new Error('Electronic agreement checkboxes not found');
+      }
 
-      // Submit
-      await this.page.click('button:has-text("SUBMIT")');
-      await this.page.waitForTimeout(3000);
       screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
 
-      // Look for confirmation
-      const confirmationText = await this.page.textContent('body');
-      const confirmationMatch = confirmationText?.match(/claim number range:\s*([\d-]+\s*to\s*[\d-]+)/i);
+      // Submit with explicit wait
+      const submitButton = await this.page.waitForSelector('button:has-text("SUBMIT"), button:has-text("Submit")');
+      await submitButton?.click();
       
-      if (confirmationMatch) {
+      // Wait for confirmation page
+      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
+      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+
+      // Look for confirmation with multiple patterns
+      const confirmationText = await this.page.textContent('body');
+      const confirmationPatterns = [
+        /claim number range:\s*([\d-]+\s*to\s*[\d-]+)/i,
+        /confirmation.*number[s]?:\s*([\d-]+(?:\s*to\s*[\d-]+)?)/i,
+        /successfully.*submitted.*(\d+)\s*applications?/i,
+      ];
+      
+      for (const pattern of confirmationPatterns) {
+        const match = confirmationText?.match(pattern);
+        if (match) {
+          return {
+            success: true,
+            message: 'Texas bulk upload successful',
+            confirmationNumbers: [match[1]],
+            screenshots,
+          };
+        }
+      }
+
+      // Check for success indicators even without specific confirmation number
+      const successIndicator = await this.page.locator('text=/success|submitted|complete/i, .success, [data-status="success"]').count();
+      if (successIndicator > 0) {
         return {
           success: true,
-          message: 'Texas bulk upload successful',
-          confirmationNumbers: [confirmationMatch[1]],
+          message: 'Upload completed successfully',
           screenshots,
         };
       }
 
       return {
-        success: true,
-        message: 'Upload completed but confirmation number not found',
+        success: false,
+        message: 'Upload completed but success confirmation not found',
         screenshots,
       };
     } catch (error) {

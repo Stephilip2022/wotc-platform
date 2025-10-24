@@ -155,43 +155,12 @@ export function generateArizonaCSV(records: EmployeeWithScreening[]): string {
 
 /**
  * Generate Texas format CSV
- * Based on Texas bulk upload requirements
- * 
- * Key requirements:
- * - Columns A, B, C, L must be TEXT format (leading zeros preserved)
- * - Maximum 999 records per file
- * - NO commas in any field
- * - Standard CSV, NOT CSV UTF-8
+ * Uses comprehensive Texas CSV generator with all columns A-AS
  */
 export function generateTexasCSV(records: EmployeeWithScreening[]): string {
-  if (records.length > 998) {
-    throw new Error('Texas bulk upload limited to 998 records per file (plus header)');
-  }
-
-  // Note: Actual Texas column structure would need to be verified
-  // This is a placeholder based on documentation
-  const header = [
-    'ConsultantEIN', // Column A - leave blank if employer direct
-    'EmployerEIN', // Column B
-    'EmployeeSSN', // Column C
-    // ... additional columns D-K
-    'ColumnL', // Column L - specific field TBD
-    // ... optional columns M-AS
-  ].join(',');
-
-  const rows = records.map(record => {
-    const { employee, employerEin } = record;
-
-    return [
-      '', // No consultant - employer direct
-      `="${cleanField(employerEin)}"`, // Preserve as text with leading zeros
-      `="${cleanField(employee.ssn?.replace(/-/g, ''))}"`, // Preserve as text
-      // ... additional fields
-      '', // Column L placeholder
-    ].join(',');
-  });
-
-  return [header, ...rows].join('\n');
+  // Import and use the dedicated Texas generator
+  const { generateTexasCSV: texasGenerator } = require('./texasCsvGenerator');
+  return texasGenerator(records);
 }
 
 /**
@@ -214,29 +183,43 @@ export function generateStateCSV(
 /**
  * Validate employee data for state submission
  */
-export function validateEmployeeForSubmission(employee: Employee): {
+export function validateEmployeeForSubmission(
+  employee: Employee,
+  screening: Screening,
+  stateCode: string
+): {
   valid: boolean;
   errors: string[];
 } {
-  const errors: string[] = [];
-
-  if (!employee.firstName) errors.push('First name required');
-  if (!employee.lastName) errors.push('Last name required');
-  if (!employee.ssn) errors.push('SSN required');
-  if (!employee.dateOfBirth) errors.push('Date of birth required');
-  if (!employee.hireDate) errors.push('Hire date required');
-  if (!employee.address) errors.push('Address required');
-  if (!employee.city) errors.push('City required');
-  if (!employee.state) errors.push('State required');
-  if (!employee.zipCode) errors.push('ZIP code required');
-
-  // Validate SSN format (9 digits)
-  if (employee.ssn && !/^\d{9}$/.test(employee.ssn.replace(/-/g, ''))) {
-    errors.push('SSN must be 9 digits');
+  switch (stateCode.toUpperCase()) {
+    case 'TX': {
+      const { validateTexasSubmission } = require('./texasCsvGenerator');
+      return validateTexasSubmission(employee, screening);
+    }
+    case 'AZ': {
+      // Basic validation for Arizona
+      const errors: string[] = [];
+      if (!employee.firstName) errors.push('First name required');
+      if (!employee.lastName) errors.push('Last name required');
+      if (!employee.ssn) errors.push('SSN required');
+      if (!employee.dateOfBirth) errors.push('Date of birth required');
+      if (!employee.hireDate) errors.push('Hire date required');
+      if (!employee.address) errors.push('Address required');
+      if (!employee.city) errors.push('City required');
+      if (!employee.state) errors.push('State required');
+      if (!employee.zipCode) errors.push('ZIP code required');
+      
+      const targetGroups = Array.isArray(screening.targetGroups) ? screening.targetGroups : [];
+      if (targetGroups.length === 0) {
+        errors.push('At least one target group must be selected');
+      }
+      
+      return { valid: errors.length === 0, errors };
+    }
+    default:
+      return {
+        valid: false,
+        errors: [`Validation not implemented for state: ${stateCode}`],
+      };
   }
-
-  return {
-    valid: errors.length === 0,
-    errors,
-  };
 }

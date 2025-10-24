@@ -3835,11 +3835,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
         .returning();
 
-      // Note: Actual processing would happen in a background worker
-      // For now, return the job ID for status tracking
+      // Trigger background processing (async - don't await)
+      const { processSubmissionJob } = await import('./workers/submissionProcessor');
+      processSubmissionJob(job.id).catch(err => {
+        console.error('Background job processing failed:', err);
+      });
+      
       res.json({
         success: true,
-        message: 'Submission job queued',
+        message: 'Submission job queued and processing started',
         jobId: job.id,
       });
     } catch (error) {
