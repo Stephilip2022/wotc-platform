@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Users, DollarSign, FileText, TrendingUp } from "lucide-react";
+import { Building2, Users, DollarSign, FileText, TrendingUp, MapPin } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -11,6 +11,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 import type { Employer } from "@shared/schema";
 
 interface AdminStats {
@@ -29,13 +41,36 @@ interface EmployerSummary extends Employer {
   projectedCredits: string;
 }
 
+interface CertificationTrend {
+  month: string;
+  certified: number;
+  denied: number;
+  pending: number;
+}
+
+interface StateBreakdown {
+  state: string;
+  totalScreenings: number;
+  certified: number;
+  denied: number;
+  totalCredits: string;
+}
+
 export default function AdminDashboard() {
-  const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery<AdminStats>({
     queryKey: ["/api/admin/stats"],
   });
 
-  const { data: employers, isLoading: employersLoading } = useQuery<EmployerSummary[]>({
+  const { data: employers, isLoading: employersLoading, isError: employersError } = useQuery<EmployerSummary[]>({
     queryKey: ["/api/admin/employers/summary"],
+  });
+
+  const { data: certificationTrends, isLoading: trendsLoading, isError: trendsError } = useQuery<CertificationTrend[]>({
+    queryKey: ["/api/admin/analytics/certification-trends"],
+  });
+
+  const { data: stateBreakdown, isLoading: statesLoading, isError: statesError } = useQuery<StateBreakdown[]>({
+    queryKey: ["/api/admin/analytics/state-breakdown"],
   });
 
   const StatCard = ({ 
@@ -43,13 +78,17 @@ export default function AdminDashboard() {
     value, 
     icon: Icon, 
     description,
-    trend 
+    trend,
+    isLoading,
+    isError
   }: { 
     title: string; 
     value: string | number; 
     icon: any; 
     description?: string;
     trend?: string;
+    isLoading?: boolean;
+    isError?: boolean;
   }) => (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -58,12 +97,21 @@ export default function AdminDashboard() {
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold" data-testid={`text-${title.toLowerCase().replace(/\s+/g, "-")}`}>
-          {statsLoading ? <Skeleton className="h-8 w-24" /> : value}
+          {isLoading ? (
+            <Skeleton className="h-8 w-24" />
+          ) : isError ? (
+            <span className="text-destructive text-sm">Error</span>
+          ) : (
+            value
+          )}
         </div>
-        {description && (
+        {description && !isError && (
           <p className="text-xs text-muted-foreground mt-1">{description}</p>
         )}
-        {trend && (
+        {isError && (
+          <p className="text-xs text-destructive mt-1">Failed to load data</p>
+        )}
+        {trend && !isError && !isLoading && (
           <div className="flex items-center gap-1 mt-2">
             <TrendingUp className="h-3 w-3 text-green-600" />
             <span className="text-xs text-green-600">{trend}</span>
@@ -73,8 +121,15 @@ export default function AdminDashboard() {
     </Card>
   );
 
+  // Calculate totals from employer data
+  const totalCertified = employersLoading ? 0 : (employers?.reduce((sum, e) => sum + e.certifiedCount, 0) || 0);
+  const totalProjectedCredits = employersLoading ? 0 : (employers?.reduce((sum, e) => {
+    const amount = Number(e.projectedCredits.replace(/[$,]/g, ""));
+    return sum + amount;
+  }, 0) || 0);
+
   return (
-    <div className="space-y-8">
+    <div className="container mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-3xl font-bold mb-2">Admin Dashboard</h1>
         <p className="text-muted-foreground">
@@ -82,18 +137,23 @@ export default function AdminDashboard() {
         </p>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Employers"
           value={stats?.totalEmployers || 0}
           icon={Building2}
           description="Active clients"
+          isLoading={statsLoading}
+          isError={statsError}
         />
         <StatCard
           title="Total Employees"
           value={stats?.totalEmployees || 0}
           icon={Users}
           description="Across all employers"
+          isLoading={statsLoading}
+          isError={statsError}
         />
         <StatCard
           title="Total Screenings"
@@ -101,19 +161,166 @@ export default function AdminDashboard() {
           icon={FileText}
           description="Completed screenings"
           trend="+15% this month"
+          isLoading={statsLoading}
+          isError={statsError}
         />
         <StatCard
-          title="Total Revenue"
-          value={stats?.totalRevenue || "$0"}
-          icon={DollarSign}
-          description="All-time revenue"
-          trend="+22% this month"
+          title="Total Certified"
+          value={totalCertified}
+          icon={TrendingUp}
+          description="WOTC certified employees"
+          isLoading={employersLoading}
+          isError={employersError}
         />
       </div>
 
+      {/* Analytics Charts */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Certification Trends */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Certification Trends</CardTitle>
+            <CardDescription>Last 12 months certification activity</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {trendsLoading ? (
+              <Skeleton className="h-80 w-full" />
+            ) : trendsError ? (
+              <div className="flex items-center justify-center h-80 text-destructive">
+                <div className="text-center">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Error loading trend data</p>
+                </div>
+              </div>
+            ) : !certificationTrends || certificationTrends.length === 0 ? (
+              <div className="flex items-center justify-center h-80 text-muted-foreground">
+                <div className="text-center">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No trend data yet</p>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={certificationTrends}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="certified" 
+                    stroke="#22c55e" 
+                    strokeWidth={2}
+                    name="Certified"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="denied" 
+                    stroke="#ef4444" 
+                    strokeWidth={2}
+                    name="Denied"
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="pending" 
+                    stroke="#94a3b8" 
+                    strokeWidth={2}
+                    name="Pending"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* State Breakdown */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Top States by Screenings</CardTitle>
+            <CardDescription>Screening activity by state</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {statesLoading ? (
+              <Skeleton className="h-80 w-full" />
+            ) : statesError ? (
+              <div className="flex items-center justify-center h-80 text-destructive">
+                <div className="text-center">
+                  <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Error loading state data</p>
+                </div>
+              </div>
+            ) : !stateBreakdown || stateBreakdown.length === 0 ? (
+              <div className="flex items-center justify-center h-80 text-muted-foreground">
+                <div className="text-center">
+                  <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No state data yet</p>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart data={stateBreakdown.slice(0, 10)}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="state" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="certified" fill="#22c55e" name="Certified" />
+                  <Bar dataKey="denied" fill="#ef4444" name="Denied" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* State Details Table */}
+      {stateBreakdown && stateBreakdown.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>State Breakdown</CardTitle>
+            <CardDescription>
+              Detailed screening and credit data by state
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>State</TableHead>
+                  <TableHead>Total Screenings</TableHead>
+                  <TableHead>Certified</TableHead>
+                  <TableHead>Denied</TableHead>
+                  <TableHead className="text-right">Total Credits</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stateBreakdown.slice(0, 15).map((state) => (
+                  <TableRow key={state.state} data-testid={`row-state-${state.state}`}>
+                    <TableCell className="font-medium">{state.state}</TableCell>
+                    <TableCell>{state.totalScreenings}</TableCell>
+                    <TableCell>
+                      <Badge variant="default">{state.certified}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="destructive">{state.denied}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {state.totalCredits}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Employer Overview */}
       <Card>
         <CardHeader>
           <CardTitle>Employer Overview</CardTitle>
+          <CardDescription>Performance comparison across all employers</CardDescription>
         </CardHeader>
         <CardContent>
           {employersLoading ? (

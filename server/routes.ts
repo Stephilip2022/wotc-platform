@@ -739,6 +739,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin Analytics: Certification Trends (last 12 months)
+  app.get("/api/admin/analytics/certification-trends", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Get monthly certification trends for the last 12 months (SQLite compatible)
+      const trends = await db
+        .select({
+          month: sql<string>`strftime('%Y-%m', ${screenings.updatedAt})`,
+          certified: sql<number>`SUM(CASE WHEN ${screenings.status} = 'certified' THEN 1 ELSE 0 END)`,
+          denied: sql<number>`SUM(CASE WHEN ${screenings.status} = 'denied' THEN 1 ELSE 0 END)`,
+          pending: sql<number>`SUM(CASE WHEN ${screenings.status} = 'pending' THEN 1 ELSE 0 END)`,
+        })
+        .from(screenings)
+        .where(sql`${screenings.updatedAt} >= date('now', '-12 months')`)
+        .groupBy(sql`strftime('%Y-%m', ${screenings.updatedAt})`)
+        .orderBy(sql`strftime('%Y-%m', ${screenings.updatedAt})`);
+
+      res.json(trends);
+    } catch (error) {
+      console.error("Error fetching certification trends:", error);
+      res.status(500).json({ error: "Failed to fetch certification trends" });
+    }
+  });
+
+  // Admin Analytics: State Breakdown
+  app.get("/api/admin/analytics/state-breakdown", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      // Get screening counts by state
+      const stateData = await db
+        .select({
+          state: employees.state,
+          totalScreenings: sql<number>`COUNT(DISTINCT ${screenings.id})`,
+          certified: sql<number>`SUM(CASE WHEN ${screenings.status} = 'certified' THEN 1 ELSE 0 END)`,
+          denied: sql<number>`SUM(CASE WHEN ${screenings.status} = 'denied' THEN 1 ELSE 0 END)`,
+          totalCredits: sql<string>`COALESCE(SUM(${creditCalculations.actualCreditAmount}), 0)`,
+        })
+        .from(employees)
+        .leftJoin(screenings, eq(screenings.employeeId, employees.id))
+        .leftJoin(creditCalculations, eq(creditCalculations.screeningId, screenings.id))
+        .where(sql`${employees.state} IS NOT NULL`)
+        .groupBy(employees.state)
+        .orderBy(sql`COUNT(DISTINCT ${screenings.id}) DESC`);
+
+      res.json(
+        stateData.map((s) => ({
+          state: s.state,
+          totalScreenings: Number(s.totalScreenings) || 0,
+          certified: Number(s.certified) || 0,
+          denied: Number(s.denied) || 0,
+          totalCredits: `$${Number(s.totalCredits || 0).toLocaleString()}`,
+        }))
+      );
+    } catch (error) {
+      console.error("Error fetching state breakdown:", error);
+      res.status(500).json({ error: "Failed to fetch state breakdown" });
+    }
+  });
+
   app.get("/api/admin/employers/summary", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
