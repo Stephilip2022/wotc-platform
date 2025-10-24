@@ -25,6 +25,9 @@ import {
   screeningStatusChanges,
   subscriptionPlans,
   subscriptions,
+  csvImportSessions,
+  csvImportRows,
+  csvImportTemplates,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -1929,6 +1932,184 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bulk CSV import
+  // NEW Enhanced CSV Import Flow - Step 1: Initialize session and detect columns
+  app.post("/api/employer/hours/import/init", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const { parseAndDetectColumns } = await import('./utils/csvParser');
+      const csvContent = req.file.buffer.toString("utf-8");
+      
+      // Parse CSV and detect columns
+      const parsed = parseAndDetectColumns(csvContent);
+      
+      if (parsed.errors.length > 0) {
+        return res.status(400).json({ 
+          error: "Failed to parse CSV", 
+          details: parsed.errors 
+        });
+      }
+
+      // Create import session
+      const [session] = await db.insert(csvImportSessions).values({
+        employerId: user.employerId,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        rowCount: parsed.rowCount,
+        status: "mapping",
+        importType: "hours",
+        detectedColumns: parsed.columns as any,
+        totalRows: parsed.rowCount,
+        createdBy: userId,
+      }).returning();
+
+      // Store raw CSV data temporarily (in session for now, could use object storage for large files)
+      // For simplicity, we'll re-parse on next step
+
+      res.json({
+        sessionId: session.id,
+        columns: parsed.columns,
+        rowCount: parsed.rowCount,
+      });
+    } catch (error) {
+      console.error("Error initializing import:", error);
+      res.status(500).json({ error: "Failed to initialize import" });
+    }
+  });
+
+  // Step 2: Get import session details
+  app.get("/api/employer/hours/import/:sessionId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const sessionId = req.params.sessionId;
+      
+      const [session] = await db
+        .select()
+        .from(csvImportSessions)
+        .where(and(
+          eq(csvImportSessions.id, sessionId),
+          eq(csvImportSessions.employerId, user.employerId)
+        ));
+
+      if (!session) {
+        return res.status(404).json({ error: "Import session not found" });
+      }
+
+      res.json(session);
+    } catch (error) {
+      console.error("Error fetching import session:", error);
+      res.status(500).json({ error: "Failed to fetch import session" });
+    }
+  });
+
+  // Step 3: Save column mappings to session
+  app.patch("/api/employer/hours/import/:sessionId/mappings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const sessionId = req.params.sessionId;
+      const { columnMappings, employeeMatchStrategy } = req.body;
+      
+      // Update session with column mappings
+      const [updatedSession] = await db
+        .update(csvImportSessions)
+        .set({
+          columnMappings: columnMappings as any,
+          employeeMatchStrategy: employeeMatchStrategy || "id",
+          status: "preview",
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(csvImportSessions.id, sessionId),
+          eq(csvImportSessions.employerId, user.employerId)
+        ))
+        .returning();
+
+      if (!updatedSession) {
+        return res.status(404).json({ error: "Import session not found" });
+      }
+
+      res.json(updatedSession);
+    } catch (error) {
+      console.error("Error saving column mappings:", error);
+      res.status(500).json({ error: "Failed to save column mappings" });
+    }
+  });
+
+  // Get all import templates for employer
+  app.get("/api/employer/hours/import/templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const templates = await db
+        .select()
+        .from(csvImportTemplates)
+        .where(eq(csvImportTemplates.employerId, user.employerId))
+        .orderBy(desc(csvImportTemplates.lastUsedAt));
+
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  // Save a new import template
+  app.post("/api/employer/hours/import/templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { name, description, columnMappings, employeeMatchStrategy, dateFormat } = req.body;
+
+      const [template] = await db.insert(csvImportTemplates).values({
+        employerId: user.employerId,
+        name,
+        description,
+        importType: "hours",
+        columnMappings: columnMappings as any,
+        employeeMatchStrategy: employeeMatchStrategy || "id",
+        dateFormat: dateFormat || "YYYY-MM-DD",
+        createdBy: userId,
+      }).returning();
+
+      res.json(template);
+    } catch (error) {
+      console.error("Error saving template:", error);
+      res.status(500).json({ error: "Failed to save template" });
+    }
+  });
+
+  // Legacy bulk import (kept for backward compatibility)
   app.post("/api/employer/hours/bulk", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
