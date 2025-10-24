@@ -31,6 +31,11 @@ const stateCredentialsSchema = z.object({
     question: z.string(),
     answer: z.string(),
   })).optional(),
+  mfaEnabled: z.boolean(),
+  mfaType: z.string().optional().or(z.literal('')),
+  mfaSecret: z.string().optional().or(z.literal('')),
+  mfaPhone: z.string().optional().or(z.literal('')),
+  mfaEmail: z.string().optional().or(z.literal('')),
   notes: z.string().optional().or(z.literal('')),
   followUps: z.array(z.object({
     date: z.string(),
@@ -77,6 +82,11 @@ export default function StateCredentialsPage() {
         challengeQuestions: data.challengeQuestions || [],
         stateContacts: data.stateContacts || [],
         followUps: data.followUps || [],
+        mfaEnabled: data.mfaEnabled || false,
+        mfaType: data.mfaType || null,
+        mfaSecret: data.mfaSecret || null,
+        mfaPhone: data.mfaPhone || null,
+        mfaEmail: data.mfaEmail || null,
       };
 
       delete apiData.userId;
@@ -110,6 +120,7 @@ export default function StateCredentialsPage() {
       stateContacts: [],
       followUps: [],
       ocrEnabled: false,
+      mfaEnabled: false,
       missingElectronicSubmittals: false,
       signatureRequirement: 'electronic',
       longPoaApprovalDuration: false,
@@ -131,6 +142,11 @@ export default function StateCredentialsPage() {
       ocrEnabled: state.ocrEnabled || false,
       bulkUploadInput: state.bulkUploadInput || '',
       challengeQuestions: state.challengeQuestions || [],
+      mfaEnabled: state.mfaEnabled || false,
+      mfaType: state.mfaType || '',
+      mfaSecret: state.mfaSecret || '',
+      mfaPhone: state.mfaPhone || '',
+      mfaEmail: state.mfaEmail || '',
       notes: state.notes || '',
       followUps: state.followUps || [],
       stateContacts: state.stateContacts || [],
@@ -308,6 +324,96 @@ export default function StateCredentialsPage() {
                 </div>
 
                 <ChallengeQuestionsSection form={form} />
+                
+                {/* MFA Configuration */}
+                <div className="border-t pt-4 mt-6">
+                  <h3 className="text-lg font-semibold mb-4">Multi-Factor Authentication (MFA)</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label htmlFor="mfaEnabled">Enable MFA</Label>
+                        <p className="text-sm text-muted-foreground">
+                          Enable multi-factor authentication for this portal
+                        </p>
+                      </div>
+                      <Controller
+                        name="mfaEnabled"
+                        control={form.control}
+                        render={({ field }) => (
+                          <Switch
+                            id="mfaEnabled"
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-mfa-enabled"
+                          />
+                        )}
+                      />
+                    </div>
+
+                    {form.watch('mfaEnabled') && (
+                      <>
+                        <div>
+                          <Label htmlFor="mfaType">MFA Type</Label>
+                          <Select
+                            value={form.watch('mfaType') || ''}
+                            onValueChange={(value) => form.setValue('mfaType', value)}
+                          >
+                            <SelectTrigger data-testid="select-mfa-type">
+                              <SelectValue placeholder="Select MFA type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="totp">TOTP (Time-based)</SelectItem>
+                              <SelectItem value="authenticator_app">Authenticator App</SelectItem>
+                              <SelectItem value="sms">SMS</SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {(form.watch('mfaType') === 'totp' || form.watch('mfaType') === 'authenticator_app') && (
+                          <div>
+                            <Label htmlFor="mfaSecret">TOTP Secret (Base32)</Label>
+                            <Input
+                              id="mfaSecret"
+                              {...form.register('mfaSecret')}
+                              placeholder="JBSWY3DPEHPK3PXP"
+                              data-testid="input-mfa-secret"
+                            />
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Base32-encoded TOTP secret from authenticator app setup
+                            </p>
+                          </div>
+                        )}
+
+                        {form.watch('mfaType') === 'sms' && (
+                          <div>
+                            <Label htmlFor="mfaPhone">MFA Phone Number</Label>
+                            <Input
+                              id="mfaPhone"
+                              {...form.register('mfaPhone')}
+                              placeholder="+1 (555) 123-4567"
+                              data-testid="input-mfa-phone"
+                            />
+                          </div>
+                        )}
+
+                        {form.watch('mfaType') === 'email' && (
+                          <div>
+                            <Label htmlFor="mfaEmail">MFA Email Address</Label>
+                            <Input
+                              id="mfaEmail"
+                              type="email"
+                              {...form.register('mfaEmail')}
+                              placeholder="mfa@example.com"
+                              data-testid="input-mfa-email"
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               </TabsContent>
 
               {/* Configuration Tab */}
