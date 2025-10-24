@@ -26,8 +26,17 @@ import {
 import { eq, and, desc, sql } from "drizzle-orm";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import OpenAI from "openai";
+import Stripe from "stripe";
 import { determineEligibility, calculateCredit, TARGET_GROUPS, normalizeTargetGroup } from "./eligibility";
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
+
+// Initialize Stripe
+if (!process.env.STRIPE_SECRET_KEY) {
+  throw new Error("Missing required Stripe secret: STRIPE_SECRET_KEY");
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2024-11-20.acacia",
+});
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -2197,6 +2206,218 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching subscription:", error);
       res.status(500).json({ error: "Failed to fetch subscription" });
+    }
+  });
+
+  // Create Stripe Checkout Session for subscription
+  app.post("/api/employer/subscription/checkout", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { planId, billingCycle } = req.body;
+
+      if (!planId || !billingCycle || !["monthly", "annual"].includes(billingCycle)) {
+        return res.status(400).json({ error: "Invalid plan or billing cycle" });
+      }
+
+      // Get the plan
+      const [plan] = await db
+        .select()
+        .from(subscriptionPlans)
+        .where(eq(subscriptionPlans.id, planId));
+
+      if (!plan) {
+        return res.status(404).json({ error: "Plan not found" });
+      }
+
+      // Get or create Stripe customer for employer
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, user.employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      let stripeCustomerId = employer.stripeCustomerId;
+
+      if (!stripeCustomerId) {
+        // Create Stripe customer
+        const customer = await stripe.customers.create({
+          email: employer.contactEmail,
+          name: employer.name,
+          metadata: {
+            employerId: employer.id,
+          },
+        });
+
+        stripeCustomerId = customer.id;
+
+        // Update employer with Stripe customer ID
+        await db
+          .update(employers)
+          .set({ stripeCustomerId: customer.id })
+          .where(eq(employers.id, employer.id));
+      }
+
+      // Create Stripe Checkout Session
+      const priceAmount = billingCycle === "monthly" ? plan.monthlyPrice : plan.annualPrice;
+      
+      const session = await stripe.checkout.sessions.create({
+        customer: stripeCustomerId,
+        mode: "subscription",
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: `${plan.displayName} - ${billingCycle === "monthly" ? "Monthly" : "Annual"}`,
+                description: plan.description || undefined,
+              },
+              recurring: {
+                interval: billingCycle === "monthly" ? "month" : "year",
+              },
+              unit_amount: Math.round(Number(priceAmount) * 100), // Convert to cents
+            },
+            quantity: 1,
+          },
+        ],
+        success_url: `${req.protocol}://${req.get('host')}/employer/billing?success=true`,
+        cancel_url: `${req.protocol}://${req.get('host')}/employer/billing?canceled=true`,
+        metadata: {
+          employerId: employer.id,
+          planId: plan.id,
+          billingCycle,
+        },
+      });
+
+      res.json({ sessionId: session.id, url: session.url });
+    } catch (error) {
+      console.error("Error creating checkout session:", error);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  // Stripe webhook handler
+  // Note: This endpoint requires raw body for signature verification
+  // Make sure your body parser middleware preserves the raw body for /api/webhooks/stripe
+  app.post("/api/webhooks/stripe", async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+
+    if (!sig) {
+      return res.status(400).send("Missing Stripe signature");
+    }
+
+    let event: Stripe.Event;
+
+    try {
+      // Verify webhook signature using raw body
+      // In production, configure STRIPE_WEBHOOK_SECRET from Stripe Dashboard → Webhooks
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+      
+      if (webhookSecret) {
+        // Production: verify signature with raw body
+        // Note: req.rawBody is set by express.json verify function in server/index.ts
+        const rawBody = (req as any).rawBody;
+        if (!rawBody) {
+          throw new Error("Raw body not available for signature verification");
+        }
+        event = stripe.webhooks.constructEvent(
+          rawBody,
+          sig,
+          webhookSecret
+        );
+      } else {
+        // Development: parse directly (INSECURE - only for local testing)
+        console.warn("WARNING: Stripe webhook running without signature verification. Set STRIPE_WEBHOOK_SECRET for production.");
+        event = req.body as Stripe.Event;
+      }
+    } catch (err: any) {
+      console.error("Webhook signature verification failed:", err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log(`Stripe webhook received: ${event.type}`);
+
+    try {
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          
+          if (session.mode === "subscription") {
+            const employerId = session.metadata?.employerId;
+            const planId = session.metadata?.planId;
+            const billingCycle = session.metadata?.billingCycle;
+
+            if (employerId && planId && billingCycle) {
+              // Create subscription record
+              const [newSubscription] = await db.insert(subscriptions).values({
+                employerId,
+                planId,
+                stripeSubscriptionId: session.subscription as string,
+                stripeCustomerId: session.customer as string,
+                billingCycle,
+                status: "active",
+                currentPeriodStart: new Date(session.created * 1000),
+              }).returning();
+
+              console.log(`Created subscription: ${newSubscription.id} for employer ${employerId}`);
+            }
+          }
+          break;
+        }
+
+        case "customer.subscription.updated": {
+          const subscription = event.data.object as Stripe.Subscription;
+          
+          // Update subscription in database
+          await db
+            .update(subscriptions)
+            .set({
+              status: subscription.status,
+              currentPeriodStart: new Date(subscription.current_period_start * 1000),
+              currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+              cancelAtPeriodEnd: subscription.cancel_at_period_end,
+              updatedAt: new Date(),
+            })
+            .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
+
+          console.log(`Updated subscription: ${subscription.id}`);
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Stripe.Subscription;
+          
+          // Mark subscription as canceled
+          await db
+            .update(subscriptions)
+            .set({
+              status: "canceled",
+              canceledAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(subscriptions.stripeSubscriptionId, subscription.id));
+
+          console.log(`Canceled subscription: ${subscription.id}`);
+          break;
+        }
+
+        default:
+          console.log(`Unhandled event type: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error("Error processing webhook:", error);
+      res.status(500).json({ error: "Webhook processing failed" });
     }
   });
 
