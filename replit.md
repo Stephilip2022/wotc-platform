@@ -12,6 +12,23 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+- **October 24, 2025 - Phase 2 Complete (Determination Tracking, Credit Calculation & Analytics)**:
+  - **Hours Tracking System**: Database schema with audit trails, employer UI for manual entry and bulk CSV imports from payroll systems
+  - **Determination Tracking**: Admin interface to update screening status (certified/denied), upload determination letters, record certification numbers and dates
+  - **Credit Calculation Engine**: Auto-calculation of WOTC credits based on hours worked with tier-based rules (25% at 120h minimum, 40% at 400h+), supporting all target groups
+  - **Enhanced Employer Dashboard**: Real-time KPIs (pending/certified/denied counts, potential vs actual credits), pipeline visualization, employee listing with credit projections, credit comparison chart showing potential vs actual credits over time
+  - **Admin Analytics Dashboard**: System-wide statistics, employer comparison tables, certification trends over time, state-by-state breakdown with geographic insights
+  - **Employee Detail Pages**: Comprehensive screening history, hours tracking tables, credit breakdowns by time period, document upload management
+  - **Production Bug Fixes**: 
+    - PostgreSQL compatibility (TO_CHAR date formatting, INTERVAL syntax)
+    - SelectItem validation (eliminated empty string values causing runtime errors)
+    - Target group normalization (mapped display names to IRS codes for credit calculation)
+    - CSV export filter regression (proper handling of "all" sentinel values)
+    - **Centralized Auth Resolution**: isAuthenticated middleware now resolves canonical user IDs with email fallback, handling OIDC sub changes gracefully across all 100+ protected endpoints without breaking foreign key relationships
+  - **End-to-End Testing**: Complete Phase 2 workflow validated via Playwright - determination upload → hours entry → credit calculation → dashboard visualization
+  - **Database Schema Additions**: hours_worked, determination_letters tables with proper foreign keys, JSONB for metadata, comprehensive audit trails
+  - **Code Quality**: Enhanced error handling with user-friendly messages, detailed server logging for production debugging, proper query invalidation patterns
+
 - **October 23, 2024 - Phase 1 Complete & Production-Ready (Core Compliance & Submission)**:
   - **Employer Onboarding**: ETA Form 9198 intake with digital signature, automatic account creation, QR code generation, and unique questionnaire URLs
   - **Branding System**: Logo upload to object storage, custom colors, welcome messages, and employer-specific styling
