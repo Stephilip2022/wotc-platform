@@ -3808,6 +3808,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Encrypt existing plaintext credentials (one-time migration)
+  app.post("/api/admin/state-portals/encrypt-credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const { encryptCredentials, encryptChallengeQuestions } = await import("./utils/encryption");
+      
+      const configs = await db.select().from(statePortalConfigs);
+      
+      let encrypted = 0;
+      for (const config of configs) {
+        let needsUpdate = false;
+        const updates: any = {};
+        
+        // Check if credentials need encryption (plaintext detection)
+        if (config.credentials) {
+          const creds = config.credentials as any;
+          if (creds.password && !creds.password.includes(':')) {
+            updates.credentials = encryptCredentials(creds);
+            needsUpdate = true;
+          }
+        }
+        
+        // Check if challenge questions need encryption
+        if (config.challengeQuestions && Array.isArray(config.challengeQuestions)) {
+          const questions = config.challengeQuestions as any;
+          if (questions.length > 0 && questions[0].answer && !questions[0].answer.includes(':')) {
+            updates.challengeQuestions = encryptChallengeQuestions(questions);
+            needsUpdate = true;
+          }
+        }
+        
+        if (needsUpdate) {
+          await db
+            .update(statePortalConfigs)
+            .set({
+              ...updates,
+              updatedAt: new Date(),
+            })
+            .where(eq(statePortalConfigs.id, config.id));
+          encrypted++;
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Encrypted credentials for ${encrypted} state(s)`,
+        encrypted,
+      });
+    } catch (error) {
+      console.error("Error encrypting credentials:", error);
+      res.status(500).json({ error: "Failed to encrypt credentials" });
+    }
+  });
+
   // Get state submission jobs for employer
   app.get("/api/employer/submissions", isAuthenticated, async (req: any, res) => {
     try {
