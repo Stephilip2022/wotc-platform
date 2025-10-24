@@ -672,6 +672,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/employer/employees/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employeeId = req.params.id;
+
+      // Get employee data
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(and(eq(employees.id, employeeId), eq(employees.employerId, user.employerId)));
+
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      // Get screening data
+      const screeningData = await db
+        .select()
+        .from(screenings)
+        .where(eq(screenings.employeeId, employeeId))
+        .orderBy(desc(screenings.updatedAt));
+
+      // Get hours worked
+      const hoursData = await db
+        .select()
+        .from(hoursWorked)
+        .where(eq(hoursWorked.employeeId, employeeId))
+        .orderBy(desc(hoursWorked.periodEnd));
+
+      // Get credit calculations
+      const creditData = await db
+        .select()
+        .from(creditCalculations)
+        .where(eq(creditCalculations.employeeId, employeeId))
+        .orderBy(desc(creditCalculations.updatedAt));
+
+      // Get documents
+      const documentsData = await db
+        .select()
+        .from(documents)
+        .where(eq(documents.employeeId, employeeId))
+        .orderBy(desc(documents.createdAt));
+
+      res.json({
+        employee,
+        screenings: screeningData,
+        hours: hoursData,
+        credits: creditData,
+        documents: documentsData,
+      });
+    } catch (error) {
+      console.error("Error fetching employee details:", error);
+      res.status(500).json({ error: "Failed to fetch employee details" });
+    }
+  });
+
   app.get("/api/employer/screenings", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
