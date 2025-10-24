@@ -127,9 +127,11 @@ export default function CSVImportWizard({ open, onClose, onComplete }: CSVImport
     },
     onSuccess: () => {
       setStep(3);
+      // Auto-trigger preview generation
+      setTimeout(() => previewMutation.mutate(), 100);
       toast({
         title: "Mappings Saved",
-        description: "Column mappings configured successfully",
+        description: "Generating preview with employee matching...",
       });
     },
     onError: (error: any) => {
@@ -316,7 +318,7 @@ export default function CSVImportWizard({ open, onClose, onComplete }: CSVImport
                 </div>
 
                 {/* Saved templates */}
-                {templates && Array.isArray(templates) && templates.length > 0 && (
+                {templates && Array.isArray(templates) && templates.length > 0 ? (
                   <div className="space-y-2">
                     <Label>Or load a saved template</Label>
                     <div className="grid gap-2">
@@ -339,7 +341,7 @@ export default function CSVImportWizard({ open, onClose, onComplete }: CSVImport
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -466,41 +468,118 @@ export default function CSVImportWizard({ open, onClose, onComplete }: CSVImport
         {/* Step 3: Preview */}
         {step === 3 && session && (
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Preview & Import</CardTitle>
-                <CardDescription>
-                  Review your import configuration before processing
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">File</p>
-                    <p className="font-medium">{session.fileName}</p>
+            {previewMutation.isPending ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <div className="space-y-3">
+                    <Progress value={undefined} className="h-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Matching employees and validating data...
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Rows</p>
-                    <p className="font-medium">{session.rowCount}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Match Strategy</p>
-                    <p className="font-medium capitalize">{matchStrategy}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Mapped Fields</p>
-                    <p className="font-medium">{getMappedFieldsCount()} columns</p>
-                  </div>
-                </div>
+                </CardContent>
+              </Card>
+            ) : previewData ? (
+              <>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Import Preview</CardTitle>
+                    <CardDescription>
+                      {previewData.successCount} of {previewData.totalRows} rows ready to import
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-4 gap-4">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Rows</p>
+                        <p className="font-semibold text-lg">{previewData.totalRows}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Valid</p>
+                        <p className="font-semibold text-lg text-green-600">{previewData.successCount}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Errors</p>
+                        <p className="font-semibold text-lg text-red-600">{previewData.errorCount}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Strategy</p>
+                        <p className="font-semibold text-sm capitalize">{matchStrategy}</p>
+                      </div>
+                    </div>
 
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    The system will now match employees, validate data, and import {session.rowCount} rows. This may take a few moments.
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
+                    {previewData.errorCount > 0 && (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          {previewData.errorCount} row(s) have validation errors and will be skipped during import.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Preview table */}
+                    <div className="border rounded-md max-h-96 overflow-y-auto">
+                      <div className="divide-y">
+                        {previewData.rows?.slice(0, 10).map((row: any) => (
+                          <div key={row.id} className="p-3 hover-elevate">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex-1 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  {row.employeeData && (
+                                    <span className="font-medium text-sm">
+                                      {row.employeeData.firstName} {row.employeeData.lastName}
+                                    </span>
+                                  )}
+                                  {row.matchConfidence && (
+                                    <Badge 
+                                      variant={
+                                        row.matchConfidence === 'exact' ? 'default' :
+                                        row.matchConfidence === 'high' ? 'secondary' :
+                                        'outline'
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {row.matchConfidence} ({row.matchScore}%)
+                                    </Badge>
+                                  )}
+                                  <Badge variant="outline" className="text-xs">
+                                    {row.matchMethod}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  Row {row.rowNumber}: {row.mappedData?.hours}h • {row.mappedData?.periodStart} to {row.mappedData?.periodEnd}
+                                </p>
+                              </div>
+                              {row.validationStatus === 'valid' ? (
+                                <Check className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <Badge variant="destructive" className="text-xs">
+                                  {row.validationErrors?.[0] || 'Error'}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {previewData.rows?.length > 10 && (
+                      <p className="text-xs text-muted-foreground text-center">
+                        Showing first 10 of {previewData.rows.length} rows
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            ) : (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <p className="text-muted-foreground">
+                    Click "Generate Preview" to validate your data
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
         )}
 
@@ -542,20 +621,33 @@ export default function CSVImportWizard({ open, onClose, onComplete }: CSVImport
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
             )}
-            {step === 3 && (
-              <Button
-                onClick={() => {
-                  // TODO: Implement final import
-                  toast({
-                    title: "Import Started",
-                    description: "Processing your import...",
-                  });
-                }}
-                data-testid="button-start-import"
-              >
-                <Check className="h-4 w-4 mr-2" />
-                Start Import
-              </Button>
+            {step === 3 && !previewMutation.isPending && (
+              <>
+                {!previewData && (
+                  <Button
+                    onClick={() => previewMutation.mutate()}
+                    disabled={previewMutation.isPending}
+                    data-testid="button-generate-preview"
+                  >
+                    Generate Preview
+                  </Button>
+                )}
+                {previewData && previewData.successCount > 0 && (
+                  <Button
+                    onClick={() => {
+                      onComplete();
+                      toast({
+                        title: "Import Complete",
+                        description: `Successfully imported ${previewData.successCount} hours entries`,
+                      });
+                    }}
+                    data-testid="button-complete-import"
+                  >
+                    <Check className="h-4 w-4 mr-2" />
+                    Complete Import ({previewData.successCount} rows)
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </DialogFooter>
