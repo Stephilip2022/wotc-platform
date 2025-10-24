@@ -47,6 +47,7 @@ Preferred communication style: Simple, everyday language.
 - **Billing & Subscriptions**: Comprehensive billing schema, subscription plans, and Stripe integration for payments and invoicing.
 - **Analytics & Reporting**: Comprehensive dashboards for employers (KPIs, credit projections) and administrators (system-wide statistics, revenue tracking, MRR/ARR, churn rates).
 - **Email Notifications**: Resend integration for transactional emails (screening invites, status updates, invoices) with responsive, branded templates.
+- **State Automation (Phase 4 - In Progress)**: Database schema and API infrastructure for automated state portal submissions, determination letter OCR parsing, and payroll API integrations. Admin UI for managing 50+ state portal configurations.
 
 ## External Dependencies
 

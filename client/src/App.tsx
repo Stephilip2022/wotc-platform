@@ -27,6 +27,7 @@ import EtaForm9198Page from "@/pages/admin/eta-form-9198";
 import EmployerSettingsPage from "@/pages/admin/employer-settings";
 import WOTCExportPage from "@/pages/admin/wotc-export";
 import RevenuemanagementPage from "@/pages/admin/revenue";
+import StateAutomationPage from "@/pages/admin/state-automation";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -84,6 +85,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/screenings" component={AdminScreeningsPage} />
                   <Route path="/admin/questionnaires" component={AdminQuestionnairesPage} />
                   <Route path="/admin/export" component={WOTCExportPage} />
+                  <Route path="/admin/automation" component={StateAutomationPage} />
                   <Route component={NotFound} />
                 </>
               ) : (

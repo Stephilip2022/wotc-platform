@@ -39,6 +39,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Screenings", url: "/admin/screenings", icon: CheckSquare },
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
     { title: "CSV Export", url: "/admin/export", icon: Download },
+    { title: "State Automation", url: "/admin/automation", icon: Settings },
     { title: "Settings", url: "/admin/settings", icon: Settings },
   ];
 

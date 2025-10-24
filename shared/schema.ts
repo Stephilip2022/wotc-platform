@@ -984,7 +984,9 @@ export const statePortalConfigs = pgTable("state_portal_configs", {
 });
 
 export const insertStatePortalConfigSchema = createInsertSchema(statePortalConfigs).omit({ id: true, createdAt: true, updatedAt: true });
+export const updateStatePortalConfigSchema = insertStatePortalConfigSchema.partial();
 export type InsertStatePortalConfig = z.infer<typeof insertStatePortalConfigSchema>;
+export type UpdateStatePortalConfig = z.infer<typeof updateStatePortalConfigSchema>;
 export type StatePortalConfig = typeof statePortalConfigs.$inferSelect;
 
 // ============================================================================
@@ -1033,7 +1035,9 @@ export const stateSubmissionJobs = pgTable("state_submission_jobs", {
 });
 
 export const insertStateSubmissionJobSchema = createInsertSchema(stateSubmissionJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export const updateStateSubmissionJobSchema = insertStateSubmissionJobSchema.partial();
 export type InsertStateSubmissionJob = z.infer<typeof insertStateSubmissionJobSchema>;
+export type UpdateStateSubmissionJob = z.infer<typeof updateStateSubmissionJobSchema>;
 export type StateSubmissionJob = typeof stateSubmissionJobs.$inferSelect;
 
 // ============================================================================
@@ -1092,7 +1096,9 @@ export const determinationLetters = pgTable("determination_letters", {
 });
 
 export const insertDeterminationLetterSchema = createInsertSchema(determinationLetters).omit({ id: true, createdAt: true, updatedAt: true });
+export const updateDeterminationLetterSchema = insertDeterminationLetterSchema.partial();
 export type InsertDeterminationLetter = z.infer<typeof insertDeterminationLetterSchema>;
+export type UpdateDeterminationLetter = z.infer<typeof updateDeterminationLetterSchema>;
 export type DeterminationLetter = typeof determinationLetters.$inferSelect;
 
 // ============================================================================
@@ -1151,7 +1157,9 @@ export const payrollConnections = pgTable("payroll_connections", {
 });
 
 export const insertPayrollConnectionSchema = createInsertSchema(payrollConnections).omit({ id: true, createdAt: true, updatedAt: true });
+export const updatePayrollConnectionSchema = insertPayrollConnectionSchema.partial();
 export type InsertPayrollConnection = z.infer<typeof insertPayrollConnectionSchema>;
+export type UpdatePayrollConnection = z.infer<typeof updatePayrollConnectionSchema>;
 export type PayrollConnection = typeof payrollConnections.$inferSelect;
 
 // ============================================================================
@@ -1209,5 +1217,7 @@ export const payrollSyncJobs = pgTable("payroll_sync_jobs", {
 });
 
 export const insertPayrollSyncJobSchema = createInsertSchema(payrollSyncJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export const updatePayrollSyncJobSchema = insertPayrollSyncJobSchema.partial();
 export type InsertPayrollSyncJob = z.infer<typeof insertPayrollSyncJobSchema>;
+export type UpdatePayrollSyncJob = z.infer<typeof updatePayrollSyncJobSchema>;
 export type PayrollSyncJob = typeof payrollSyncJobs.$inferSelect;

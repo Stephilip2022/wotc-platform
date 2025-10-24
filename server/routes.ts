@@ -3635,6 +3635,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // PHASE 4: STATE AUTOMATION & INTELLIGENCE API ROUTES
+  // ============================================================================
+
+  // Get all state portal configurations
+  app.get("/api/admin/state-portals", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const configs = await db.select().from(statePortalConfigs).orderBy(statePortalConfigs.stateName);
+      
+      res.json(configs);
+    } catch (error) {
+      console.error("Error fetching state portals:", error);
+      res.status(500).json({ error: "Failed to fetch state portals" });
+    }
+  });
+
+  // Get single state portal configuration
+  app.get("/api/admin/state-portals/:stateCode", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const [config] = await db
+        .select()
+        .from(statePortalConfigs)
+        .where(eq(statePortalConfigs.stateCode, req.params.stateCode));
+      
+      if (!config) {
+        return res.status(404).json({ error: "State portal not found" });
+      }
+
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching state portal:", error);
+      res.status(500).json({ error: "Failed to fetch state portal" });
+    }
+  });
+
+  // Update state portal configuration
+  app.patch("/api/admin/state-portals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalConfigs, updateStatePortalConfigSchema } = await import("@shared/schema");
+      
+      // Validate input
+      const validated = updateStatePortalConfigSchema.safeParse(req.body);
+      if (!validated.success) {
+        return res.status(400).json({ 
+          error: "Invalid input", 
+          details: validated.error.issues 
+        });
+      }
+
+      const [updated] = await db
+        .update(statePortalConfigs)
+        .set({
+          ...validated.data,
+          updatedAt: new Date(),
+        })
+        .where(eq(statePortalConfigs.id, req.params.id))
+        .returning();
+
+      if (!updated) {
+        return res.status(404).json({ error: "State portal not found" });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating state portal:", error);
+      res.status(500).json({ error: "Failed to update state portal" });
+    }
+  });
+
+  // Initialize state portal seeds
+  app.post("/api/admin/state-portals/seed", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { statePortalSeeds } = await import('./utils/statePortalSeeds');
+      const { statePortalConfigs } = await import("@shared/schema");
+
+      // Insert or update portal configs
+      const results = [];
+      for (const seed of statePortalSeeds) {
+        const [existing] = await db
+          .select()
+          .from(statePortalConfigs)
+          .where(eq(statePortalConfigs.stateCode, seed.stateCode));
+
+        if (existing) {
+          // Update existing
+          const [updated] = await db
+            .update(statePortalConfigs)
+            .set({
+              ...seed,
+              updatedAt: new Date(),
+            })
+            .where(eq(statePortalConfigs.stateCode, seed.stateCode))
+            .returning();
+          results.push({ action: 'updated', config: updated });
+        } else {
+          // Insert new
+          const [created] = await db
+            .insert(statePortalConfigs)
+            .values(seed)
+            .returning();
+          results.push({ action: 'created', config: created });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Seeded ${results.length} state portal configurations`,
+        results,
+      });
+    } catch (error) {
+      console.error("Error seeding state portals:", error);
+      res.status(500).json({ error: "Failed to seed state portals" });
+    }
+  });
+
+  // Get state submission jobs for employer
+  app.get("/api/employer/submissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'employer' || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { stateSubmissionJobs } = await import("@shared/schema");
+      const jobs = await db
+        .select()
+        .from(stateSubmissionJobs)
+        .where(eq(stateSubmissionJobs.employerId, user.employerId))
+        .orderBy(desc(stateSubmissionJobs.createdAt))
+        .limit(100);
+
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching submissions:", error);
+      res.status(500).json({ error: "Failed to fetch submissions" });
+    }
+  });
+
+  // Get all submission jobs (admin)
+  app.get("/api/admin/submissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateSubmissionJobs } = await import("@shared/schema");
+      const jobs = await db
+        .select()
+        .from(stateSubmissionJobs)
+        .orderBy(desc(stateSubmissionJobs.createdAt))
+        .limit(500);
+
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching submissions:", error);
+      res.status(500).json({ error: "Failed to fetch submissions" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
