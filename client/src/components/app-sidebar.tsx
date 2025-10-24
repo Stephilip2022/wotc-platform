@@ -21,6 +21,7 @@ import {
   FolderOpen,
   Download,
   CheckSquare,
+  Clock,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -46,6 +47,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Dashboard", url: "/employer", icon: LayoutDashboard },
     { title: "Employees", url: "/employer/employees", icon: Users },
     { title: "Screenings", url: "/employer/screenings", icon: ClipboardCheck },
+    { title: "Hours", url: "/employer/hours", icon: Clock },
     { title: "Documents", url: "/employer/documents", icon: FolderOpen },
     { title: "Credits", url: "/employer/credits", icon: DollarSign },
     { title: "Settings", url: "/employer/settings", icon: Settings },

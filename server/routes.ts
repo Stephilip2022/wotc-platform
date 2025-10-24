@@ -32,7 +32,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-// Configure multer for file uploads
+// Configure multer for file uploads (documents)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -48,6 +48,25 @@ const upload = multer({
       return cb(null, true);
     }
     cb(new Error("Invalid file type. Only JPEG, PNG, PDF, DOC, and DOCX files are allowed."));
+  },
+});
+
+// Configure multer for CSV uploads
+const csvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit for CSV
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only CSV files
+    const allowedTypes = /csv/;
+    const mimeType = file.mimetype === "text/csv" || file.mimetype === "application/vnd.ms-excel" || file.mimetype === "text/plain";
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    
+    if (mimeType && extname) {
+      return cb(null, true);
+    }
+    cb(new Error("Invalid file type. Only CSV files are allowed."));
   },
 });
 
@@ -1565,6 +1584,234 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching screening history:", error);
       res.status(500).json({ error: "Failed to fetch screening history" });
+    }
+  });
+
+  // ============================================================================
+  // HOURS TRACKING ROUTES (Employer)
+  // ============================================================================
+
+  // Get all hours for employer's employees
+  app.get("/api/employer/hours", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerId = user.employerId;
+      const { employeeId, startDate, endDate } = req.query;
+
+      let query = db
+        .select({
+          hours: hoursWorked,
+          employee: employees,
+        })
+        .from(hoursWorked)
+        .leftJoin(employees, eq(hoursWorked.employeeId, employees.id))
+        .where(eq(hoursWorked.employerId, employerId))
+        .orderBy(desc(hoursWorked.enteredAt));
+
+      const results = await query;
+      res.json(results);
+    } catch (error) {
+      console.error("Error fetching hours:", error);
+      res.status(500).json({ error: "Failed to fetch hours" });
+    }
+  });
+
+  // Add hours manually
+  app.post("/api/employer/hours", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const employerId = user.employerId;
+      const { employeeId, hours, periodStart, periodEnd, notes } = req.body;
+
+      // Verify employee belongs to this employer
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(and(eq(employees.id, employeeId), eq(employees.employerId, employerId)));
+
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      const [newHours] = await db.insert(hoursWorked).values({
+        employeeId,
+        employerId,
+        hours,
+        periodStart,
+        periodEnd,
+        source: "manual",
+        notes,
+        enteredBy: userId,
+      }).returning();
+
+      res.json(newHours);
+    } catch (error) {
+      console.error("Error adding hours:", error);
+      res.status(500).json({ error: "Failed to add hours" });
+    }
+  });
+
+  // Bulk CSV import
+  app.post("/api/employer/hours/bulk", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const employerId = user.employerId;
+      const csvContent = req.file.buffer.toString("utf-8");
+      const lines = csvContent.split("\n").filter(line => line.trim());
+      
+      if (lines.length < 2) {
+        return res.status(400).json({ error: "CSV file is empty or has no data rows" });
+      }
+
+      // Parse CSV (expect: employeeId, hours, periodStart, periodEnd, notes)
+      const header = lines[0].split(",").map(h => h.trim());
+      const batchId = `batch-${Date.now()}`;
+      const hoursEntries = [];
+      const errors = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(",").map(v => v.trim());
+        const row: any = {};
+        header.forEach((h, idx) => {
+          row[h] = values[idx];
+        });
+
+        // Verify employee exists and belongs to employer
+        const [employee] = await db
+          .select()
+          .from(employees)
+          .where(and(
+            eq(employees.id, row.employeeId || row.employee_id),
+            eq(employees.employerId, employerId)
+          ));
+
+        if (!employee) {
+          errors.push({ line: i + 1, error: `Employee ${row.employeeId || row.employee_id} not found` });
+          continue;
+        }
+
+        hoursEntries.push({
+          employeeId: employee.id,
+          employerId,
+          hours: row.hours,
+          periodStart: row.periodStart || row.period_start,
+          periodEnd: row.periodEnd || row.period_end,
+          notes: row.notes || "",
+          source: "csv_import",
+          batchId,
+          enteredBy: userId,
+        });
+      }
+
+      // Insert all hours
+      if (hoursEntries.length > 0) {
+        await db.insert(hoursWorked).values(hoursEntries);
+      }
+
+      res.json({
+        success: true,
+        imported: hoursEntries.length,
+        errors,
+        batchId,
+      });
+    } catch (error) {
+      console.error("Error importing hours:", error);
+      res.status(500).json({ error: "Failed to import hours" });
+    }
+  });
+
+  // Update hours entry
+  app.patch("/api/employer/hours/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const hoursId = req.params.id;
+      const { hours, periodStart, periodEnd, notes } = req.body;
+
+      // Verify hours entry belongs to this employer
+      const [existingHours] = await db
+        .select()
+        .from(hoursWorked)
+        .where(and(eq(hoursWorked.id, hoursId), eq(hoursWorked.employerId, user.employerId)));
+
+      if (!existingHours) {
+        return res.status(404).json({ error: "Hours entry not found" });
+      }
+
+      const [updated] = await db
+        .update(hoursWorked)
+        .set({
+          hours,
+          periodStart,
+          periodEnd,
+          notes,
+          updatedAt: new Date(),
+        })
+        .where(eq(hoursWorked.id, hoursId))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating hours:", error);
+      res.status(500).json({ error: "Failed to update hours" });
+    }
+  });
+
+  // Delete hours entry
+  app.delete("/api/employer/hours/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const hoursId = req.params.id;
+
+      // Verify hours entry belongs to this employer
+      const [existingHours] = await db
+        .select()
+        .from(hoursWorked)
+        .where(and(eq(hoursWorked.id, hoursId), eq(hoursWorked.employerId, user.employerId)));
+
+      if (!existingHours) {
+        return res.status(404).json({ error: "Hours entry not found" });
+      }
+
+      await db.delete(hoursWorked).where(eq(hoursWorked.id, hoursId));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting hours:", error);
+      res.status(500).json({ error: "Failed to delete hours" });
     }
   });
 
