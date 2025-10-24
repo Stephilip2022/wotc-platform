@@ -293,6 +293,19 @@ export default function LandingPage() {
           <p className="mt-2">
             Work Opportunity Tax Credit screening and certification platform
           </p>
+          <div className="mt-4 pt-4 border-t border-border/50">
+            <p className="text-xs">
+              <span className="font-medium text-foreground">Testing Only:</span>{" "}
+              <a 
+                href="/employee/questionnaire" 
+                className="underline hover:text-foreground transition-colors"
+                data-testid="link-test-questionnaire"
+              >
+                Preview Employee Questionnaire
+              </a>
+              {" "}(Remove before production)
+            </p>
+          </div>
         </div>
       </footer>
     </div>
