@@ -3638,6 +3638,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // PHASE 4: STATE AUTOMATION & INTELLIGENCE API ROUTES
   // ============================================================================
+  
+  // Test MFA functionality (Development only)
+  app.post('/api/admin/test-mfa', async (req, res) => {
+    try {
+      const { generateTOTPToken, validateTOTPToken, generateTOTPSecret, generateBackupCodes } = await import("./utils/mfaHandler");
+      
+      const secret = generateTOTPSecret();
+      const token = generateTOTPToken(secret);
+      const isValid = validateTOTPToken(token, secret);
+      const backupCodes = generateBackupCodes(10);
+      
+      res.json({
+        success: true,
+        secret: secret.substring(0, 16) + '...',
+        token,
+        isValid,
+        backupCodesCount: backupCodes.length,
+        sampleBackupCodes: backupCodes.slice(0, 3),
+      });
+    } catch (error) {
+      console.error("MFA test failed:", error);
+      res.status(500).json({ error: "MFA test failed" });
+    }
+  });
 
   // Get all state portal configurations (with decryption for admin UI)
   app.get("/api/admin/state-portals", isAuthenticated, async (req: any, res) => {
