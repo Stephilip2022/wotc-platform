@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { registerDemoPortalRoutes } from "./routes-demo-portal";
 import { setupVite, serveStatic, log } from "./vite";
+import { startOrchestrator } from "./utils/submissionOrchestrator";
 
 const app = express();
 
@@ -81,5 +82,14 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Start the automated submission orchestrator
+    // This polls for pending submission jobs and processes them automatically
+    startOrchestrator({
+      maxConcurrent: 5, // Process up to 5 submissions at once
+      pollInterval: 60000, // Check for new jobs every minute
+      retryDelayBase: 5000, // 5 second base delay for retries
+      maxRetries: 3, // Retry failed submissions up to 3 times
+    });
   });
 })();

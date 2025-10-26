@@ -265,8 +265,8 @@ export class StatePortalBot {
       screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
 
       // Submit with explicit wait
-      const submitButton = await this.page.waitForSelector('button:has-text("SUBMIT"), button:has-text("Submit")');
-      await submitButton?.click();
+      const finalSubmitButton = await this.page.waitForSelector('button:has-text("SUBMIT"), button:has-text("Submit")');
+      await finalSubmitButton?.click();
       
       // Wait for confirmation page
       await this.page.waitForLoadState('networkidle', { timeout: 30000 });
