@@ -4379,6 +4379,388 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // PHASE 5: AI PREDICTION & QUESTIONNAIRE OPTIMIZATION ROUTES
+  // ============================================================================
+
+  // Simplify a questionnaire question in real-time
+  app.post("/api/questionnaire/simplify-question", isAuthenticated, async (req: any, res) => {
+    try {
+      const { question, targetLanguage, readabilityTarget, context } = req.body;
+      
+      if (!question) {
+        return res.status(400).json({ error: "question is required" });
+      }
+
+      const { simplifyQuestion } = await import("./utils/questionnaireOptimization");
+      const result = await simplifyQuestion({
+        question,
+        targetLanguage,
+        readabilityTarget,
+        context,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error("Error simplifying question:", error);
+      res.status(500).json({ error: "Failed to simplify question" });
+    }
+  });
+
+  // Translate question to Spanish
+  app.post("/api/questionnaire/translate-spanish", isAuthenticated, async (req: any, res) => {
+    try {
+      const { question, context } = req.body;
+      
+      if (!question) {
+        return res.status(400).json({ error: "question is required" });
+      }
+
+      const { translateToSpanish } = await import("./utils/questionnaireOptimization");
+      const translation = await translateToSpanish(question, context);
+
+      res.json({ translation });
+    } catch (error) {
+      console.error("Error translating question:", error);
+      res.status(500).json({ error: "Failed to translate question" });
+    }
+  });
+
+  // Batch simplify multiple questions
+  app.post("/api/questionnaire/batch-simplify", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { questions } = req.body;
+      
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return res.status(400).json({ error: "questions array is required" });
+      }
+
+      // Validate that each item is a proper SimplificationRequest object
+      const invalidQuestions = questions.filter(
+        (q: any) => typeof q !== 'object' || !q.question || typeof q.question !== 'string'
+      );
+      
+      if (invalidQuestions.length > 0) {
+        return res.status(400).json({
+          error: "Each question must be an object with a 'question' string field",
+        });
+      }
+
+      const { batchSimplifyQuestions } = await import("./utils/questionnaireOptimization");
+      const results = await batchSimplifyQuestions(questions);
+
+      res.json({ results });
+    } catch (error) {
+      console.error("Error batch simplifying questions:", error);
+      res.status(500).json({ error: "Failed to batch simplify questions" });
+    }
+  });
+
+  // Analyze questionnaire readability
+  app.post("/api/questionnaire/analyze-readability", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { questions, targetGrade } = req.body;
+      
+      if (!Array.isArray(questions) || questions.length === 0) {
+        return res.status(400).json({ error: "questions array is required" });
+      }
+
+      const { analyzeQuestionnaireReadability } = await import("./utils/questionnaireOptimization");
+      const analysis = analyzeQuestionnaireReadability(questions, targetGrade);
+
+      res.json(analysis);
+    } catch (error) {
+      console.error("Error analyzing readability:", error);
+      res.status(500).json({ error: "Failed to analyze readability" });
+    }
+  });
+
+  // Track question simplification (store in database)
+  app.post("/api/questionnaire/track-simplification", isAuthenticated, async (req: any, res) => {
+    try {
+      const {
+        employeeId,
+        questionnaireResponseId,
+        questionId,
+        originalQuestion,
+        simplifiedQuestion,
+        targetLanguage,
+        readabilityScoreOriginal,
+        readabilityScoreSimplified,
+        simplificationReason,
+        employeeRequested,
+      } = req.body;
+
+      if (!questionId || !originalQuestion || !simplifiedQuestion) {
+        return res.status(400).json({
+          error: "questionId, originalQuestion, and simplifiedQuestion are required",
+        });
+      }
+
+      const { aiQuestionnaireSimplifications } = await import("@shared/schema");
+      const [tracked] = await db
+        .insert(aiQuestionnaireSimplifications)
+        .values({
+          employeeId: employeeId || null,
+          questionnaireResponseId: questionnaireResponseId || null,
+          questionId,
+          originalQuestion,
+          simplifiedQuestion,
+          targetLanguage: targetLanguage || "en",
+          readabilityScoreOriginal: readabilityScoreOriginal || null,
+          readabilityScoreSimplified: readabilityScoreSimplified || null,
+          simplificationReason: simplificationReason || "user_requested",
+          employeeRequested: employeeRequested || false,
+        })
+        .returning();
+
+      res.json(tracked);
+    } catch (error) {
+      console.error("Error tracking simplification:", error);
+      res.status(500).json({ error: "Failed to track simplification" });
+    }
+  });
+
+  // Get simplification statistics
+  app.get("/api/admin/questionnaire/simplification-stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { aiQuestionnaireSimplifications } = await import("@shared/schema");
+      
+      const stats = await db
+        .select({
+          totalSimplifications: sql<number>`COUNT(*)`,
+          employeeRequested: sql<number>`COUNT(CASE WHEN ${aiQuestionnaireSimplifications.employeeRequested} = true THEN 1 END)`,
+          averageReadabilityImprovement: sql<number>`AVG(
+            ${aiQuestionnaireSimplifications.readabilityScoreOriginal} - 
+            ${aiQuestionnaireSimplifications.readabilityScoreSimplified}
+          )`,
+          spanishTranslations: sql<number>`COUNT(CASE WHEN ${aiQuestionnaireSimplifications.targetLanguage} = 'es' THEN 1 END)`,
+        })
+        .from(aiQuestionnaireSimplifications);
+
+      res.json(stats[0] || {});
+    } catch (error) {
+      console.error("Error fetching simplification stats:", error);
+      res.status(500).json({ error: "Failed to fetch simplification statistics" });
+    }
+  });
+
+  // Generate AI eligibility prediction for an employee
+  app.post("/api/admin/ai/predict-eligibility", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employeeId, questionnaireResponseId } = req.body;
+      
+      if (!employeeId) {
+        return res.status(400).json({ error: "employeeId is required" });
+      }
+
+      // Fetch employee data
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.id, employeeId));
+      
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      // Fetch questionnaire response if provided
+      let questionnaireResponse;
+      if (questionnaireResponseId) {
+        [questionnaireResponse] = await db
+          .select()
+          .from(questionnaireResponses)
+          .where(eq(questionnaireResponses.id, questionnaireResponseId));
+      }
+
+      // Generate prediction using AI
+      const { predictWotcEligibility } = await import("./utils/aiPrediction");
+      const prediction = await predictWotcEligibility({
+        employee,
+        questionnaireResponse,
+      });
+
+      // Store prediction in database
+      const { aiEligibilityPredictions } = await import("@shared/schema");
+      const [storedPrediction] = await db
+        .insert(aiEligibilityPredictions)
+        .values({
+          employeeId: employee.id,
+          employerId: employee.employerId,
+          screeningId: null, // Can be linked later
+          eligibilityScore: prediction.eligibilityScore,
+          confidence: prediction.confidence,
+          predictedTargetGroups: prediction.predictedTargetGroups,
+          primaryPredictedGroup: prediction.primaryPredictedGroup,
+          reasons: prediction.reasons,
+          factorsAnalyzed: prediction.factorsAnalyzed,
+          modelVersion: prediction.modelVersion,
+          promptTokens: prediction.promptTokens,
+          completionTokens: prediction.completionTokens,
+          predictionLatencyMs: prediction.predictionLatencyMs,
+        })
+        .returning();
+
+      res.json({
+        prediction: storedPrediction,
+        ...prediction,
+      });
+    } catch (error) {
+      console.error("Error generating AI prediction:", error);
+      res.status(500).json({ error: "Failed to generate AI prediction" });
+    }
+  });
+
+  // Get AI predictions for an employee
+  app.get("/api/admin/ai/predictions/:employeeId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employeeId } = req.params;
+      const { aiEligibilityPredictions } = await import("@shared/schema");
+      
+      const predictions = await db
+        .select()
+        .from(aiEligibilityPredictions)
+        .where(eq(aiEligibilityPredictions.employeeId, employeeId))
+        .orderBy(desc(aiEligibilityPredictions.createdAt));
+
+      res.json(predictions);
+    } catch (error) {
+      console.error("Error fetching AI predictions:", error);
+      res.status(500).json({ error: "Failed to fetch AI predictions" });
+    }
+  });
+
+  // Validate prediction accuracy (compare AI prediction vs actual result)
+  app.post("/api/admin/ai/validate-prediction/:predictionId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { predictionId } = req.params;
+      const { actualResult, actualTargetGroup } = req.body;
+      
+      if (!actualResult) {
+        return res.status(400).json({ error: "actualResult is required" });
+      }
+
+      const { aiEligibilityPredictions } = await import("@shared/schema");
+      
+      // Fetch the prediction
+      const [prediction] = await db
+        .select()
+        .from(aiEligibilityPredictions)
+        .where(eq(aiEligibilityPredictions.id, predictionId));
+      
+      if (!prediction) {
+        return res.status(404).json({ error: "Prediction not found" });
+      }
+
+      // Determine if prediction was accurate
+      const predictionAccurate = 
+        (actualResult === 'certified' && prediction.eligibilityScore >= 70) ||
+        (actualResult === 'not_eligible' && prediction.eligibilityScore < 30) ||
+        (actualTargetGroup === prediction.primaryPredictedGroup);
+
+      // Update prediction with actual results
+      const [updated] = await db
+        .update(aiEligibilityPredictions)
+        .set({
+          actualResult,
+          actualTargetGroup,
+          predictionAccurate,
+          validatedAt: new Date(),
+        })
+        .where(eq(aiEligibilityPredictions.id, predictionId))
+        .returning();
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error validating prediction:", error);
+      res.status(500).json({ error: "Failed to validate prediction" });
+    }
+  });
+
+  // Get AI prediction accuracy statistics
+  app.get("/api/admin/ai/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { aiEligibilityPredictions } = await import("@shared/schema");
+      
+      // Get prediction statistics
+      const stats = await db
+        .select({
+          totalPredictions: sql<number>`COUNT(*)`,
+          validatedPredictions: sql<number>`COUNT(CASE WHEN ${aiEligibilityPredictions.validatedAt} IS NOT NULL THEN 1 END)`,
+          accuratePredictions: sql<number>`COUNT(CASE WHEN ${aiEligibilityPredictions.predictionAccurate} = true THEN 1 END)`,
+          averageEligibilityScore: sql<number>`AVG(${aiEligibilityPredictions.eligibilityScore})`,
+          averageLatencyMs: sql<number>`AVG(${aiEligibilityPredictions.predictionLatencyMs})`,
+          totalPromptTokens: sql<number>`SUM(${aiEligibilityPredictions.promptTokens})`,
+          totalCompletionTokens: sql<number>`SUM(${aiEligibilityPredictions.completionTokens})`,
+        })
+        .from(aiEligibilityPredictions);
+
+      const [statistics] = stats;
+
+      // Calculate accuracy rate
+      const accuracyRate = statistics.validatedPredictions > 0
+        ? (statistics.accuratePredictions / statistics.validatedPredictions) * 100
+        : 0;
+
+      res.json({
+        ...statistics,
+        accuracyRate: Math.round(accuracyRate * 100) / 100,
+      });
+    } catch (error) {
+      console.error("Error fetching AI stats:", error);
+      res.status(500).json({ error: "Failed to fetch AI statistics" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

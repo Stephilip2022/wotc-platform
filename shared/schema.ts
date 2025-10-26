@@ -1294,3 +1294,459 @@ export const updatePayrollSyncJobSchema = insertPayrollSyncJobSchema.partial();
 export type InsertPayrollSyncJob = z.infer<typeof insertPayrollSyncJobSchema>;
 export type UpdatePayrollSyncJob = z.infer<typeof updatePayrollSyncJobSchema>;
 export type PayrollSyncJob = typeof payrollSyncJobs.$inferSelect;
+
+// ============================================================================
+// PHASE 5: AI-POWERED INTELLIGENCE & PREDICTION
+// ============================================================================
+
+// AI Eligibility Predictions - Track all AI-generated eligibility predictions
+export const aiEligibilityPredictions = pgTable("ai_eligibility_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+  screeningId: varchar("screening_id").references(() => screenings.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // AI Prediction Score (0-100%)
+  eligibilityScore: integer("eligibility_score").notNull(), // 0-100
+  confidence: text("confidence").notNull(), // 'low', 'medium', 'high'
+  
+  // Predicted target groups (ranked by likelihood)
+  predictedTargetGroups: jsonb("predicted_target_groups").notNull(), // [{ group: "V-Disability", probability: 0.85 }]
+  primaryPredictedGroup: text("primary_predicted_group"),
+  
+  // AI Reasoning
+  reasons: jsonb("reasons").notNull(), // Array of reason objects explaining the prediction
+  factorsAnalyzed: jsonb("factors_analyzed"), // What data points were analyzed
+  
+  // Model information
+  modelVersion: text("model_version").default("gpt-4o"),
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
+  
+  // Input data snapshot (for model training)
+  inputDataSnapshot: jsonb("input_data_snapshot"),
+  
+  // Validation (compare AI prediction vs actual result)
+  actualResult: text("actual_result"), // 'certified', 'denied', 'not_eligible'
+  actualTargetGroup: text("actual_target_group"),
+  predictionAccurate: boolean("prediction_accurate"),
+  
+  // Timing
+  predictionLatencyMs: integer("prediction_latency_ms"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  validatedAt: timestamp("validated_at"),
+});
+
+export const insertAiEligibilityPredictionSchema = createInsertSchema(aiEligibilityPredictions).omit({ id: true, createdAt: true });
+export type InsertAiEligibilityPrediction = z.infer<typeof insertAiEligibilityPredictionSchema>;
+export type AiEligibilityPrediction = typeof aiEligibilityPredictions.$inferSelect;
+
+// Credit Forecasts - Predictive analytics for future credit earnings
+export const creditForecasts = pgTable("credit_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Forecast period
+  forecastPeriod: text("forecast_period").notNull(), // 'current_month', 'next_month', 'quarter', 'year'
+  periodStart: text("period_start").notNull(), // YYYY-MM-DD
+  periodEnd: text("period_end").notNull(), // YYYY-MM-DD
+  
+  // Hiring pipeline data
+  pipelineSize: integer("pipeline_size"), // Number of candidates in hiring pipeline
+  expectedHires: integer("expected_hires"), // Expected hires this period
+  
+  // Historical conversion rates
+  historicalEligibilityRate: decimal("historical_eligibility_rate", { precision: 5, scale: 2 }), // % of hires that are WOTC eligible
+  historicalCertificationRate: decimal("historical_certification_rate", { precision: 5, scale: 2 }), // % of eligibles that get certified
+  historicalAverageCreditPerHire: decimal("historical_average_credit_per_hire", { precision: 10, scale: 2 }),
+  
+  // Predictions
+  predictedEligibleHires: integer("predicted_eligible_hires"),
+  predictedCertifications: integer("predicted_certifications"),
+  predictedTotalCredits: decimal("predicted_total_credits", { precision: 10, scale: 2 }),
+  
+  // Target group breakdown
+  targetGroupBreakdown: jsonb("target_group_breakdown"), // [{ group: "V-Disability", count: 5, credits: 48000 }]
+  
+  // Confidence intervals
+  lowEstimate: decimal("low_estimate", { precision: 10, scale: 2 }),
+  highEstimate: decimal("high_estimate", { precision: 10, scale: 2 }),
+  confidenceLevel: integer("confidence_level").default(95), // 95% confidence interval
+  
+  // Model metadata
+  modelVersion: text("model_version"),
+  assumptions: jsonb("assumptions"), // What assumptions went into the forecast
+  
+  // Actual results (for validation)
+  actualHires: integer("actual_hires"),
+  actualEligible: integer("actual_eligible"),
+  actualCertified: integer("actual_certified"),
+  actualCredits: decimal("actual_credits", { precision: 10, scale: 2 }),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCreditForecastSchema = createInsertSchema(creditForecasts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertCreditForecast = z.infer<typeof insertCreditForecastSchema>;
+export type CreditForecast = typeof creditForecasts.$inferSelect;
+
+// AI Questionnaire Simplifications - Track real-time question rewording
+export const aiQuestionnaireSimplifications = pgTable("ai_questionnaire_simplifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "cascade" }),
+  questionnaireResponseId: varchar("questionnaire_response_id").references(() => questionnaireResponses.id, { onDelete: "cascade" }),
+  
+  // Question details
+  questionId: text("question_id").notNull(),
+  originalQuestion: text("original_question").notNull(),
+  simplifiedQuestion: text("simplified_question").notNull(),
+  targetLanguage: text("target_language").default("en"), // 'en', 'es', etc.
+  
+  // Simplification metadata
+  readabilityScoreOriginal: integer("readability_score_original"), // Flesch-Kincaid grade level
+  readabilityScoreSimplified: integer("readability_score_simplified"),
+  simplificationReason: text("simplification_reason"), // 'comprehension', 'language_barrier', 'request'
+  
+  // Employee interaction
+  employeeRequested: boolean("employee_requested").default(false), // Did employee ask for simplification?
+  employeePreferred: text("employee_preferred"), // 'original', 'simplified'
+  timeToAnswer: integer("time_to_answer"), // Seconds spent on question
+  
+  // Model info
+  modelVersion: text("model_version").default("gpt-4o-mini"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertAiQuestionnaireSimplificationSchema = createInsertSchema(aiQuestionnaireSimplifications).omit({ id: true, createdAt: true });
+export type InsertAiQuestionnaireSimplification = z.infer<typeof insertAiQuestionnaireSimplificationSchema>;
+export type AiQuestionnaireSimplification = typeof aiQuestionnaireSimplifications.$inferSelect;
+
+// ============================================================================
+// PHASE 6: ENTERPRISE INTEGRATIONS (ATS/HCM)
+// ============================================================================
+
+// Integration Providers - Catalog of supported integrations
+export const integrationProviders = pgTable("integration_providers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Provider identification
+  providerKey: text("provider_key").notNull().unique(), // 'greenhouse', 'bamboohr', 'workday', 'adp_workforce', etc.
+  providerName: text("provider_name").notNull(), // "Greenhouse"
+  category: text("category").notNull(), // 'ats', 'hcm', 'payroll', 'accounting'
+  
+  // Provider details
+  logoUrl: text("logo_url"),
+  websiteUrl: text("website_url"),
+  description: text("description"),
+  documentation: text("documentation"), // URL to integration docs
+  
+  // Integration capabilities
+  supportsOAuth: boolean("supports_oauth").default(true),
+  supportsWebhooks: boolean("supports_webhooks").default(false),
+  supportsRealTimeSync: boolean("supports_real_time_sync").default(false),
+  supportsBidirectionalSync: boolean("supports_bidirectional_sync").default(false),
+  
+  // OAuth configuration
+  oauthAuthUrl: text("oauth_auth_url"),
+  oauthTokenUrl: text("oauth_token_url"),
+  oauthScopes: text("oauth_scopes").array(),
+  
+  // API details
+  apiBaseUrl: text("api_base_url"),
+  apiVersion: text("api_version"),
+  apiDocumentationUrl: text("api_documentation_url"),
+  
+  // Rate limiting
+  rateLimitPerHour: integer("rate_limit_per_hour"),
+  rateLimitPerDay: integer("rate_limit_per_day"),
+  
+  // Data sync capabilities
+  canSyncApplicants: boolean("can_sync_applicants").default(false),
+  canSyncEmployees: boolean("can_sync_employees").default(false),
+  canSyncApplications: boolean("can_sync_applications").default(false),
+  canPushWotcStatus: boolean("can_push_wotc_status").default(false),
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  isBeta: boolean("is_beta").default(false),
+  
+  // Metadata
+  config: jsonb("config"), // Provider-specific configuration
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertIntegrationProviderSchema = createInsertSchema(integrationProviders).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertIntegrationProvider = z.infer<typeof insertIntegrationProviderSchema>;
+export type IntegrationProvider = typeof integrationProviders.$inferSelect;
+
+// Integration Connections - Employer-specific connections to external systems
+export const integrationConnections = pgTable("integration_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  providerId: varchar("provider_id").notNull().references(() => integrationProviders.id),
+  
+  // Connection name
+  name: text("name").notNull(), // "Production Greenhouse"
+  
+  // Authentication
+  authType: text("auth_type").notNull(), // 'oauth', 'api_key', 'basic_auth'
+  accessToken: text("access_token"), // Encrypted OAuth token
+  refreshToken: text("refresh_token"), // Encrypted
+  tokenExpiresAt: timestamp("token_expires_at"),
+  apiKey: text("api_key"), // Encrypted API key
+  apiSecret: text("api_secret"), // Encrypted
+  
+  // OAuth metadata
+  oauthState: text("oauth_state"), // CSRF state for OAuth flow
+  oauthCode: text("oauth_code"),
+  
+  // External system identification
+  externalAccountId: text("external_account_id"), // Employer's ID in the external system
+  externalAccountName: text("external_account_name"),
+  
+  // Sync configuration
+  syncEnabled: boolean("sync_enabled").default(true),
+  syncDirection: text("sync_direction").default("bidirectional"), // 'inbound', 'outbound', 'bidirectional'
+  syncFrequency: text("sync_frequency").default("hourly"), // 'realtime', 'hourly', 'daily', 'weekly', 'manual'
+  
+  // Sync scope
+  syncApplicants: boolean("sync_applicants").default(true),
+  syncEmployees: boolean("sync_employees").default(true),
+  syncApplicationStatus: boolean("sync_application_status").default(false),
+  pushWotcResults: boolean("push_wotc_results").default(true),
+  
+  // Webhook configuration
+  webhookUrl: text("webhook_url"), // Our endpoint for receiving webhooks
+  webhookSecret: text("webhook_secret"), // Encrypted secret for webhook validation
+  webhookEvents: text("webhook_events").array(), // ['applicant.created', 'employee.updated']
+  
+  // Last sync
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSuccessfulSyncAt: timestamp("last_successful_sync_at"),
+  nextScheduledSyncAt: timestamp("next_scheduled_sync_at"),
+  
+  // Health monitoring
+  status: text("status").default("active"), // 'active', 'paused', 'error', 'expired', 'disconnected'
+  healthStatus: text("health_status").default("healthy"), // 'healthy', 'degraded', 'unhealthy'
+  lastHealthCheckAt: timestamp("last_health_check_at"),
+  
+  // Error tracking
+  errorCount: integer("error_count").default(0),
+  lastError: text("last_error"),
+  lastErrorAt: timestamp("last_error_at"),
+  
+  // Audit
+  connectedBy: varchar("connected_by").notNull().references(() => users.id),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertIntegrationConnectionSchema = createInsertSchema(integrationConnections).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertIntegrationConnection = z.infer<typeof insertIntegrationConnectionSchema>;
+export type IntegrationConnection = typeof integrationConnections.$inferSelect;
+
+// Integration Field Mappings - Map external fields to our system
+export const integrationFieldMappings = pgTable("integration_field_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  connectionId: varchar("connection_id").notNull().references(() => integrationConnections.id, { onDelete: "cascade" }),
+  
+  // Entity being mapped
+  entityType: text("entity_type").notNull(), // 'applicant', 'employee', 'application'
+  
+  // Field mappings (external field -> our field)
+  fieldMappings: jsonb("field_mappings").notNull(), 
+  // Example: { "first_name": "firstName", "last_name": "lastName", "email_addresses[0].value": "email" }
+  
+  // Transformation rules
+  transformationRules: jsonb("transformation_rules"), // Custom transformations
+  // Example: { "hire_date": { "type": "date", "format": "MM/DD/YYYY" } }
+  
+  // Default values for missing fields
+  defaultValues: jsonb("default_values"),
+  
+  // Validation rules
+  validationRules: jsonb("validation_rules"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertIntegrationFieldMappingSchema = createInsertSchema(integrationFieldMappings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertIntegrationFieldMapping = z.infer<typeof insertIntegrationFieldMappingSchema>;
+export type IntegrationFieldMapping = typeof integrationFieldMappings.$inferSelect;
+
+// Integration Sync Logs - Track all sync operations
+export const integrationSyncLogs = pgTable("integration_sync_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  connectionId: varchar("connection_id").notNull().references(() => integrationConnections.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Sync details
+  syncType: text("sync_type").notNull(), // 'full', 'incremental', 'webhook'
+  syncDirection: text("sync_direction").notNull(), // 'inbound', 'outbound'
+  entityType: text("entity_type"), // 'applicant', 'employee', etc.
+  
+  // Execution
+  status: text("status").notNull().default("pending"), // 'pending', 'running', 'completed', 'failed', 'partial'
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+  
+  // Results
+  recordsProcessed: integer("records_processed").default(0),
+  recordsCreated: integer("records_created").default(0),
+  recordsUpdated: integer("records_updated").default(0),
+  recordsSkipped: integer("records_skipped").default(0),
+  recordsFailed: integer("records_failed").default(0),
+  
+  // Data details
+  syncSummary: jsonb("sync_summary"), // Detailed summary
+  changesApplied: jsonb("changes_applied").array(), // [{ entityId, field, oldValue, newValue }]
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  errorDetails: jsonb("error_details"),
+  errorStack: text("error_stack"),
+  
+  // API usage
+  apiCallsMade: integer("api_calls_made").default(0),
+  apiCallsFailed: integer("api_calls_failed").default(0),
+  rateLimitHit: boolean("rate_limit_hit").default(false),
+  
+  // Audit
+  triggeredBy: varchar("triggered_by").references(() => users.id), // null for automated
+  triggerSource: text("trigger_source"), // 'scheduled', 'manual', 'webhook', 'api'
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertIntegrationSyncLogSchema = createInsertSchema(integrationSyncLogs).omit({ id: true, createdAt: true });
+export type InsertIntegrationSyncLog = z.infer<typeof insertIntegrationSyncLogSchema>;
+export type IntegrationSyncLog = typeof integrationSyncLogs.$inferSelect;
+
+// Integration Synced Records - Track which external records have been synced
+export const integrationSyncedRecords = pgTable("integration_synced_records", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  connectionId: varchar("connection_id").notNull().references(() => integrationConnections.id, { onDelete: "cascade" }),
+  
+  // External record identification
+  externalId: text("external_id").notNull(), // ID in the external system
+  externalType: text("external_type").notNull(), // 'applicant', 'employee', 'candidate'
+  externalUrl: text("external_url"), // Link to view record in external system
+  
+  // Internal record mapping
+  internalId: varchar("internal_id"), // Our employee/applicant ID
+  internalType: text("internal_type"), // 'employee', 'screening'
+  
+  // Sync metadata
+  firstSyncedAt: timestamp("first_synced_at").notNull().defaultNow(),
+  lastSyncedAt: timestamp("last_synced_at").notNull().defaultNow(),
+  syncCount: integer("sync_count").default(1),
+  
+  // External data snapshot (for change detection)
+  externalDataHash: text("external_data_hash"), // Hash of external data to detect changes
+  lastExternalData: jsonb("last_external_data"), // Last known state
+  
+  // Status
+  syncStatus: text("sync_status").default("synced"), // 'synced', 'pending', 'failed', 'orphaned'
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertIntegrationSyncedRecordSchema = createInsertSchema(integrationSyncedRecords).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertIntegrationSyncedRecord = z.infer<typeof insertIntegrationSyncedRecordSchema>;
+export type IntegrationSyncedRecord = typeof integrationSyncedRecords.$inferSelect;
+
+// Integration Webhooks - Store webhook payloads for processing
+export const integrationWebhooks = pgTable("integration_webhooks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  connectionId: varchar("connection_id").references(() => integrationConnections.id, { onDelete: "set null" }),
+  providerId: varchar("provider_id").references(() => integrationProviders.id),
+  
+  // Webhook metadata
+  eventType: text("event_type").notNull(), // 'applicant.created', 'employee.updated'
+  externalEventId: text("external_event_id"), // External system's event ID
+  
+  // Payload
+  payload: jsonb("payload").notNull(), // Raw webhook payload
+  headers: jsonb("headers"), // HTTP headers
+  
+  // Processing
+  status: text("status").default("pending"), // 'pending', 'processing', 'processed', 'failed', 'ignored'
+  processedAt: timestamp("processed_at"),
+  processingDurationMs: integer("processing_duration_ms"),
+  
+  // Results
+  actionsCreated: jsonb("actions_created"), // What actions were taken
+  errorMessage: text("error_message"),
+  
+  // Security
+  signatureValid: boolean("signature_valid"),
+  ipAddress: text("ip_address"),
+  
+  // Retry
+  retryCount: integer("retry_count").default(0),
+  nextRetryAt: timestamp("next_retry_at"),
+  
+  receivedAt: timestamp("received_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertIntegrationWebhookSchema = createInsertSchema(integrationWebhooks).omit({ id: true, receivedAt: true, createdAt: true });
+export type InsertIntegrationWebhook = z.infer<typeof insertIntegrationWebhookSchema>;
+export type IntegrationWebhook = typeof integrationWebhooks.$inferSelect;
+
+// ============================================================================
+// ACCOUNTING SOFTWARE INTEGRATIONS
+// ============================================================================
+
+// Accounting Export Jobs - Track credit exports to accounting systems
+export const accountingExportJobs = pgTable("accounting_export_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Export details
+  exportType: text("export_type").notNull(), // 'quickbooks', 'xero', 'netsuite', 'sage', 'csv'
+  exportFormat: text("export_format").notNull(), // 'qbo', 'xml', 'csv', 'api'
+  exportPeriod: text("export_period"), // 'Q1_2025', '2024_Annual'
+  
+  // Credits included
+  screeningIds: text("screening_ids").array(), // Array of screening IDs included
+  totalCredits: decimal("total_credits", { precision: 10, scale: 2 }).notNull(),
+  creditCount: integer("credit_count").notNull(),
+  
+  // Export file
+  fileName: text("file_name"),
+  fileUrl: text("file_url"), // Object storage URL
+  fileSize: integer("file_size"),
+  
+  // Accounting system details
+  accountingSystemId: text("accounting_system_id"), // External journal entry ID
+  accountingPeriod: text("accounting_period"),
+  
+  // Status
+  status: text("status").default("pending"), // 'pending', 'generated', 'sent', 'imported', 'failed'
+  generatedAt: timestamp("generated_at"),
+  sentAt: timestamp("sent_at"),
+  importedAt: timestamp("imported_at"),
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  
+  // Audit
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertAccountingExportJobSchema = createInsertSchema(accountingExportJobs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertAccountingExportJob = z.infer<typeof insertAccountingExportJobSchema>;
+export type AccountingExportJob = typeof accountingExportJobs.$inferSelect;
