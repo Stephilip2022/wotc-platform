@@ -1172,6 +1172,55 @@ export const determinationLetters = pgTable("determination_letters", {
 export const insertDeterminationLetterSchema = createInsertSchema(determinationLetters).omit({ id: true, createdAt: true, updatedAt: true });
 export const updateDeterminationLetterSchema = insertDeterminationLetterSchema.partial();
 export type InsertDeterminationLetter = z.infer<typeof insertDeterminationLetterSchema>;
+
+// ============================================================================
+// AUTO-SUBMISSION QUEUE (Phase 7: Zero-Touch Processing)
+// ============================================================================
+
+export const submissionQueue = pgTable("submission_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  screeningId: varchar("screening_id").notNull().references(() => screenings.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  stateCode: text("state_code").notNull(),
+  
+  // Readiness tracking
+  status: text("status").notNull().default("pending_validation"), // 'pending_validation', 'ready', 'queued', 'in_progress', 'submitted', 'failed', 'cancelled'
+  readinessScore: integer("readiness_score").default(0), // 0-100 score for data completeness
+  missingFields: text("missing_fields").array(), // List of required fields that are missing
+  validationErrors: jsonb("validation_errors"), // Detailed validation errors { field: string, error: string }[]
+  lastValidationResult: jsonb("last_validation_result"), // Full validation details
+  
+  // Priority & scheduling
+  priority: integer("priority").default(5), // 1-10, higher = more urgent (5 = normal)
+  scheduledSubmissionDate: timestamp("scheduled_submission_date"), // When to submit (for batching)
+  submissionWindow: text("submission_window").default("daily_batch"), // 'immediate', 'hourly_batch', 'daily_batch', 'weekly_batch'
+  urgencyReason: text("urgency_reason"), // Explanation for high priority (e.g., "hire_date_approaching")
+  
+  // Submission tracking
+  assignedToJobId: varchar("assigned_to_job_id").references(() => stateSubmissionJobs.id),
+  submittedAt: timestamp("submitted_at"),
+  completedAt: timestamp("completed_at"),
+  
+  // Auto-retry logic
+  failureCount: integer("failure_count").default(0),
+  lastFailureReason: text("last_failure_reason"),
+  nextRetryAt: timestamp("next_retry_at"),
+  
+  // Metadata
+  lastValidatedAt: timestamp("last_validated_at"),
+  addedToQueueAt: timestamp("added_to_queue_at").notNull().defaultNow(),
+  detectedBySystem: boolean("detected_by_system").default(true), // Auto-detected vs manually queued
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertSubmissionQueueSchema = createInsertSchema(submissionQueue).omit({ id: true, createdAt: true, updatedAt: true });
+export const updateSubmissionQueueSchema = insertSubmissionQueueSchema.partial();
+export type InsertSubmissionQueue = z.infer<typeof insertSubmissionQueueSchema>;
+export type UpdateSubmissionQueue = z.infer<typeof updateSubmissionQueueSchema>;
+export type SubmissionQueue = typeof submissionQueue.$inferSelect;
 export type UpdateDeterminationLetter = z.infer<typeof updateDeterminationLetterSchema>;
 export type DeterminationLetter = typeof determinationLetters.$inferSelect;
 
