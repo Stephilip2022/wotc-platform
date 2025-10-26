@@ -287,8 +287,9 @@ export const hoursWorked = pgTable("hours_worked", {
   employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
   creditCalculationId: varchar("credit_calculation_id").references(() => creditCalculations.id, { onDelete: "cascade" }),
   
-  // Hours details
+  // Hours and wages details
   hours: decimal("hours", { precision: 10, scale: 2 }).notNull(),
+  wages: decimal("wages", { precision: 12, scale: 2 }), // Gross wages for the period (from payroll)
   periodStart: text("period_start").notNull(), // YYYY-MM-DD
   periodEnd: text("period_end").notNull(), // YYYY-MM-DD
   source: text("source").default("manual"), // 'manual', 'csv_import', 'api', 'payroll_system'
