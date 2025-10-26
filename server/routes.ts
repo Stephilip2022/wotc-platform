@@ -4380,7 +4380,122 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
-  // PHASE 5: AI PREDICTION & QUESTIONNAIRE OPTIMIZATION ROUTES
+  // PHASE 5: AI PREDICTION, QUESTIONNAIRE OPTIMIZATION & CREDIT FORECASTING
+  // ============================================================================
+
+  // Generate credit forecast for an employer
+  app.post("/api/employer/credit-forecast", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || !user.employerId) {
+        return res.status(403).json({ error: "Employer access required" });
+      }
+
+      const { timeframeMonths, currentPipelineCount } = req.body;
+
+      const { generateCreditForecast } = await import("./utils/creditForecasting");
+      const forecast = await generateCreditForecast({
+        employerId: user.employerId,
+        timeframeMonths,
+        currentPipelineCount,
+      });
+
+      // Store forecast in database
+      const { creditForecasts } = await import("@shared/schema");
+      const [storedForecast] = await db
+        .insert(creditForecasts)
+        .values({
+          employerId: user.employerId,
+          forecastType: "employer_projection",
+          timeframeDays: (timeframeMonths || 12) * 30,
+          projectedCredits: forecast.estimatedTotalCredits.toString(),
+          projectedCertifications: forecast.projectedCertifications,
+          confidence: forecast.confidenceLevel,
+          calculatedBy: userId,
+          forecastData: forecast as any,
+        })
+        .returning();
+
+      res.json({
+        forecast,
+        storedForecast,
+      });
+    } catch (error) {
+      console.error("Error generating credit forecast:", error);
+      res.status(500).json({ error: "Failed to generate credit forecast" });
+    }
+  });
+
+  // Get monthly projection trend
+  app.get("/api/employer/credit-forecast/trend", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || !user.employerId) {
+        return res.status(403).json({ error: "Employer access required" });
+      }
+
+      const months = parseInt(req.query.months as string) || 12;
+
+      const { getMonthlyProjectionTrend } = await import("./utils/creditForecasting");
+      const trend = await getMonthlyProjectionTrend(user.employerId, months);
+
+      res.json({ trend });
+    } catch (error) {
+      console.error("Error fetching projection trend:", error);
+      res.status(500).json({ error: "Failed to fetch projection trend" });
+    }
+  });
+
+  // Admin: System-wide credit forecast
+  app.get("/api/admin/credit-forecast/system-wide", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { generateSystemWideForecast } = await import("./utils/creditForecasting");
+      const forecast = await generateSystemWideForecast();
+
+      res.json(forecast);
+    } catch (error) {
+      console.error("Error generating system-wide forecast:", error);
+      res.status(500).json({ error: "Failed to generate system-wide forecast" });
+    }
+  });
+
+  // Admin: Get all stored forecasts
+  app.get("/api/admin/credit-forecasts", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { creditForecasts } = await import("@shared/schema");
+      const forecasts = await db
+        .select()
+        .from(creditForecasts)
+        .orderBy(desc(creditForecasts.createdAt))
+        .limit(100);
+
+      res.json(forecasts);
+    } catch (error) {
+      console.error("Error fetching credit forecasts:", error);
+      res.status(500).json({ error: "Failed to fetch credit forecasts" });
+    }
+  });
+
+  // ============================================================================
+  // AI PREDICTION & QUESTIONNAIRE OPTIMIZATION ROUTES
   // ============================================================================
 
   // Simplify a questionnaire question in real-time
