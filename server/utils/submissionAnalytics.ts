@@ -38,7 +38,7 @@ export interface SubmissionMetrics {
     employerName: string;
     errorMessage: string | null;
     createdAt: Date;
-    retryCount: number;
+    retryCount: number | null;
   }[];
 }
 
@@ -65,13 +65,17 @@ export async function getSubmissionMetrics(
   startDate?: Date,
   endDate?: Date
 ): Promise<SubmissionMetrics> {
-  const whereConditions = [];
+  // Build separate where conditions for each table
+  const jobWhereConditions = [];
+  const queueWhereConditions = [];
   
   if (startDate) {
-    whereConditions.push(gte(stateSubmissionJobs.createdAt, startDate));
+    jobWhereConditions.push(gte(stateSubmissionJobs.createdAt, startDate));
+    queueWhereConditions.push(gte(submissionQueue.createdAt, startDate));
   }
   if (endDate) {
-    whereConditions.push(lte(stateSubmissionJobs.createdAt, endDate));
+    jobWhereConditions.push(lte(stateSubmissionJobs.createdAt, endDate));
+    queueWhereConditions.push(lte(submissionQueue.createdAt, endDate));
   }
 
   // Get job status counts
@@ -81,7 +85,7 @@ export async function getSubmissionMetrics(
       count: count(stateSubmissionJobs.id),
     })
     .from(stateSubmissionJobs)
-    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
+    .where(jobWhereConditions.length > 0 ? and(...jobWhereConditions) : undefined)
     .groupBy(stateSubmissionJobs.status);
 
   const totalJobs = jobStats.reduce((sum: number, s: any) => sum + Number(s.count), 0);
@@ -102,7 +106,7 @@ export async function getSubmissionMetrics(
     .where(
       and(
         eq(stateSubmissionJobs.status, "completed"),
-        whereConditions.length > 0 ? and(...whereConditions) : undefined
+        jobWhereConditions.length > 0 ? and(...jobWhereConditions) : undefined
       )
     );
 
@@ -126,7 +130,7 @@ export async function getSubmissionMetrics(
       count: count(submissionQueue.id),
     })
     .from(submissionQueue)
-    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
+    .where(queueWhereConditions.length > 0 ? and(...queueWhereConditions) : undefined)
     .groupBy(submissionQueue.status);
 
   const totalScreenings = queueStats.reduce((sum: number, s: any) => sum + Number(s.count), 0);
@@ -141,7 +145,7 @@ export async function getSubmissionMetrics(
       count: count(stateSubmissionJobs.id),
     })
     .from(stateSubmissionJobs)
-    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
+    .where(jobWhereConditions.length > 0 ? and(...jobWhereConditions) : undefined)
     .groupBy(stateSubmissionJobs.stateCode, stateSubmissionJobs.status);
 
   // Aggregate by state
@@ -180,7 +184,7 @@ export async function getSubmissionMetrics(
     })
     .from(stateSubmissionJobs)
     .innerJoin(employers, eq(stateSubmissionJobs.employerId, employers.id))
-    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
+    .where(jobWhereConditions.length > 0 ? and(...jobWhereConditions) : undefined)
     .groupBy(stateSubmissionJobs.employerId, employers.name, stateSubmissionJobs.status);
 
   // Aggregate by employer

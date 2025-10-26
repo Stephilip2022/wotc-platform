@@ -178,6 +178,22 @@ async function processSubmissionJob(
           .where(eq(submissionQueue.assignedToJobId, jobId));
       });
 
+      // Send success notification to employer
+      try {
+        const { sendSubmissionSuccess } = await import('../email/submissionNotifications');
+        await sendSubmissionSuccess({
+          employerName: employer.name,
+          employerEmail: employer.contactEmail,
+          stateCode: job.stateCode,
+          recordCount: screeningIds.length,
+          confirmationNumber: result.confirmationNumber || 'N/A',
+          submittedAt: new Date().toLocaleString(),
+        });
+      } catch (emailError) {
+        console.error(`[Orchestrator] Failed to send success email for job ${jobId}:`, emailError);
+        // Don't fail the job if email fails
+      }
+
     } else {
       // Submission failed - check if we should retry
       const retryCount = (job.retryCount ?? 0) + 1;
@@ -238,6 +254,26 @@ async function processSubmissionJob(
             })
             .where(eq(submissionQueue.assignedToJobId, jobId));
         });
+
+        // Send failure alert to admin
+        try {
+          const { sendSubmissionFailureAlert } = await import('../email/submissionNotifications');
+          // Get admin email from environment or use a default
+          const adminEmail = process.env.ADMIN_EMAIL || 'admin@wotc-platform.com';
+          
+          await sendSubmissionFailureAlert({
+            employerName: employer.name,
+            adminEmail,
+            stateCode: job.stateCode,
+            recordCount: screeningIds.length,
+            errorMessage: result.error || 'Unknown error',
+            jobId: jobId,
+            retryCount,
+          });
+        } catch (emailError) {
+          console.error(`[Orchestrator] Failed to send failure alert for job ${jobId}:`, emailError);
+          // Don't fail the job if email fails
+        }
       }
     }
 

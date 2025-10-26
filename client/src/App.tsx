@@ -29,6 +29,7 @@ import WOTCExportPage from "@/pages/admin/wotc-export";
 import RevenuemanagementPage from "@/pages/admin/revenue";
 import StateAutomationPage from "@/pages/admin/state-automation";
 import StateCredentialsPage from "@/pages/admin/state-credentials";
+import SubmissionMonitoringPage from "@/pages/admin/submission-monitoring";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -88,6 +89,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/export" component={WOTCExportPage} />
                   <Route path="/admin/automation" component={StateAutomationPage} />
                   <Route path="/admin/state-credentials" component={StateCredentialsPage} />
+                  <Route path="/admin/monitoring" component={SubmissionMonitoringPage} />
                   <Route component={NotFound} />
                 </>
               ) : (

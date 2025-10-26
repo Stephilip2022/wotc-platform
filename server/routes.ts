@@ -4283,6 +4283,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get submission metrics for monitoring dashboard
+  app.get("/api/admin/submissions/metrics", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { getSubmissionMetrics } = await import('./utils/submissionAnalytics');
+      
+      // Parse date filters from query params
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+      
+      if (req.query.startDate) {
+        startDate = new Date(req.query.startDate as string);
+      }
+      if (req.query.endDate) {
+        endDate = new Date(req.query.endDate as string);
+      }
+
+      const metrics = await getSubmissionMetrics(startDate, endDate);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Error fetching submission metrics:", error);
+      res.status(500).json({ error: "Failed to fetch metrics" });
+    }
+  });
+
+  // Get submission anomalies for alerts
+  app.get("/api/admin/submissions/anomalies", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { detectAnomalies } = await import('./utils/submissionAnalytics');
+      const anomalies = await detectAnomalies();
+      
+      res.json(anomalies);
+    } catch (error) {
+      console.error("Error detecting anomalies:", error);
+      res.status(500).json({ error: "Failed to detect anomalies" });
+    }
+  });
+
+  // Get detailed job list with filters
+  app.get("/api/admin/submissions/jobs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { getJobDetails } = await import('./utils/submissionAnalytics');
+      
+      const jobs = await getJobDetails(
+        req.query.status as string | undefined,
+        req.query.stateCode as string | undefined,
+        req.query.employerId as string | undefined,
+        req.query.limit ? parseInt(req.query.limit as string) : 50
+      );
+      
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching job details:", error);
+      res.status(500).json({ error: "Failed to fetch job details" });
+    }
+  });
+
   // Parse determination letter with OCR
   app.post("/api/admin/determination-letters/parse", isAuthenticated, async (req: any, res) => {
     try {
