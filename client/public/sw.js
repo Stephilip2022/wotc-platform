@@ -72,40 +72,64 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
+  let notificationData;
+  
+  try {
+    notificationData = event.data ? event.data.json() : {};
+  } catch (e) {
+    notificationData = {
+      title: 'WOTC Platform',
+      body: event.data ? event.data.text() : 'New notification',
+    };
+  }
+
   const options = {
-    body: event.data ? event.data.text() : 'New notification',
-    icon: '/favicon.png',
-    badge: '/favicon.png',
+    body: notificationData.body || 'New notification',
+    icon: notificationData.icon || '/favicon.png',
+    badge: notificationData.badge || '/favicon.png',
     vibrate: [200, 100, 200],
-    data: {
+    data: notificationData.data || {
       dateOfArrival: Date.now(),
-      primaryKey: 1
+      url: '/',
     },
-    actions: [
+    actions: notificationData.actions || [
       {
         action: 'view',
         title: 'View',
-        icon: '/favicon.png'
       },
       {
         action: 'close',
-        title: 'Close',
-        icon: '/favicon.png'
+        title: 'Dismiss',
       }
-    ]
+    ],
+    tag: notificationData.tag || 'wotc-notification',
+    requireInteraction: notificationData.requireInteraction || false,
   };
 
   event.waitUntil(
-    self.registration.showNotification('WOTC Platform', options)
+    self.registration.showNotification(notificationData.title || 'WOTC Platform', options)
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  if (event.action === 'view') {
-    event.waitUntil(
-      clients.openWindow('/')
-    );
+  if (event.action === 'close') {
+    return;
   }
+
+  const urlToOpen = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (let client of windowClients) {
+        if (client.url === urlToOpen && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(urlToOpen);
+      }
+    })
+  );
 });

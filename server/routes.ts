@@ -35,6 +35,7 @@ import OpenAI from "openai";
 import Stripe from "stripe";
 import { determineEligibility, calculateCredit, TARGET_GROUPS, normalizeTargetGroup } from "./eligibility";
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
+import notificationsRouter from "./routes/notifications";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -90,6 +91,9 @@ const csvUpload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Replit Auth
   await setupAuth(app);
+
+  // Mount notification routes
+  app.use("/api/notifications", isAuthenticated, notificationsRouter);
 
   // ============================================================================
   // AUTHENTICATION ROUTES

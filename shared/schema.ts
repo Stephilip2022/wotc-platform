@@ -40,6 +40,58 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
 // ============================================================================
+// PUSH SUBSCRIPTIONS & NOTIFICATION PREFERENCES
+// ============================================================================
+
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  
+  // Screening notifications
+  screeningStarted: boolean("screening_started").default(true),
+  screeningCompleted: boolean("screening_completed").default(true),
+  screeningEligible: boolean("screening_eligible").default(true),
+  screeningCertified: boolean("screening_certified").default(true),
+  screeningDenied: boolean("screening_denied").default(true),
+  
+  // Submission notifications
+  submissionQueued: boolean("submission_queued").default(true),
+  submissionSuccess: boolean("submission_success").default(true),
+  submissionFailed: boolean("submission_failed").default(true),
+  
+  // Credit notifications
+  creditCalculated: boolean("credit_calculated").default(true),
+  creditUpdated: boolean("credit_updated").default(true),
+  
+  // Billing notifications (employer only)
+  invoiceGenerated: boolean("invoice_generated").default(true),
+  paymentReceived: boolean("payment_received").default(true),
+  paymentFailed: boolean("payment_failed").default(true),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+
+// ============================================================================
 // EMPLOYERS (Multi-tenant)
 // ============================================================================
 
