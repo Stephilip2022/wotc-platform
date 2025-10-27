@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { ApiKeyService } from "../utils/apiKeyService";
-import { ApiKeyRequest } from "./apiKeyAuth";
+import { ApiKeyRequest, apiKeyAuth as apiKeyAuthMiddleware, requireScope as requireScopeMiddleware, requireAnyScope as requireAnyScopeMiddleware } from "./apiKeyAuth";
 import { getCanonicalEndpoint } from "../utils/normalizeEndpoint";
 
 /**
@@ -119,18 +119,16 @@ export function usageTracker(req: Request, res: Response, next: NextFunction) {
  * @param scope - Optional scope requirement (string or string array for any-of logic)
  */
 export function publicApiMiddleware(scope?: string | string[]) {
-  const { apiKeyAuth, requireScope, requireAnyScope } = require("./apiKeyAuth");
-  
-  const middleware: any[] = [apiKeyAuth];
+  const middleware: any[] = [apiKeyAuthMiddleware];
   
   // Add scope requirement if specified
   if (scope) {
     if (Array.isArray(scope)) {
       // Multiple scopes: require ANY of them (OR logic)
-      middleware.push(requireAnyScope(scope));
+      middleware.push(requireAnyScopeMiddleware(scope));
     } else {
       // Single scope: require exactly that one
-      middleware.push(requireScope(scope));
+      middleware.push(requireScopeMiddleware(scope));
     }
   }
   
@@ -140,4 +138,4 @@ export function publicApiMiddleware(scope?: string | string[]) {
   return middleware;
 }
 
-export { apiKeyAuth, requireScope, requireAnyScope } from "./apiKeyAuth";
+export { apiKeyAuthMiddleware as apiKeyAuth, requireScopeMiddleware as requireScope, requireAnyScopeMiddleware as requireAnyScope };

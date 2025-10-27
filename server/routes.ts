@@ -37,6 +37,7 @@ import { determineEligibility, calculateCredit, TARGET_GROUPS, normalizeTargetGr
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
 import notificationsRouter from "./routes/notifications";
 import apiKeysRouter from "./routes/apiKeys";
+import publicApiRouter from "./routes/publicApi";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -92,6 +93,9 @@ const csvUpload = multer({
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Replit Auth
   await setupAuth(app);
+
+  // Mount public API routes (v1) - uses API key authentication
+  app.use("/api/v1", publicApiRouter);
 
   // Mount notification routes
   app.use("/api/notifications", isAuthenticated, notificationsRouter);
