@@ -1852,3 +1852,163 @@ export const accountingExportJobs = pgTable("accounting_export_jobs", {
 export const insertAccountingExportJobSchema = createInsertSchema(accountingExportJobs).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertAccountingExportJob = z.infer<typeof insertAccountingExportJobSchema>;
 export type AccountingExportJob = typeof accountingExportJobs.$inferSelect;
+
+// ============================================================================
+// PUBLIC API & DEVELOPER PLATFORM
+// ============================================================================
+
+// API Keys - Secure keys for third-party integrations
+export const apiKeys = pgTable("api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  
+  // Key details
+  name: text("name").notNull(), // Friendly name: "Production API Key", "Staging Key"
+  keyPrefix: varchar("key_prefix", { length: 20 }).notNull(), // Prefix for identification: "wotc_live_abc123"
+  keyHash: text("key_hash").notNull().unique(), // SHA-256 hash of the full key
+  
+  // Permissions & scopes
+  scopes: text("scopes").array().notNull(), // ['employees:read', 'screenings:write', 'credits:read']
+  environment: text("environment").default("production"), // 'production', 'sandbox'
+  
+  // Rate limiting
+  rateLimit: integer("rate_limit").default(1000), // Requests per hour
+  rateLimitWindow: integer("rate_limit_window").default(3600), // Window in seconds (default: 1 hour)
+  
+  // Usage tracking
+  lastUsedAt: timestamp("last_used_at"),
+  totalRequests: integer("total_requests").default(0),
+  
+  // Expiration
+  expiresAt: timestamp("expires_at"), // null = never expires
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  revokedAt: timestamp("revoked_at"),
+  revokedBy: varchar("revoked_by").references(() => users.id),
+  revokedReason: text("revoked_reason"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  lastUsedAt: true,
+  totalRequests: true,
+});
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type ApiKey = typeof apiKeys.$inferSelect;
+
+// API Key Usage - Track API usage for analytics and billing
+export const apiKeyUsage = pgTable("api_key_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  apiKeyId: varchar("api_key_id").notNull().references(() => apiKeys.id, { onDelete: "cascade" }),
+  
+  // Request details
+  endpoint: text("endpoint").notNull(), // '/api/v1/employees'
+  method: text("method").notNull(), // 'GET', 'POST', 'PUT', 'DELETE'
+  statusCode: integer("status_code").notNull(), // 200, 404, 500
+  
+  // Performance
+  responseTimeMs: integer("response_time_ms"),
+  
+  // Client information
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  
+  // Error tracking
+  errorMessage: text("error_message"),
+  
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+});
+
+export const insertApiKeyUsageSchema = createInsertSchema(apiKeyUsage).omit({ id: true, timestamp: true });
+export type InsertApiKeyUsage = z.infer<typeof insertApiKeyUsageSchema>;
+export type ApiKeyUsage = typeof apiKeyUsage.$inferSelect;
+
+// Webhook Endpoints - Developer-configured webhooks
+export const webhookEndpoints = pgTable("webhook_endpoints", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  
+  // Endpoint configuration
+  url: text("url").notNull(), // https://example.com/webhooks/wotc
+  secret: text("secret").notNull(), // Used for HMAC signature verification
+  description: text("description"), // "Production webhook for screening updates"
+  
+  // Event subscriptions
+  events: text("events").array().notNull(), // ['screening.completed', 'credit.calculated']
+  
+  // Delivery configuration
+  version: text("version").default("v1"), // API version
+  maxRetries: integer("max_retries").default(3),
+  retryBackoffSeconds: integer("retry_backoff_seconds").default(60), // 1 minute
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  lastDeliveryAt: timestamp("last_delivery_at"),
+  lastDeliveryStatus: text("last_delivery_status"), // 'success', 'failed'
+  
+  // Statistics
+  totalDeliveries: integer("total_deliveries").default(0),
+  successfulDeliveries: integer("successful_deliveries").default(0),
+  failedDeliveries: integer("failed_deliveries").default(0),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertWebhookEndpointSchema = createInsertSchema(webhookEndpoints).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  lastDeliveryAt: true,
+  lastDeliveryStatus: true,
+  totalDeliveries: true,
+  successfulDeliveries: true,
+  failedDeliveries: true,
+});
+export type InsertWebhookEndpoint = z.infer<typeof insertWebhookEndpointSchema>;
+export type WebhookEndpoint = typeof webhookEndpoints.$inferSelect;
+
+// Webhook Deliveries - Track all webhook delivery attempts
+export const webhookDeliveries = pgTable("webhook_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  webhookEndpointId: varchar("webhook_endpoint_id").notNull().references(() => webhookEndpoints.id, { onDelete: "cascade" }),
+  
+  // Event details
+  eventType: text("event_type").notNull(), // 'screening.completed'
+  eventId: varchar("event_id").notNull(), // Unique event ID for idempotency
+  
+  // Payload
+  payload: jsonb("payload").notNull(),
+  headers: jsonb("headers"), // HTTP headers sent
+  
+  // Delivery attempt
+  attemptNumber: integer("attempt_number").default(1),
+  
+  // Response
+  statusCode: integer("status_code"),
+  responseBody: text("response_body"),
+  responseTimeMs: integer("response_time_ms"),
+  
+  // Status
+  status: text("status").notNull(), // 'pending', 'success', 'failed', 'retrying'
+  errorMessage: text("error_message"),
+  
+  // Retry
+  nextRetryAt: timestamp("next_retry_at"),
+  
+  // Timestamps
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertWebhookDeliverySchema = createInsertSchema(webhookDeliveries).omit({ id: true, createdAt: true });
+export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
+export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;

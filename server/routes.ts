@@ -36,6 +36,7 @@ import Stripe from "stripe";
 import { determineEligibility, calculateCredit, TARGET_GROUPS, normalizeTargetGroup } from "./eligibility";
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
 import notificationsRouter from "./routes/notifications";
+import apiKeysRouter from "./routes/apiKeys";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -94,6 +95,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount notification routes
   app.use("/api/notifications", isAuthenticated, notificationsRouter);
+  
+  // Mount API key management routes
+  app.use("/api/developer/keys", isAuthenticated, apiKeysRouter);
 
   // ============================================================================
   // AUTHENTICATION ROUTES
