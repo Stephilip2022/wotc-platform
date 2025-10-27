@@ -39,6 +39,8 @@ import notificationsRouter from "./routes/notifications";
 import apiKeysRouter from "./routes/apiKeys";
 import publicApiRouter from "./routes/publicApi";
 import webhooksRouter from "./routes/webhooks";
+import retentionRouter from "./routes/retention";
+import multiCreditRouter from "./routes/multiCredit";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -106,6 +108,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Mount webhook management routes
   app.use("/api/webhooks", isAuthenticated, webhooksRouter);
+  
+  // Mount retention optimization routes
+  app.use("/api/retention", isAuthenticated, retentionRouter);
+  
+  // Mount multi-credit bundling routes
+  app.use("/api/credits", isAuthenticated, multiCreditRouter);
 
   // ============================================================================
   // AUTHENTICATION ROUTES

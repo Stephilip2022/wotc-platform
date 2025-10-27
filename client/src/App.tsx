@@ -19,6 +19,7 @@ import EmployeesPage from "@/pages/employer/employees";
 import EmployeeDetailPage from "@/pages/employer/employee-detail";
 import ScreeningsPage from "@/pages/employer/screenings";
 import EmployerHoursPage from "@/pages/employer/hours";
+import RetentionPage from "@/pages/employer/retention";
 import BillingPage from "@/pages/employer/billing";
 import InvoiceDetailPage from "@/pages/employer/invoice-detail";
 import EmployerCreditsPage from "@/pages/employer/credits";
@@ -106,6 +107,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/employer/employees/:id" component={EmployeeDetailPage} />
                   <Route path="/employer/screenings" component={ScreeningsPage} />
                   <Route path="/employer/hours" component={EmployerHoursPage} />
+                  <Route path="/employer/retention" component={RetentionPage} />
                   <Route path="/employer/credits" component={EmployerCreditsPage} />
                   <Route path="/employer/billing" component={BillingPage} />
                   <Route path="/employer/invoice/:id" component={InvoiceDetailPage} />

@@ -27,6 +27,7 @@ import {
   Webhook,
   Book,
   Activity,
+  TrendingUp,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -54,6 +55,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Employees", url: "/employer/employees", icon: Users },
     { title: "Screenings", url: "/employer/screenings", icon: ClipboardCheck },
     { title: "Hours", url: "/employer/hours", icon: Clock },
+    { title: "Retention", url: "/employer/retention", icon: TrendingUp },
     { title: "Documents", url: "/employer/documents", icon: FolderOpen },
     { title: "Credits", url: "/employer/credits", icon: DollarSign },
     { title: "Billing", url: "/employer/billing", icon: DollarSign },
