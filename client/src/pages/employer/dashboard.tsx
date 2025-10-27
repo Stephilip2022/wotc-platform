@@ -24,6 +24,11 @@ import {
   Legend,
   Cell,
 } from "recharts";
+import { useMobileDetect } from "@/hooks/useMobileDetect";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
+import { PullToRefreshIndicator } from "@/components/mobile/PullToRefreshIndicator";
+import { queryClient } from "@/lib/queryClient";
 
 interface DashboardStats {
   totalEmployees: number;
@@ -64,6 +69,8 @@ interface EmployeeWithCredit {
 }
 
 export default function EmployerDashboard() {
+  const { isMobile } = useMobileDetect();
+  
   const { data: stats, isLoading: statsLoading } = useQuery<DashboardStats>({
     queryKey: ["/api/employer/stats"],
   });
@@ -78,6 +85,21 @@ export default function EmployerDashboard() {
 
   const { data: employeesWithCredits, isLoading: creditsLoading } = useQuery<EmployeeWithCredit[]>({
     queryKey: ["/api/employer/credits"],
+  });
+
+  // Pull-to-refresh for mobile
+  const handleRefresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/stats"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/recent-activity"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/screenings"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/credits"] }),
+    ]);
+  };
+
+  const { pullDistance, isRefreshing, isTriggered } = usePullToRefresh({
+    onRefresh: handleRefresh,
+    enabled: isMobile,
   });
 
   // Calculate pipeline distribution
@@ -118,9 +140,9 @@ export default function EmployerDashboard() {
     description?: string;
     trend?: string;
     link?: string;
-  }) => (
-    <Card className={link ? "hover-elevate cursor-pointer" : ""}>
-      <Link href={link || "#"}>
+  }) => {
+    const content = (
+      <>
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
           <CardTitle className="text-sm font-medium">{title}</CardTitle>
           <Icon className="h-4 w-4 text-muted-foreground" />
@@ -139,9 +161,21 @@ export default function EmployerDashboard() {
             </div>
           )}
         </CardContent>
-      </Link>
-    </Card>
-  );
+      </>
+    );
+
+    if (link) {
+      return (
+        <Link href={link}>
+          <Card className="hover-elevate cursor-pointer">
+            {content}
+          </Card>
+        </Link>
+      );
+    }
+
+    return <Card>{content}</Card>;
+  };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, "default" | "secondary" | "destructive"> = {
@@ -167,24 +201,34 @@ export default function EmployerDashboard() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Overview of your WOTC screening and credit tracking
-          </p>
+    <>
+      {/* Pull-to-refresh indicator for mobile */}
+      {isMobile && (
+        <PullToRefreshIndicator
+          pullDistance={pullDistance}
+          isRefreshing={isRefreshing}
+          isTriggered={isTriggered}
+        />
+      )}
+
+      <div className={`container mx-auto p-4 md:p-6 space-y-6 md:space-y-8 ${isMobile ? "pb-20" : ""}`}>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold mb-1 md:mb-2">Dashboard</h1>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Overview of your WOTC screening and credit tracking
+            </p>
+          </div>
+          <Link href="/employer/employees">
+            <Button data-testid="button-view-employees" size={isMobile ? "sm" : "default"}>
+              {isMobile ? "Employees" : "View All Employees"}
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </Link>
         </div>
-        <Link href="/employer/employees">
-          <Button data-testid="button-view-employees">
-            View All Employees
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </Link>
-      </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Total Employees"
           value={stats?.totalEmployees || 0}
@@ -234,11 +278,17 @@ export default function EmployerDashboard() {
                 </div>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
                 <BarChart data={pipelineData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="status" />
-                  <YAxis />
+                  <XAxis 
+                    dataKey="status" 
+                    tick={{ fontSize: isMobile ? 10 : 12 }}
+                    angle={isMobile ? -45 : 0}
+                    textAnchor={isMobile ? "end" : "middle"}
+                    height={isMobile ? 60 : 30}
+                  />
+                  <YAxis tick={{ fontSize: isMobile ? 10 : 12 }} />
                   <Tooltip />
                   <Bar dataKey="count" radius={[8, 8, 0, 0]}>
                     {pipelineData.map((entry: any, index: number) => (
@@ -261,15 +311,15 @@ export default function EmployerDashboard() {
             {statsLoading ? (
               <Skeleton className="h-64 w-full" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
                 <BarChart data={creditChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+                  <XAxis dataKey="name" tick={{ fontSize: isMobile ? 10 : 12 }} />
+                  <YAxis tick={{ fontSize: isMobile ? 10 : 12 }} />
                   <Tooltip
                     formatter={(value: any) => `$${Number(value).toLocaleString()}`}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ fontSize: isMobile ? 12 : 14 }} />
                   <Bar dataKey="amount" fill="#3b82f6" radius={[8, 8, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -306,38 +356,40 @@ export default function EmployerDashboard() {
               <p>No credit data available yet</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Hours</TableHead>
-                  <TableHead className="text-right">Actual Credit</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {employeesWithCredits
-                  .filter(e => e.credit)
-                  .sort((a, b) => Number(b.credit?.actualCreditAmount || 0) - Number(a.credit?.actualCreditAmount || 0))
-                  .slice(0, 5)
-                  .map((emp) => (
-                    <TableRow key={emp.employee.id} data-testid={`row-employee-${emp.employee.id}`}>
-                      <TableCell className="font-medium">
-                        {emp.employee.firstName} {emp.employee.lastName}
-                      </TableCell>
-                      <TableCell>
-                        {emp.credit && getStatusBadge(emp.credit.status)}
-                      </TableCell>
-                      <TableCell>
-                        {emp.credit?.hoursWorked || 0} hours
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        ${Number(emp.credit?.actualCreditAmount || 0).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
+            <div className={isMobile ? "overflow-x-auto" : ""}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead className="text-right">Actual Credit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {employeesWithCredits
+                    .filter(e => e.credit)
+                    .sort((a, b) => Number(b.credit?.actualCreditAmount || 0) - Number(a.credit?.actualCreditAmount || 0))
+                    .slice(0, 5)
+                    .map((emp) => (
+                      <TableRow key={emp.employee.id} data-testid={`row-employee-${emp.employee.id}`}>
+                        <TableCell className="font-medium">
+                          {emp.employee.firstName} {emp.employee.lastName}
+                        </TableCell>
+                        <TableCell>
+                          {emp.credit && getStatusBadge(emp.credit.status)}
+                        </TableCell>
+                        <TableCell>
+                          {emp.credit?.hoursWorked || 0} hours
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          ${Number(emp.credit?.actualCreditAmount || 0).toLocaleString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -358,41 +410,47 @@ export default function EmployerDashboard() {
               ))}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentActivity && recentActivity.length > 0 ? (
-                  recentActivity.map((activity) => (
-                    <TableRow key={activity.id} data-testid={`row-activity-${activity.id}`}>
-                      <TableCell className="font-medium">
-                        {activity.employeeName}
-                      </TableCell>
-                      <TableCell>{activity.action}</TableCell>
-                      <TableCell>{getStatusBadge(activity.status)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {activity.date}
+            <div className={isMobile ? "overflow-x-auto" : ""}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Date</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentActivity && recentActivity.length > 0 ? (
+                    recentActivity.map((activity) => (
+                      <TableRow key={activity.id} data-testid={`row-activity-${activity.id}`}>
+                        <TableCell className="font-medium">
+                          {activity.employeeName}
+                        </TableCell>
+                        <TableCell>{activity.action}</TableCell>
+                        <TableCell>{getStatusBadge(activity.status)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">
+                          {activity.date}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                        No recent activity
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                      No recent activity
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
     </div>
+
+    {/* Mobile Bottom Navigation */}
+    {isMobile && <MobileBottomNav />}
+  </>
   );
 }
