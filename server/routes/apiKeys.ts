@@ -276,16 +276,17 @@ router.get("/:keyId/usage", async (req: any, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    // Check rate limit status
-    const rateLimitStatus = await ApiKeyService.checkRateLimit(keyId);
+    // Get aggregated usage across all endpoints
+    const totalUsage = await ApiKeyService.checkRateLimitTotal(keyId);
 
     res.json({
       totalRequests: key.totalRequests,
       lastUsedAt: key.lastUsedAt,
-      rateLimit: {
-        limit: key.rateLimit,
-        remaining: rateLimitStatus.remaining,
-        resetAt: rateLimitStatus.resetAt,
+      currentWindow: {
+        limit: totalUsage.limit,
+        used: totalUsage.totalUsed,
+        remaining: Math.max(0, totalUsage.limit - totalUsage.totalUsed),
+        resetAt: totalUsage.resetAt,
       },
     });
   } catch (error) {

@@ -141,9 +141,9 @@ export class ApiKeyService {
   }
 
   /**
-   * Check rate limit for an API key
+   * Check TOTAL rate limit for an API key across ALL endpoints (for stats)
    */
-  static async checkRateLimit(keyId: string): Promise<{ allowed: boolean; remaining: number; resetAt: Date }> {
+  static async checkRateLimitTotal(keyId: string): Promise<{ limit: number; totalUsed: number; resetAt: Date }> {
     try {
       const [key] = await db
         .select()
@@ -151,7 +151,7 @@ export class ApiKeyService {
         .where(eq(apiKeys.id, keyId));
 
       if (!key) {
-        return { allowed: false, remaining: 0, resetAt: new Date() };
+        return { limit: 0, totalUsed: 0, resetAt: new Date() };
       }
 
       const rateLimitWindow = key.rateLimitWindow || 3600;
@@ -159,7 +159,7 @@ export class ApiKeyService {
       
       const windowStart = new Date(Date.now() - (rateLimitWindow * 1000));
       
-      // Count requests in the current window
+      // Count ALL requests in the current window across all endpoints
       const [result] = await db
         .select({ count: sql<number>`COUNT(*)` })
         .from(apiKeyUsage)
@@ -170,18 +170,64 @@ export class ApiKeyService {
           )
         );
 
+      const totalUsed = Number(result?.count || 0);
+      const resetAt = new Date(Date.now() + (rateLimitWindow * 1000));
+
+      return {
+        limit: rateLimit,
+        totalUsed,
+        resetAt,
+      };
+    } catch (error) {
+      console.error("Error checking total rate limit:", error);
+      return { limit: 0, totalUsed: 0, resetAt: new Date() };
+    }
+  }
+
+  /**
+   * Check rate limit for an API key on a specific endpoint
+   */
+  static async checkRateLimit(keyId: string, endpoint: string): Promise<{ allowed: boolean; limit: number; remaining: number; resetAt: Date }> {
+    try {
+      const [key] = await db
+        .select()
+        .from(apiKeys)
+        .where(eq(apiKeys.id, keyId));
+
+      if (!key) {
+        return { allowed: false, limit: 0, remaining: 0, resetAt: new Date() };
+      }
+
+      const rateLimitWindow = key.rateLimitWindow || 3600;
+      const rateLimit = key.rateLimit || 1000;
+      
+      const windowStart = new Date(Date.now() - (rateLimitWindow * 1000));
+      
+      // Count requests in the current window for this specific endpoint
+      const [result] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(apiKeyUsage)
+        .where(
+          and(
+            eq(apiKeyUsage.apiKeyId, keyId),
+            eq(apiKeyUsage.endpoint, endpoint),
+            sql`${apiKeyUsage.timestamp} >= ${windowStart}`
+          )
+        );
+
       const requestCount = Number(result?.count || 0);
       const remaining = Math.max(0, rateLimit - requestCount);
       const resetAt = new Date(Date.now() + (rateLimitWindow * 1000));
 
       return {
         allowed: requestCount < rateLimit,
+        limit: rateLimit,
         remaining,
         resetAt,
       };
     } catch (error) {
       console.error("Error checking rate limit:", error);
-      return { allowed: false, remaining: 0, resetAt: new Date() };
+      return { allowed: false, limit: 0, remaining: 0, resetAt: new Date() };
     }
   }
 
