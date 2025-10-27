@@ -1,15 +1,17 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSwipeable } from "react-swipeable";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle2, ChevronRight, Sparkles, AlertCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, Sparkles, AlertCircle, ChevronLeft } from "lucide-react";
 import * as LucideIcons from "lucide-react";
 import { getIconForTargetGroup, getColorForSection, getSectionName, getEncouragingMessage } from "@shared/wotc-icons";
 import { validateRequiredQuestions } from "./conditional-logic";
 import QuestionRenderer from "./QuestionRenderer";
+import { useMobileDetect } from "@/hooks/useMobileDetect";
 import type { QuestionnaireSection, SectionState, WOTCTargetGroup } from "@shared/schema";
 
 interface QuestionnaireWizardProps {
@@ -37,9 +39,29 @@ export default function QuestionnaireWizard({
   const [showWelcome, setShowWelcome] = useState(!!welcomeMessage);
   const [showCelebration, setShowCelebration] = useState(false);
 
+  const { isMobile } = useMobileDetect();
   const currentSection = sections[currentSectionIndex];
   const progress = ((currentSectionIndex + 1) / sections.length) * 100;
   const completedCount = sectionStates.filter(s => s.status === "completed" || s.status === "skipped").length;
+
+  // Swipe handlers for mobile navigation
+  const swipeHandlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (isMobile && currentSectionIndex < sections.length - 1) {
+        const currentState = sectionStates.find(s => s.sectionId === currentSection.id);
+        if (currentState?.status === "completed" || currentState?.status === "skipped") {
+          setCurrentSectionIndex(prev => prev + 1);
+        }
+      }
+    },
+    onSwipedRight: () => {
+      if (isMobile && currentSectionIndex > 0) {
+        setCurrentSectionIndex(prev => prev - 1);
+      }
+    },
+    preventScrollOnSwipe: true,
+    trackMouse: false,
+  });
 
   // Animation variants
   const pageVariants = {
@@ -177,7 +199,7 @@ export default function QuestionnaireWizard({
   const isSkipped = currentState?.status === "skipped";
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-8">
+    <div className="max-w-2xl mx-auto p-4 md:p-8" {...(isMobile ? swipeHandlers : {})}>
       {/* Progress Bar */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
@@ -185,14 +207,32 @@ export default function QuestionnaireWizard({
         className="mb-6 space-y-3"
       >
         <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">
-            Section {currentSectionIndex + 1} of {sections.length}
-          </span>
-          <span className="text-muted-foreground">
+          <div className="flex items-center gap-2">
+            {isMobile && currentSectionIndex > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setCurrentSectionIndex(prev => prev - 1)}
+                data-testid="button-prev-section"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            )}
+            <span className="font-medium">
+              Section {currentSectionIndex + 1} of {sections.length}
+            </span>
+          </div>
+          <span className="text-muted-foreground text-xs md:text-sm">
             {completedCount} completed
           </span>
         </div>
-        <Progress value={progress} className="h-2" data-testid="progress-bar" />
+        <Progress value={progress} className="h-2 md:h-3" data-testid="progress-bar" />
+        {isMobile && (
+          <p className="text-xs text-center text-muted-foreground">
+            Swipe left/right to navigate
+          </p>
+        )}
       </motion.div>
 
       {/* Celebration Animation */}

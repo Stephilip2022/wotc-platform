@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { HelpCircle, Sparkles, Upload, CheckCircle, FileText, Loader2 } from "lucide-react";
 import { shouldDisplayQuestion } from "./conditional-logic";
 import { useToast } from "@/hooks/use-toast";
+import { useMobileDetect } from "@/hooks/useMobileDetect";
+import { CameraFileUpload } from "@/components/mobile/CameraFileUpload";
 import type { QuestionMetadata } from "@shared/schema";
 
 interface QuestionRendererProps {
@@ -31,8 +33,10 @@ export default function QuestionRenderer({
   simplifiedText,
 }: QuestionRendererProps) {
   const { toast } = useToast();
+  const { isMobile } = useMobileDetect();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; url: string } | null>(null);
+  const [fileObject, setFileObject] = useState<File | null>(null);
 
   // Sync uploaded file state with value prop (for persisted responses)
   useEffect(() => {
@@ -66,7 +70,7 @@ export default function QuestionRenderer({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("documentType", question.ui?.documentType || "other");
+      formData.append("documentType", (question.ui as any)?.documentType || "other");
       formData.append("description", questionText);
 
       const response = await fetch("/api/upload/document", {
@@ -148,7 +152,9 @@ export default function QuestionRenderer({
           onChange={(e) => onAnswerChange(question.id, e.target.value)}
           placeholder={question.ui?.placeholder}
           data-testid={`input-${question.id}`}
-          className="text-base"
+          className="text-base min-h-[44px]"
+          inputMode={question.id.toLowerCase().includes("email") ? "email" : question.id.toLowerCase().includes("phone") ? "tel" : "text"}
+          autoComplete={question.id.toLowerCase().includes("email") ? "email" : question.id.toLowerCase().includes("phone") ? "tel" : undefined}
         />
       )}
 
@@ -220,7 +226,7 @@ export default function QuestionRenderer({
           value={value || ""}
           onChange={(e) => onAnswerChange(question.id, e.target.value)}
           data-testid={`input-date-${question.id}`}
-          className="text-base"
+          className="text-base min-h-[44px]"
         />
       )}
 
@@ -232,7 +238,8 @@ export default function QuestionRenderer({
           onChange={(e) => onAnswerChange(question.id, e.target.value)}
           placeholder={question.ui?.placeholder}
           data-testid={`input-number-${question.id}`}
-          className="text-base"
+          className="text-base min-h-[44px]"
+          inputMode="numeric"
         />
       )}
 
@@ -253,7 +260,66 @@ export default function QuestionRenderer({
         </select>
       )}
 
-      {question.type === "file" && (
+      {question.type === "file" && isMobile && (
+        <CameraFileUpload
+          questionId={question.id}
+          onFileChange={async (file) => {
+            if (!file) {
+              setUploadedFile(null);
+              setFileObject(null);
+              onAnswerChange(question.id, null);
+              return;
+            }
+
+            setFileObject(file);
+            setIsUploading(true);
+            try {
+              const formData = new FormData();
+              formData.append("file", file);
+              formData.append("documentType", (question.ui as any)?.documentType || "other");
+              formData.append("description", questionText);
+
+              const response = await fetch("/api/upload/document", {
+                method: "POST",
+                body: formData,
+              });
+
+              if (!response.ok) {
+                throw new Error("Upload failed");
+              }
+
+              const data = await response.json();
+              const fileData = {
+                name: file.name,
+                url: data.document.filePath,
+                documentId: data.document.id,
+              };
+
+              setUploadedFile(fileData);
+              onAnswerChange(question.id, fileData);
+
+              toast({
+                title: "Upload successful",
+                description: `${file.name} has been uploaded.`,
+              });
+            } catch (error) {
+              console.error("Upload error:", error);
+              toast({
+                title: "Upload failed",
+                description: "Please try again.",
+                variant: "destructive",
+              });
+              setFileObject(null);
+            } finally {
+              setIsUploading(false);
+            }
+          }}
+          uploadedFile={fileObject}
+          isUploading={isUploading}
+        />
+      )}
+
+      {question.type === "file" && !isMobile && (
         <div className="space-y-3">
           {uploadedFile ? (
             <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/50">
