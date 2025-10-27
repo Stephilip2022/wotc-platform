@@ -2012,3 +2012,179 @@ export const webhookDeliveries = pgTable("webhook_deliveries", {
 export const insertWebhookDeliverySchema = createInsertSchema(webhookDeliveries).omit({ id: true, createdAt: true });
 export type InsertWebhookDelivery = z.infer<typeof insertWebhookDeliverySchema>;
 export type WebhookDelivery = typeof webhookDeliveries.$inferSelect;
+
+// ============================================================================
+// RETENTION OPTIMIZATION - Track employee hours milestones for credit maximization
+// ============================================================================
+
+export const retentionMilestones = pgTable("retention_milestones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Milestone tracking
+  currentHours: decimal("current_hours", { precision: 10, scale: 2 }).notNull().default("0"),
+  targetMilestone: integer("target_milestone").notNull(), // 120 or 400 hours
+  progressPercent: decimal("progress_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+  
+  // Time estimates
+  averageHoursPerWeek: decimal("average_hours_per_week", { precision: 5, scale: 2 }),
+  estimatedDaysToMilestone: integer("estimated_days_to_milestone"),
+  projectedCompletionDate: timestamp("projected_completion_date"),
+  
+  // Alert thresholds
+  alert80Triggered: boolean("alert_80_triggered").default(false),
+  alert90Triggered: boolean("alert_90_triggered").default(false),
+  
+  // Credit value tracking
+  currentCreditValue: decimal("current_credit_value", { precision: 10, scale: 2 }).default("0"),
+  potentialCreditValue: decimal("potential_credit_value", { precision: 10, scale: 2 }).default("0"),
+  
+  // Timestamps
+  lastCalculated: timestamp("last_calculated").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertRetentionMilestoneSchema = createInsertSchema(retentionMilestones).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRetentionMilestone = z.infer<typeof insertRetentionMilestoneSchema>;
+export type RetentionMilestone = typeof retentionMilestones.$inferSelect;
+
+export const retentionAlerts = pgTable("retention_alerts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Alert details
+  alertType: text("alert_type").notNull(), // 'milestone_80', 'milestone_90', 'high_turnover_risk', 'missed_milestone'
+  severity: text("severity").notNull().default("medium"), // 'low', 'medium', 'high', 'critical'
+  
+  // Message
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  
+  // Context
+  currentHours: decimal("current_hours", { precision: 10, scale: 2 }),
+  targetMilestone: integer("target_milestone"),
+  daysRemaining: integer("days_remaining"),
+  potentialValueAtRisk: decimal("potential_value_at_risk", { precision: 10, scale: 2 }),
+  
+  // Recommended actions
+  recommendedActions: jsonb("recommended_actions"), // Array of action items
+  
+  // Status
+  acknowledged: boolean("acknowledged").default(false),
+  acknowledgedBy: varchar("acknowledged_by").references(() => users.id),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  dismissed: boolean("dismissed").default(false),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertRetentionAlertSchema = createInsertSchema(retentionAlerts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertRetentionAlert = z.infer<typeof insertRetentionAlertSchema>;
+export type RetentionAlert = typeof retentionAlerts.$inferSelect;
+
+export const turnoverPredictions = pgTable("turnover_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Risk assessment
+  riskScore: integer("risk_score").notNull(), // 0-100
+  riskLevel: text("risk_level").notNull(), // 'low', 'medium', 'high', 'critical'
+  confidence: integer("confidence").notNull(), // 0-100 (AI confidence in prediction)
+  
+  // Risk factors
+  factors: jsonb("factors").notNull(), // Array of risk factors with weights
+  // Example: [{ factor: "low_hours_volatility", weight: 0.3, description: "..." }]
+  
+  // Analysis inputs
+  tenure: integer("tenure_days"), // Days since hire
+  hoursVolatility: decimal("hours_volatility", { precision: 5, scale: 2 }), // Std dev of hours
+  recentHoursTrend: text("recent_hours_trend"), // 'increasing', 'stable', 'decreasing'
+  currentMilestoneProgress: decimal("current_milestone_progress", { precision: 5, scale: 2 }),
+  
+  // Recommendations
+  recommendedActions: jsonb("recommended_actions").notNull(),
+  // Example: [{ action: "schedule_retention_conversation", priority: "high", rationale: "..." }]
+  
+  // AI metadata
+  model: text("model"), // OpenAI model used
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
+  
+  // Validation (for tracking prediction accuracy)
+  actualOutcome: text("actual_outcome"), // 'retained', 'left_before_milestone', 'left_after_milestone'
+  outcomeRecordedAt: timestamp("outcome_recorded_at"),
+  
+  // Timestamps
+  predictedAt: timestamp("predicted_at").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertTurnoverPredictionSchema = createInsertSchema(turnoverPredictions).omit({ id: true, createdAt: true, predictedAt: true });
+export type InsertTurnoverPrediction = z.infer<typeof insertTurnoverPredictionSchema>;
+export type TurnoverPrediction = typeof turnoverPredictions.$inferSelect;
+
+// ============================================================================
+// MULTI-CREDIT BUNDLING - Identify other tax credits beyond WOTC
+// ============================================================================
+
+export const otherTaxCredits = pgTable("other_tax_credits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Credit identification
+  creditType: text("credit_type").notNull(), // 'rd_tax_credit', 'state_hiring_incentive', 'new_markets_tax_credit', 'disabled_access_credit', etc.
+  creditName: text("credit_name").notNull(),
+  creditCategory: text("credit_category"), // 'federal', 'state', 'local'
+  
+  // Eligibility
+  eligibilityScore: integer("eligibility_score").notNull(), // 0-100 (AI confidence)
+  status: text("status").notNull().default("identified"), // 'identified', 'qualified', 'claimed', 'denied', 'expired'
+  
+  // Value
+  estimatedValue: decimal("estimated_value", { precision: 12, scale: 2 }),
+  minimumValue: decimal("minimum_value", { precision: 12, scale: 2 }),
+  maximumValue: decimal("maximum_value", { precision: 12, scale: 2 }),
+  
+  // Criteria & analysis
+  eligibilityCriteria: jsonb("eligibility_criteria").notNull(),
+  // Example: { role: "Software Engineer", location: "CA", qualifyingActivities: [...] }
+  
+  aiAnalysis: jsonb("ai_analysis"),
+  // AI reasoning for why this credit applies
+  
+  // Requirements
+  requiredDocumentation: jsonb("required_documentation"),
+  // Array of docs needed: ["time tracking", "project descriptions", "qualified research activities"]
+  
+  nextSteps: jsonb("next_steps"),
+  // Action items to claim credit
+  
+  // Supporting data
+  jurisdiction: text("jurisdiction"), // State/locality for regional credits
+  expirationDate: timestamp("expiration_date"),
+  claimDeadline: timestamp("claim_deadline"),
+  
+  // Tracking
+  identifiedBy: text("identified_by").default("ai_scan"), // 'ai_scan', 'manual_review', 'user_submitted'
+  
+  // Notes
+  notes: text("notes"),
+  
+  // Timestamps
+  identifiedAt: timestamp("identified_at").notNull().defaultNow(),
+  lastReviewedAt: timestamp("last_reviewed_at"),
+  claimedAt: timestamp("claimed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertOtherTaxCreditSchema = createInsertSchema(otherTaxCredits).omit({ id: true, createdAt: true, updatedAt: true, identifiedAt: true });
+export type InsertOtherTaxCredit = z.infer<typeof insertOtherTaxCreditSchema>;
+export type OtherTaxCredit = typeof otherTaxCredits.$inferSelect;
