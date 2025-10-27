@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -8,6 +9,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
+import { registerServiceWorker } from "@/utils/registerSW";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import EmployeeQuestionnaire from "@/pages/employee/questionnaire";
@@ -151,10 +154,15 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    registerServiceWorker();
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <PWAInstallPrompt />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>
