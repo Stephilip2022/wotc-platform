@@ -22,6 +22,10 @@ import EmployerHoursPage from "@/pages/employer/hours";
 import BillingPage from "@/pages/employer/billing";
 import InvoiceDetailPage from "@/pages/employer/invoice-detail";
 import EmployerCreditsPage from "@/pages/employer/credits";
+import ApiKeysPage from "@/pages/employer/api-keys";
+import WebhooksPage from "@/pages/employer/webhooks";
+import ApiDocsPage from "@/pages/employer/api-docs";
+import ApiUsagePage from "@/pages/employer/api-usage";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminEmployersPage from "@/pages/admin/employers";
 import AdminScreeningsPage from "@/pages/admin/screenings";
@@ -105,6 +109,10 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/employer/credits" component={EmployerCreditsPage} />
                   <Route path="/employer/billing" component={BillingPage} />
                   <Route path="/employer/invoice/:id" component={InvoiceDetailPage} />
+                  <Route path="/employer/api-keys" component={ApiKeysPage} />
+                  <Route path="/employer/webhooks" component={WebhooksPage} />
+                  <Route path="/employer/api-docs" component={ApiDocsPage} />
+                  <Route path="/employer/api-usage" component={ApiUsagePage} />
                   <Route component={NotFound} />
                 </>
               )}

@@ -23,6 +23,10 @@ import {
   CheckSquare,
   Clock,
   KeyRound,
+  Code,
+  Webhook,
+  Book,
+  Activity,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -56,6 +60,13 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Settings", url: "/employer/settings", icon: Settings },
   ];
 
+  const developerItems = [
+    { title: "API Keys", url: "/employer/api-keys", icon: KeyRound },
+    { title: "Webhooks", url: "/employer/webhooks", icon: Webhook },
+    { title: "API Docs", url: "/employer/api-docs", icon: Book },
+    { title: "API Usage", url: "/employer/api-usage", icon: Activity },
+  ];
+
   const items = role === "admin" ? adminItems : employerItems;
 
   return (
@@ -85,6 +96,30 @@ export function AppSidebar({ role }: AppSidebarProps) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        
+        {role === "employer" && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Developer</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {developerItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={location === item.url}
+                      data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="p-4">
         <p className="text-xs text-muted-foreground">
