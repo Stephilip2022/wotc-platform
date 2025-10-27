@@ -38,6 +38,7 @@ import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename
 import notificationsRouter from "./routes/notifications";
 import apiKeysRouter from "./routes/apiKeys";
 import publicApiRouter from "./routes/publicApi";
+import webhooksRouter from "./routes/webhooks";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -102,6 +103,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Mount API key management routes
   app.use("/api/developer/keys", isAuthenticated, apiKeysRouter);
+  
+  // Mount webhook management routes
+  app.use("/api/webhooks", isAuthenticated, webhooksRouter);
 
   // ============================================================================
   // AUTHENTICATION ROUTES

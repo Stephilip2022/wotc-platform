@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { registerDemoPortalRoutes } from "./routes-demo-portal";
 import { setupVite, serveStatic, log } from "./vite";
 import { startOrchestrator } from "./utils/submissionOrchestrator";
+import { startWebhookRetryWorker } from "./utils/webhookService";
 
 const app = express();
 
@@ -91,5 +92,9 @@ app.use((req, res, next) => {
       retryDelayBase: 5000, // 5 second base delay for retries
       maxRetries: 3, // Retry failed submissions up to 3 times
     });
+    
+    // Start the webhook retry worker
+    // This processes pending webhook retries every minute
+    startWebhookRetryWorker(60000); // Check for retries every minute
   });
 })();
