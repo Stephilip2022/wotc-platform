@@ -1,0 +1,504 @@
+# WOTC Optimization Platform - Complete Feature List
+
+## Platform Overview
+Comprehensive enterprise SaaS platform for managing the complete Work Opportunity Tax Credit lifecycle, from employee screening to state submission automation, credit calculation, and billing.
+
+---
+
+## Core Features
+
+### 1. Multi-Portal Architecture
+- **Employee Portal**: Self-service questionnaire completion with gamified experience
+- **Employer Portal**: Full workforce management, screening oversight, and analytics
+- **Admin Portal**: Platform-wide management, revenue tracking, and system configuration
+- **White-Label Support**: Licensee revenue sharing and branded experiences
+
+### 2. Employer Onboarding & Management
+- **Digital ETA Form 9198**: Complete electronic employer registration with digital signatures
+- **QR Code Generation**: Automatic QR codes for employee screening invitations
+- **Custom Questionnaire URLs**: Unique screening links for each employer
+- **Multi-Employer Support**: Manage unlimited employer accounts with tenant isolation
+- **Employer Settings**: Configurable branding, notification preferences, and billing settings
+
+### 3. Employee Screening System
+- **Intelligent Questionnaire**: Conditional logic adapts questions based on previous answers
+- **AI-Powered Assistance**: 
+  - Question simplification with reading level adjustment (6th-14th grade)
+  - Spanish translation support
+  - Flesch-Kincaid readability analysis
+  - Contextual help and clarifications
+- **Target Group Detection**: Automatically identifies all applicable WOTC categories
+- **Progress Tracking**: Save and resume functionality with completion percentages
+- **Mobile-Optimized**: Responsive design works on any device
+
+### 4. WOTC Eligibility & Certification
+- **Automated Eligibility Determination**: Rules engine evaluates all 10+ WOTC target groups
+- **AI Eligibility Prediction**: Machine learning predicts certification likelihood with confidence scores
+- **Form Generation**: Auto-creates IRS Form 8850 and ETA Form 9061
+- **Certification Tracking**: Monitor status from screening through final determination
+- **Multi-Status Support**: pending, eligible, not_eligible, certified, denied
+- **Expiration Management**: Track certification dates and renewal requirements
+
+### 5. Document Management
+- **Secure File Upload**: Support for DD-214s, TANF letters, SNAP cards, unemployment documentation
+- **Object Storage Integration**: Cloud-based storage with public/private directories
+- **Document Verification**: Admin review and approval workflow
+- **File Type Validation**: Accepts PDF, JPEG, PNG, DOC, DOCX up to 10MB
+- **Document Organization**: Link supporting docs to specific screenings
+
+### 6. Hours Worked & Payroll Integration
+- **Manual Hours Entry**: Direct input by employers with period tracking
+- **CSV Import System**:
+  - Intelligent column detection
+  - Employee matching algorithms
+  - Reusable mapping templates
+  - Batch processing with validation
+- **Real-Time Payroll Sync**:
+  - ADP integration (hours + wages)
+  - Gusto integration (hours + wages)
+  - QuickBooks Payroll integration
+  - Automatic employee matching via integrationSyncedRecords
+- **Hours Tracking**: Decimal precision (10,2) for accurate calculations
+- **Wages Tracking**: Currency precision (12,2) for payroll data
+
+### 7. Credit Calculation Engine
+- **Automated WOTC Calculations**: Real-time credit computation based on:
+  - Target group category
+  - Hours worked (120-hour and 400-hour thresholds)
+  - Wages earned
+  - First-year vs. second-year credits
+- **Multiple Credit Stages**: Projected, in-progress, claimed, denied
+- **Credit Projections**: Estimate future value based on hiring pipeline
+- **Historical Tracking**: Complete audit trail of all credit calculations
+
+---
+
+## Phase 4: State Automation (Production-Ready)
+
+### State Portal Automation
+- **56 State Portals Configured**: All US states + DC, Puerto Rico, Virgin Islands
+- **7 Automation-Enabled States**: CA, TX, NY, FL, IL, OH, PA with Playwright bots
+- **Credential Management**:
+  - AES-256-GCM encryption for portal credentials
+  - Automatic credential rotation with audit trail
+  - Secure storage in encrypted database fields
+- **MFA Token Handling**: TOTP/authenticator app integration for multi-factor auth
+- **Submission Tracking**: Complete history with success/failure rates
+
+### OCR-Powered Determination Parsing
+- **Automatic Letter Processing**: Extract certification details from PDF determination letters
+- **Data Extraction**:
+  - Certification numbers
+  - Approval/denial status
+  - Effective dates
+  - Target group classifications
+- **Status Auto-Update**: Sync screening status based on parsed results
+
+---
+
+## Phase 5: AI-Powered Intelligence (Production-Ready)
+
+### Eligibility Prediction Engine
+- **AI Analysis**: Evaluate applicant demographics, employment history, questionnaire responses
+- **Confidence Scoring**: 0-100% likelihood of WOTC certification
+- **Target Group Recommendations**: Suggest most likely qualifying categories
+- **Detailed Reasoning**: Explain AI predictions with supporting factors
+- **Prediction Validation**: Track accuracy by comparing predictions to actual determinations
+
+### Smart Questionnaire Optimization
+- **Real-Time Question Simplification**: Adjust complexity on-the-fly
+- **Reading Level Control**: 6th-14th grade Flesch-Kincaid targeting
+- **Spanish Translation**: Automatic bilingual support
+- **Batch Processing**: Optimize entire questionnaire sets
+- **Token Usage Tracking**: Monitor OpenAI API costs
+
+### Predictive Credit Forecasting
+- **Historical Data Analysis**: Learn from past screening outcomes
+- **Conversion Rate Tracking**: Monitor screening-to-certification ratios
+- **Hiring Pipeline Projections**: Estimate future credit value
+- **Target Group Distribution**: Analyze typical qualification patterns
+- **Automated Estimates**: Calculate expected credits based on hiring volume
+
+---
+
+## Phase 6: Enterprise Integrations (Production-Ready)
+
+### OAuth 2.0 Infrastructure
+- **Token Management**: AES-256-GCM encrypted storage
+- **Automatic Refresh**: Background token renewal logic
+- **Webhook Validation**: HMAC signature verification
+- **Retry Mechanisms**: Exponential backoff for failed requests
+- **Connection Health Monitoring**: Track integration status
+
+### ATS/HCM Connectors
+- **Greenhouse Integration**:
+  - Bidirectional candidate sync
+  - Automatic WOTC screening workflow
+  - Results export back to Greenhouse
+- **BambooHR Integration**:
+  - Employee data sync
+  - Certification status updates
+  - Auto-create screening records
+
+### Payroll Integrations
+- **ADP Workforce Now**: Real-time hours and wages sync
+- **Gusto**: Automatic payroll data import
+- **QuickBooks Payroll**: Hours and compensation tracking
+- **Employee Matching**: Intelligent record linking via integrationSyncedRecords
+- **Auto Recalculation**: Update credit values when payroll data changes
+
+### Accounting Exports
+- **QuickBooks Integration**:
+  - Journal entries for certified credits
+  - Supporting documentation attachments
+  - Credit memos for CPA workflows
+- **Xero Integration**:
+  - Automated tax filing prep
+  - Detailed credit tracking
+  - Audit-ready documentation
+
+### Integration Monitoring Dashboard
+- **Sync Status Tracking**: Real-time connection health
+- **Error Logs**: Detailed failure analysis
+- **Data Flow Statistics**: Monitor record counts and sync frequency
+- **Rate Limit Monitoring**: Track API usage across providers
+- **Automated Scheduler**: Configurable sync intervals (real-time, hourly, daily)
+
+---
+
+## Phase 7: Zero-Touch Processing (Production-Ready)
+
+### Submission Readiness Detection
+- **Automatic Monitoring**: Continuously validate screening completion
+- **Readiness Scoring**: 0-100 score based on form completion, state credentials
+- **Missing Field Identification**: Pinpoint incomplete data
+- **Priority Calculation**: 1-10 urgency based on hire dates and deadlines
+
+### Intelligent Queue Manager
+- **Batch Optimization**: Group screenings by state/employer/submission window
+- **State Portal Limits**: Respect maxBatchSize for each state
+- **Priority Escalation**: Urgent items (priority ≥8) processed first
+- **Race Condition Safety**: Database transactions ensure single-claim guarantees
+
+### Automated Submission Orchestrator
+- **Background Worker**: Polls for pending submissions every 60 seconds
+- **Concurrency Control**: Max 5 simultaneous submissions
+- **Playwright Integration**: Browser automation for state portals
+- **Retry Logic**: Exponential backoff (3 attempts, 5-second base delay)
+- **MFA Handling**: Automatic TOTP/authenticator challenges
+
+### Monitoring & Alerting System
+- **Real-Time Metrics**: Success rates, processing times, job statistics
+- **Anomaly Detection**: High failure rates, stuck jobs, repeated failures
+- **Email Notifications**: Submission success/failure alerts
+- **State-by-State Performance**: Breakdown by portal
+- **Auto-Refreshing UI**: Live dashboard with filtering
+
+---
+
+## Phase 8A: Mobile Experience (PWA)
+
+### Progressive Web App
+- **Installable**: Add to home screen on iOS/Android
+- **Offline Capability**: Service worker for offline screening completion
+- **Push Notifications**: Real-time alerts for screening status updates
+- **Background Sync**: Queue responses when offline, sync when reconnected
+- **Responsive Design**: Optimized for mobile, tablet, desktop
+
+### Web Push Notifications
+- **Screening Events**: Started, completed, eligible, certified, denied
+- **Submission Updates**: Queued, success, failed
+- **Credit Milestones**: Calculated, claimed
+- **Custom Preferences**: User-configurable notification settings
+- **Cross-Platform**: Works on Chrome, Firefox, Safari, Edge
+
+---
+
+## Phase 8B: Public API & Developer Platform (Production-Ready)
+
+### API Key Management
+- **Secure Generation**: 64-byte crypto.randomBytes hex tokens
+- **bcrypt Hashing**: Database-backed secure storage
+- **Scope-Based Permissions**: employees:read/write, screenings:read/write, credits:read
+- **Expiration Control**: Configurable key lifetimes
+- **Rate Limiting**: 100 req/hour default (configurable per key)
+- **Usage Tracking**: Monitor API consumption
+- **Key Rotation**: Update keys without downtime
+
+### REST API v1
+- **Employee Endpoints**: CRUD operations with pagination
+- **Screening Endpoints**: List, filter, sort screenings
+- **Credit Endpoints**: Retrieve calculated credits
+- **Pagination Support**: page/limit parameters
+- **Advanced Filtering**: status, dateRange queries
+- **Sorting**: Any field + asc/desc direction
+- **Tenant Isolation**: API key enforces employer boundary
+- **Standard HTTP Codes**: 200/201/400/401/403/404/429/500
+
+### Webhook System
+- **15 Event Types**: 
+  - screening.completed, screening.eligible, screening.certified
+  - submission.queued, submission.success, submission.failed
+  - credit.calculated, credit.claimed
+  - employee.created, employee.updated
+  - And more...
+- **HMAC-SHA256 Signatures**: Secure webhook verification
+- **Automatic Retries**: Exponential backoff up to configurable maxRetries
+- **Delivery History**: Complete audit trail with pagination
+- **Secret Rotation**: Update webhook secrets safely
+- **Test Delivery**: Verify endpoint configuration
+
+### Developer Portal UI
+- **API Keys Page**: CRUD interface with scope selection, masked display, localStorage persistence
+- **Webhooks Page**: 
+  - Endpoint management with event subscription
+  - Delivery history with filtering
+  - Test webhook functionality
+  - Secret regeneration
+- **API Docs Page**: 
+  - Interactive documentation for 6 endpoints
+  - Code examples in cURL, Node.js, Python
+  - Auto-populating API key examples
+- **API Usage Page**:
+  - Total requests, avg response time, error rate KPIs
+  - Per-key utilization tracking
+  - Top-10 endpoint performance metrics
+
+---
+
+## Phase 9: Retention & Multi-Credit Optimization (NEW - Just Completed)
+
+### Retention-Based Credit Optimization
+- **Milestone Tracking**: Monitor progress toward 120-hour and 400-hour thresholds
+- **Automated Calculations**:
+  - Current hours / target hours percentage
+  - Average hours per week (8-week rolling)
+  - Estimated days to milestone
+  - Projected completion date
+- **Proactive Alerts**:
+  - 80% milestone alert (medium severity)
+  - 90% milestone alert (high severity)
+  - High turnover risk warnings (critical severity)
+- **AI Turnover Prediction**:
+  - OpenAI analysis of tenure, hours volatility, work patterns
+  - Risk score (0-100) with confidence level
+  - Weighted risk factors with explanations
+  - Recommended retention actions
+  - Prediction validation tracking
+- **Retention Dashboard**:
+  - At-risk employee table with progress bars
+  - Days remaining to milestone
+  - Turnover risk badges
+  - Potential credit value at risk
+  - Actionable retention recommendations
+
+### Multi-Credit Bundling
+- **AI Credit Detection**: Scan employees for additional tax credit opportunities
+- **Federal R&D Tax Credit**:
+  - Identifies software engineers, data scientists, engineers
+  - Analyzes qualifying research activities
+  - Estimates credit value with min/max ranges
+  - Required documentation guidance
+- **State Hiring Incentives**:
+  - California Competes Tax Credit
+  - NY Excelsior Jobs Program
+  - Texas Enterprise Fund
+  - Florida QTI Tax Refund
+  - Location-based eligibility analysis
+- **New Markets Tax Credit**:
+  - Qualified low-income community detection
+  - Census tract validation
+  - Investment structuring guidance
+- **Disabled Access Credit**:
+  - Links to WOTC disability target groups
+  - Accessibility improvement tracking
+  - Form 8826 filing support
+- **Credit Management**:
+  - Scan individual employees or batch process
+  - Track status (identified, qualified, claimed, denied)
+  - Estimated value aggregation
+  - Next steps and documentation requirements
+
+---
+
+## Billing & Revenue Management
+
+### Subscription Plans
+- **Flexible Pricing**: Per-employee, per-screening, flat-rate options
+- **Tiered Plans**: Starter, Professional, Enterprise
+- **Trial Periods**: Configurable trial lengths
+- **Feature Gating**: Plan-based feature access control
+
+### Stripe Integration
+- **Payment Processing**: Credit card, ACH, wire transfer support
+- **Subscription Management**: Auto-renewal, upgrades, downgrades
+- **Invoice Generation**:
+  - Professional PDF invoices
+  - Itemized line items
+  - Tax calculations
+  - Payment terms (Net 30, Net 60)
+- **Payment Tracking**: Paid, pending, overdue status
+- **Revenue Recognition**: MRR, ARR calculations
+
+### White-Label Revenue Sharing
+- **Licensee Management**: Support for resellers and partners
+- **Commission Tracking**: Percentage-based or flat-fee splits
+- **Revenue Attribution**: Link screenings to licensees
+- **Partner Dashboards**: Revenue analytics for each licensee
+
+---
+
+## Analytics & Reporting
+
+### Employer Dashboard
+- **Key Metrics**:
+  - Total employees screened
+  - Certification success rate
+  - Total credit value (projected + actual)
+  - Average credit per employee
+- **Credit Projections**: Pipeline forecasting
+- **ROI Calculations**: Platform cost vs. credit value
+- **Trend Analysis**: Month-over-month comparisons
+- **Export Capabilities**: CSV download of all data
+
+### Admin Dashboard
+- **System-Wide Statistics**:
+  - Total screenings across all employers
+  - Platform-wide certification rates
+  - Revenue tracking (MRR, ARR)
+  - Churn analysis
+- **Employer Performance**: Success rates by employer
+- **State Automation Metrics**: Portal-by-portal success rates
+- **Integration Health**: Connection status monitoring
+
+### CSV Export System
+- **WOTC Export**: IRS-compliant CSV format
+- **State-Specific Formats**: Custom exports for each state portal
+- **Batch Processing**: Export hundreds of screenings at once
+- **Filtering Options**: Date ranges, status, target groups
+- **Automated Naming**: Generated filenames with timestamps
+
+---
+
+## Email Notifications (Resend Integration)
+
+### Transactional Emails
+- **Screening Invitations**: Welcome emails with QR codes and questionnaire links
+- **Status Updates**: Eligible, certified, denied notifications
+- **Invoice Delivery**: Automatic invoice emails with PDF attachments
+- **Payment Reminders**: Overdue payment alerts
+- **Submission Notifications**: State portal submission confirmations
+- **Branded Templates**: Responsive HTML emails
+- **Personalization**: Employee/employer-specific content
+
+---
+
+## Security & Compliance
+
+### Authentication & Authorization
+- **Replit Auth (OIDC)**: Enterprise-grade authentication
+- **Role-Based Access Control**: Employee, Employer, Admin, Licensee roles
+- **Session Management**: PostgreSQL-backed persistent sessions
+- **HTTP-Only Cookies**: Secure, CSRF-protected
+- **API Key Authentication**: Bearer token support for public API
+
+### Data Security
+- **Encryption**:
+  - AES-256-GCM for sensitive fields (SSN, credentials)
+  - bcrypt for password/API key hashing
+  - TLS for all data in transit
+- **PII Protection**: Encrypted storage for social security numbers
+- **Audit Trails**: Complete history of data changes
+- **Data Retention Policies**: Configurable retention periods
+- **Multi-Tenancy**: Strong employer data isolation
+
+### Compliance
+- **IRS Form Support**: 8850, 9061 generation
+- **ETA Form 9198**: Digital employer registration
+- **WOTC Regulations**: Built-in compliance with federal rules
+- **State Requirements**: Portal-specific rule enforcement
+- **Data Privacy**: GDPR-ready architecture
+
+---
+
+## Technical Architecture
+
+### Frontend
+- **React 18**: Modern component-based UI
+- **TypeScript**: Type-safe development
+- **Tailwind CSS**: Utility-first styling
+- **Shadcn/ui**: Accessible component library (Radix UI)
+- **TanStack Query**: Server state management
+- **Wouter**: Lightweight routing
+- **React Hook Form + Zod**: Type-safe form validation
+
+### Backend
+- **Node.js + Express**: RESTful API server
+- **TypeScript**: End-to-end type safety
+- **Drizzle ORM**: Type-safe database queries
+- **PostgreSQL**: Production-grade relational database (Neon serverless)
+- **OpenAI Integration**: GPT-4 for AI features
+- **Stripe SDK**: Payment processing
+- **Playwright**: Browser automation for state portals
+
+### Infrastructure
+- **Neon Serverless PostgreSQL**: Scalable database with rollback support
+- **Object Storage**: Cloud file storage for documents
+- **Resend**: Transactional email delivery
+- **Replit Deployment**: One-click publishing with TLS
+- **Environment Secrets**: Secure credential management
+
+---
+
+## Development & Operations
+
+### Developer Experience
+- **Type Safety**: Shared TypeScript schemas between frontend/backend
+- **Hot Reload**: Instant feedback during development
+- **LSP Support**: Full IDE integration
+- **Database Migrations**: Drizzle Kit for schema management
+- **Code Organization**: Modular, maintainable architecture
+
+### Monitoring & Debugging
+- **Comprehensive Logging**: Structured application logs
+- **Error Tracking**: Detailed error messages with stack traces
+- **Performance Metrics**: API response times, database query performance
+- **Integration Monitoring**: Real-time connection health checks
+- **Webhook Delivery Logs**: Complete audit trail
+
+### Quality Assurance
+- **E2E Testing**: Playwright-based browser testing
+- **API Testing**: Automated endpoint validation
+- **Type Checking**: Compile-time error prevention
+- **Schema Validation**: Zod-based runtime validation
+- **Database Constraints**: Foreign keys, uniqueness enforcement
+
+---
+
+## Recent Updates Summary (Phase 9)
+
+### What's New
+1. **Retention Optimization** - Prevent employee turnover before milestone hours with AI-powered risk prediction and proactive alerts
+2. **Multi-Credit Bundling** - Automatically identify R&D tax credits, state hiring incentives, NMTC, and disabled access credits
+3. **Enhanced ROI** - Maximize total tax credit value beyond WOTC alone
+
+### Coming Soon
+- Additional state incentive programs
+- Enhanced predictive analytics
+- Advanced reporting dashboards
+- Mobile app improvements
+
+---
+
+## Support & Documentation
+
+- **Interactive API Documentation**: Built-in docs with code examples
+- **Webhook Testing**: Test delivery endpoints before going live
+- **Usage Analytics**: Track API consumption and optimize usage
+- **Developer Portal**: Complete self-service integration management
+
+---
+
+**Last Updated**: October 27, 2025
+**Version**: Phase 9 Complete
+**Platform Status**: Production-Ready
