@@ -43,6 +43,7 @@ import AnalyticsPage from "@/pages/admin/analytics";
 import AuditLogsPage from "@/pages/admin/audit-logs";
 import IntegrationsPage from "@/pages/employer/integrations";
 import DocumentOCRPage from "@/pages/admin/document-ocr";
+import PricingConfigPage from "@/pages/admin/pricing-config";
 import MultiCreditPage from "@/pages/employer/multi-credit";
 import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
 import BulkImportPage from "@/pages/employer/bulk-import";
@@ -110,6 +111,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/analytics" component={AnalyticsPage} />
                   <Route path="/admin/audit" component={AuditLogsPage} />
                   <Route path="/admin/document-ocr" component={DocumentOCRPage} />
+                  <Route path="/admin/pricing" component={PricingConfigPage} />
                   <Route component={NotFound} />
                 </>
               ) : (

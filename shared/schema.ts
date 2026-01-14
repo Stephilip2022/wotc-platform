@@ -2351,3 +2351,123 @@ export const complianceReports = pgTable("compliance_reports", {
 export const insertComplianceReportSchema = createInsertSchema(complianceReports).omit({ id: true, createdAt: true });
 export type InsertComplianceReport = z.infer<typeof insertComplianceReportSchema>;
 export type ComplianceReport = typeof complianceReports.$inferSelect;
+
+// ============================================================================
+// PRICING PLANS - Flexible pricing model configurations
+// ============================================================================
+
+export const pricingPlans = pgTable("pricing_plans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  
+  // Pricing model type
+  pricingModel: text("pricing_model").notNull(), // 'percentage', 'milestone_flat_fee', 'per_screening', 'deferred_annual'
+  
+  // Model 1: Traditional percentage of credits
+  percentageRate: decimal("percentage_rate", { precision: 5, scale: 2 }), // e.g., 15.00
+  
+  // Model 2: Milestone flat fees (per target group)
+  milestoneFeesConfig: jsonb("milestone_fees_config"), // { targetGroup: { submittal: X, certification: Y, hours120: Z, hours400: W } }
+  
+  // Model 3: Per-screening volume pricing
+  perScreeningConfig: jsonb("per_screening_config"), // { tiers: [{ minScreenings: 1, maxScreenings: 50, pricePerScreening: 30 }, ...] }
+  
+  // Model 4: Deferred annual billing
+  deferredConfig: jsonb("deferred_config"), // { monthlyBase: 199, annualPercentage: 9.5, billingDate: "03-15" }
+  
+  // Common settings
+  monthlySubscriptionFee: decimal("monthly_subscription_fee", { precision: 10, scale: 2 }).default("0.00"),
+  minimumAnnualFee: decimal("minimum_annual_fee", { precision: 10, scale: 2 }),
+  setupFee: decimal("setup_fee", { precision: 10, scale: 2 }).default("0.00"),
+  
+  // Status
+  isActive: boolean("is_active").default(true),
+  isDefault: boolean("is_default").default(false),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertPricingPlanSchema = createInsertSchema(pricingPlans).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPricingPlan = z.infer<typeof insertPricingPlanSchema>;
+export type PricingPlan = typeof pricingPlans.$inferSelect;
+
+// ============================================================================
+// EMPLOYER BILLING - Links employers to pricing plans and tracks billing
+// ============================================================================
+
+export const employerBilling = pgTable("employer_billing", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  pricingPlanId: varchar("pricing_plan_id").references(() => pricingPlans.id),
+  
+  // Custom overrides (if different from plan defaults)
+  customPercentageRate: decimal("custom_percentage_rate", { precision: 5, scale: 2 }),
+  customMonthlyFee: decimal("custom_monthly_fee", { precision: 10, scale: 2 }),
+  customMilestoneConfig: jsonb("custom_milestone_config"),
+  
+  // Billing status
+  billingStatus: text("billing_status").default("active"), // 'active', 'suspended', 'pending'
+  
+  // Deferred billing specific
+  annualBillingDate: text("annual_billing_date"), // e.g., "03-15"
+  form5884Released: boolean("form_5884_released").default(false),
+  lastAnnualInvoiceDate: timestamp("last_annual_invoice_date"),
+  lastAnnualInvoiceAmount: decimal("last_annual_invoice_amount", { precision: 12, scale: 2 }),
+  lastAnnualInvoicePaid: boolean("last_annual_invoice_paid").default(false),
+  
+  // Contract details
+  contractStartDate: timestamp("contract_start_date"),
+  contractEndDate: timestamp("contract_end_date"),
+  
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_employer_billing_employer").on(table.employerId),
+  index("idx_employer_billing_plan").on(table.pricingPlanId),
+]);
+
+export const insertEmployerBillingSchema = createInsertSchema(employerBilling).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEmployerBilling = z.infer<typeof insertEmployerBillingSchema>;
+export type EmployerBilling = typeof employerBilling.$inferSelect;
+
+// ============================================================================
+// BILLING EVENTS - Track billable events for invoicing
+// ============================================================================
+
+export const billingEvents = pgTable("billing_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").references(() => employees.id),
+  screeningId: varchar("screening_id").references(() => screenings.id),
+  
+  // Event type
+  eventType: text("event_type").notNull(), // 'screening', 'submittal', 'certification', 'hours_120', 'hours_400', 'monthly_subscription', 'annual_invoice'
+  
+  // Target group (for milestone-based billing)
+  targetGroup: text("target_group"),
+  
+  // Financial
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  creditAmount: decimal("credit_amount", { precision: 12, scale: 2 }), // Associated WOTC credit amount
+  
+  // Billing status
+  invoiced: boolean("invoiced").default(false),
+  invoiceId: varchar("invoice_id"),
+  invoicedAt: timestamp("invoiced_at"),
+  
+  // Timestamps
+  eventDate: timestamp("event_date").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_billing_events_employer").on(table.employerId),
+  index("idx_billing_events_type").on(table.eventType),
+  index("idx_billing_events_invoiced").on(table.invoiced),
+]);
+
+export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({ id: true, createdAt: true });
+export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
+export type BillingEvent = typeof billingEvents.$inferSelect;
