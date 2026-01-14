@@ -28,6 +28,9 @@ import {
   Book,
   Activity,
   TrendingUp,
+  Link2,
+  Palette,
+  Bot,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -44,6 +47,8 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Employers", url: "/admin/employers", icon: Building2 },
     { title: "Screenings", url: "/admin/screenings", icon: CheckSquare },
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
+    { title: "White-Label", url: "/admin/licensees", icon: Palette },
+    { title: "Submissions", url: "/admin/submissions", icon: Bot },
     { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "State Automation", url: "/admin/automation", icon: Settings },
     { title: "State Credentials", url: "/admin/state-credentials", icon: KeyRound },
@@ -56,6 +61,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Screenings", url: "/employer/screenings", icon: ClipboardCheck },
     { title: "Hours", url: "/employer/hours", icon: Clock },
     { title: "Retention", url: "/employer/retention", icon: TrendingUp },
+    { title: "Integrations", url: "/employer/integrations", icon: Link2 },
     { title: "Documents", url: "/employer/documents", icon: FolderOpen },
     { title: "Credits", url: "/employer/credits", icon: DollarSign },
     { title: "Billing", url: "/employer/billing", icon: DollarSign },

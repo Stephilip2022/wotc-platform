@@ -41,6 +41,8 @@ import publicApiRouter from "./routes/publicApi";
 import webhooksRouter from "./routes/webhooks";
 import retentionRouter from "./routes/retention";
 import multiCreditRouter from "./routes/multiCredit";
+import integrationsRouter from "./routes/integrations";
+import { translateToSpanish, batchTranslateToSpanish, spanishUIStrings } from "./services/translationService";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -114,6 +116,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Mount multi-credit bundling routes
   app.use("/api/credits", isAuthenticated, multiCreditRouter);
+
+  // Mount integrations routes
+  app.use("/api/integrations", isAuthenticated, integrationsRouter);
+
+  // ============================================================================
+  // TRANSLATION ROUTES
+  // ============================================================================
+
+  // Translate single text to Spanish
+  app.post("/api/translate", isAuthenticated, async (req: any, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: "Text is required" });
+      }
+      const result = await translateToSpanish(text);
+      res.json(result);
+    } catch (error) {
+      console.error("Translation error:", error);
+      res.status(500).json({ error: "Failed to translate text" });
+    }
+  });
+
+  // Batch translate multiple texts to Spanish
+  app.post("/api/translate/batch", isAuthenticated, async (req: any, res) => {
+    try {
+      const { texts } = req.body;
+      if (!texts || !Array.isArray(texts)) {
+        return res.status(400).json({ error: "Texts array is required" });
+      }
+      const result = await batchTranslateToSpanish(texts);
+      res.json(result);
+    } catch (error) {
+      console.error("Batch translation error:", error);
+      res.status(500).json({ error: "Failed to translate texts" });
+    }
+  });
+
+  // Get pre-translated UI strings
+  app.get("/api/translate/ui-strings", isAuthenticated, async (req: any, res) => {
+    res.json(spanishUIStrings);
+  });
 
   // ============================================================================
   // AUTHENTICATION ROUTES

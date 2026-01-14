@@ -38,6 +38,8 @@ import RevenuemanagementPage from "@/pages/admin/revenue";
 import StateAutomationPage from "@/pages/admin/state-automation";
 import StateCredentialsPage from "@/pages/admin/state-credentials";
 import SubmissionMonitoringPage from "@/pages/admin/submission-monitoring";
+import LicenseesPage from "@/pages/admin/licensees";
+import IntegrationsPage from "@/pages/employer/integrations";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -97,7 +99,8 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/export" component={WOTCExportPage} />
                   <Route path="/admin/automation" component={StateAutomationPage} />
                   <Route path="/admin/state-credentials" component={StateCredentialsPage} />
-                  <Route path="/admin/monitoring" component={SubmissionMonitoringPage} />
+                  <Route path="/admin/submissions" component={SubmissionMonitoringPage} />
+                  <Route path="/admin/licensees" component={LicenseesPage} />
                   <Route component={NotFound} />
                 </>
               ) : (
@@ -108,6 +111,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/employer/screenings" component={ScreeningsPage} />
                   <Route path="/employer/hours" component={EmployerHoursPage} />
                   <Route path="/employer/retention" component={RetentionPage} />
+                  <Route path="/employer/integrations" component={IntegrationsPage} />
                   <Route path="/employer/credits" component={EmployerCreditsPage} />
                   <Route path="/employer/billing" component={BillingPage} />
                   <Route path="/employer/invoice/:id" component={InvoiceDetailPage} />
