@@ -42,6 +42,8 @@ import webhooksRouter from "./routes/webhooks";
 import retentionRouter from "./routes/retention";
 import multiCreditRouter from "./routes/multiCredit";
 import integrationsRouter from "./routes/integrations";
+import analyticsRouter from "./routes/analytics";
+import auditRouter, { logAuditEvent } from "./routes/audit";
 import { 
   translateText, 
   translateToSpanish, 
@@ -141,6 +143,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount integrations routes
   app.use("/api/integrations", isAuthenticated, integrationsRouter);
+
+  // Mount analytics routes
+  app.use("/api/analytics", isAuthenticated, analyticsRouter);
+
+  // Mount audit routes  
+  app.use("/api/audit", isAuthenticated, auditRouter);
 
   // ============================================================================
   // TRANSLATION ROUTES

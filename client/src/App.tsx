@@ -39,6 +39,8 @@ import StateAutomationPage from "@/pages/admin/state-automation";
 import StateCredentialsPage from "@/pages/admin/state-credentials";
 import SubmissionMonitoringPage from "@/pages/admin/submission-monitoring";
 import LicenseesPage from "@/pages/admin/licensees";
+import AnalyticsPage from "@/pages/admin/analytics";
+import AuditLogsPage from "@/pages/admin/audit-logs";
 import IntegrationsPage from "@/pages/employer/integrations";
 import { Loader2 } from "lucide-react";
 
@@ -101,6 +103,8 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/state-credentials" component={StateCredentialsPage} />
                   <Route path="/admin/submissions" component={SubmissionMonitoringPage} />
                   <Route path="/admin/licensees" component={LicenseesPage} />
+                  <Route path="/admin/analytics" component={AnalyticsPage} />
+                  <Route path="/admin/audit" component={AuditLogsPage} />
                   <Route component={NotFound} />
                 </>
               ) : (

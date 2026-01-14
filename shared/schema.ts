@@ -2188,3 +2188,107 @@ export const otherTaxCredits = pgTable("other_tax_credits", {
 export const insertOtherTaxCreditSchema = createInsertSchema(otherTaxCredits).omit({ id: true, createdAt: true, updatedAt: true, identifiedAt: true });
 export type InsertOtherTaxCredit = z.infer<typeof insertOtherTaxCreditSchema>;
 export type OtherTaxCredit = typeof otherTaxCredits.$inferSelect;
+
+// ============================================================================
+// AUDIT LOGS - Complete compliance and audit trail
+// ============================================================================
+
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Actor information
+  userId: varchar("user_id").references(() => users.id),
+  userEmail: text("user_email"),
+  userRole: text("user_role"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  
+  // Action details
+  action: text("action").notNull(), // 'create', 'read', 'update', 'delete', 'login', 'logout', 'export', etc.
+  resourceType: text("resource_type").notNull(), // 'employee', 'screening', 'credit', 'employer', etc.
+  resourceId: varchar("resource_id"),
+  
+  // Tenant isolation
+  employerId: varchar("employer_id").references(() => employers.id),
+  
+  // Change tracking
+  previousData: jsonb("previous_data"), // State before change
+  newData: jsonb("new_data"), // State after change
+  changedFields: jsonb("changed_fields"), // List of fields that changed
+  
+  // Context
+  description: text("description"),
+  category: text("category").notNull().default("general"), // 'authentication', 'data_access', 'data_modification', 'admin_action', 'compliance', 'billing'
+  severity: text("severity").notNull().default("info"), // 'info', 'warning', 'critical'
+  
+  // Request context
+  requestId: varchar("request_id"), // For tracing related actions
+  sessionId: varchar("session_id"),
+  
+  // Compliance flags
+  piiAccessed: boolean("pii_accessed").default(false),
+  exportedData: boolean("exported_data").default(false),
+  requiresReview: boolean("requires_review").default(false),
+  reviewed: boolean("reviewed").default(false),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  
+  // Timestamps
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_audit_logs_user").on(table.userId),
+  index("idx_audit_logs_employer").on(table.employerId),
+  index("idx_audit_logs_action").on(table.action),
+  index("idx_audit_logs_resource").on(table.resourceType, table.resourceId),
+  index("idx_audit_logs_timestamp").on(table.timestamp),
+  index("idx_audit_logs_category").on(table.category),
+]);
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// ============================================================================
+// COMPLIANCE REPORTS - Automated compliance documentation
+// ============================================================================
+
+export const complianceReports = pgTable("compliance_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Report type
+  reportType: text("report_type").notNull(), // 'monthly_summary', 'quarterly_audit', 'annual_review', 'data_retention', 'pii_access'
+  reportName: text("report_name").notNull(),
+  
+  // Period
+  periodStart: timestamp("period_start").notNull(),
+  periodEnd: timestamp("period_end").notNull(),
+  
+  // Status
+  status: text("status").notNull().default("generating"), // 'generating', 'completed', 'failed'
+  
+  // Content
+  summary: jsonb("summary"), // Key metrics and findings
+  details: jsonb("details"), // Full report data
+  findings: jsonb("findings"), // Any compliance issues found
+  recommendations: jsonb("recommendations"),
+  
+  // Generated files
+  pdfUrl: text("pdf_url"),
+  csvUrl: text("csv_url"),
+  
+  // Metadata
+  generatedBy: varchar("generated_by").references(() => users.id),
+  generationMethod: text("generation_method").default("scheduled"), // 'scheduled', 'manual', 'triggered'
+  
+  // Timestamps
+  generatedAt: timestamp("generated_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertComplianceReportSchema = createInsertSchema(complianceReports).omit({ id: true, createdAt: true });
+export type InsertComplianceReport = z.infer<typeof insertComplianceReportSchema>;
+export type ComplianceReport = typeof complianceReports.$inferSelect;

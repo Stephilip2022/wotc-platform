@@ -31,6 +31,8 @@ import {
   Link2,
   Palette,
   Bot,
+  BarChart3,
+  Shield,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -43,12 +45,14 @@ export function AppSidebar({ role }: AppSidebarProps) {
 
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
+    { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
     { title: "Revenue", url: "/admin/revenue", icon: DollarSign },
     { title: "Employers", url: "/admin/employers", icon: Building2 },
     { title: "Screenings", url: "/admin/screenings", icon: CheckSquare },
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
     { title: "White-Label", url: "/admin/licensees", icon: Palette },
     { title: "Submissions", url: "/admin/submissions", icon: Bot },
+    { title: "Audit Logs", url: "/admin/audit", icon: Shield },
     { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "State Automation", url: "/admin/automation", icon: Settings },
     { title: "State Credentials", url: "/admin/state-credentials", icon: KeyRound },
