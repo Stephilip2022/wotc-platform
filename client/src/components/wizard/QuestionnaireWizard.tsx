@@ -20,6 +20,8 @@ interface QuestionnaireWizardProps {
   onComplete: (responses: Record<string, any>, sectionStates: SectionState[]) => void;
   initialResponses?: Record<string, any>;
   initialSectionStates?: SectionState[];
+  onQuestionChange?: (question: string, section: string) => void;
+  language?: string;
 }
 
 export default function QuestionnaireWizard({
@@ -28,6 +30,8 @@ export default function QuestionnaireWizard({
   onComplete,
   initialResponses = {},
   initialSectionStates = [],
+  onQuestionChange,
+  language = "en",
 }: QuestionnaireWizardProps) {
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, any>>(initialResponses);
@@ -43,6 +47,32 @@ export default function QuestionnaireWizard({
   const currentSection = sections[currentSectionIndex];
   const progress = ((currentSectionIndex + 1) / sections.length) * 100;
   const completedCount = sectionStates.filter(s => s.status === "completed" || s.status === "skipped").length;
+
+  // Notify parent of current question/section changes
+  useEffect(() => {
+    if (onQuestionChange && currentSection) {
+      const firstTargetGroup = Array.isArray(currentSection.targetGroups) 
+        ? currentSection.targetGroups[0] 
+        : undefined;
+      const sectionName = firstTargetGroup ? getSectionName(firstTargetGroup) : `Section ${currentSectionIndex + 1}`;
+      const currentState = sectionStates.find(s => s.sectionId === currentSection.id);
+      
+      if (currentState?.status === "pending" && currentSection.gatingConfig) {
+        const gatingQ = currentSection.questions?.find(q => q.id === currentSection.gatingConfig?.questionId);
+        if (gatingQ) {
+          onQuestionChange(gatingQ.question, sectionName);
+        }
+      } else if (currentSection.questions?.length > 0) {
+        // Use hasOwnProperty to differentiate between unanswered and falsy-but-valid answers
+        const firstUnanswered = currentSection.questions.find(
+          q => !Object.prototype.hasOwnProperty.call(responses, q.id) || responses[q.id] === undefined || responses[q.id] === null
+        );
+        if (firstUnanswered) {
+          onQuestionChange(firstUnanswered.question, sectionName);
+        }
+      }
+    }
+  }, [currentSectionIndex, sectionStates, responses, currentSection, onQuestionChange]);
 
   // Swipe handlers for mobile navigation
   const swipeHandlers = useSwipeable({

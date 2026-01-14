@@ -1,15 +1,35 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, Globe, MessageCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import QuestionnaireWizard from "@/components/wizard/QuestionnaireWizard";
+import AIAssistantChat from "@/components/AIAssistantChat";
 import type { Questionnaire, QuestionnaireResponse, SectionState } from "@shared/schema";
+
+const SUPPORTED_LANGUAGES = [
+  { code: "en", name: "English" },
+  { code: "es", name: "Espa\u00f1ol" },
+  { code: "fr", name: "Fran\u00e7ais" },
+  { code: "zh", name: "\u4e2d\u6587" },
+  { code: "vi", name: "Ti\u1ebfng Vi\u1ec7t" },
+  { code: "ko", name: "\ud55c\uad6d\uc5b4" },
+  { code: "pt", name: "Portugu\u00eas" },
+  { code: "de", name: "Deutsch" },
+  { code: "ja", name: "\u65e5\u672c\u8a9e" },
+];
 
 export default function EmployeeQuestionnaire() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [currentQuestion, setCurrentQuestion] = useState("");
+  const [currentSection, setCurrentSection] = useState("");
 
   const { data: questionnaire, isLoading } = useQuery<Questionnaire>({
     queryKey: ["/api/employee/questionnaire"],
@@ -23,13 +43,10 @@ export default function EmployeeQuestionnaire() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: { responses: Record<string, any>; sectionStates: SectionState[] }) => {
-      return apiRequest("/api/employee/questionnaire/response", {
-        method: "POST",
-        body: JSON.stringify({
-          questionnaireId: questionnaire?.id,
-          responses: data.responses,
-          completionPercentage: calculateCompletion(data.sectionStates),
-        }),
+      return apiRequest("POST", "/api/employee/questionnaire/response", {
+        questionnaireId: questionnaire?.id,
+        responses: data.responses,
+        completionPercentage: calculateCompletion(data.sectionStates),
       });
     },
     onSuccess: () => {
@@ -39,12 +56,9 @@ export default function EmployeeQuestionnaire() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: { responses: Record<string, any> }) => {
-      return apiRequest("/api/employee/questionnaire/submit", {
-        method: "POST",
-        body: JSON.stringify({
-          questionnaireId: questionnaire?.id,
-          responses: data.responses,
-        }),
+      return apiRequest("POST", "/api/employee/questionnaire/submit", {
+        questionnaireId: questionnaire?.id,
+        responses: data.responses,
       });
     },
     onSuccess: () => {
@@ -146,12 +160,59 @@ export default function EmployeeQuestionnaire() {
   }
 
   return (
-    <QuestionnaireWizard
-      sections={sections}
-      welcomeMessage={questionnaire.description || "Let's see if you qualify for valuable tax credits!"}
-      onComplete={handleComplete}
-      initialResponses={savedResponse?.responses as Record<string, any> || {}}
-      initialSectionStates={[]}
-    />
+    <div className="relative min-h-screen">
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2" data-testid="language-controls">
+        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+          <SelectTrigger className="w-[140px] bg-background" data-testid="select-language">
+            <Globe className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Language" />
+          </SelectTrigger>
+          <SelectContent>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <SelectItem key={lang.code} value={lang.code} data-testid={`language-${lang.code}`}>
+                {lang.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        
+        {!showChat && (
+          <Button
+            size="icon"
+            onClick={() => setShowChat(true)}
+            className="rounded-full h-12 w-12 shadow-lg"
+            data-testid="button-open-chat"
+          >
+            <MessageCircle className="h-6 w-6" />
+          </Button>
+        )}
+      </div>
+
+      <QuestionnaireWizard
+        sections={sections}
+        welcomeMessage={questionnaire.description || "Let's see if you qualify for valuable tax credits!"}
+        onComplete={handleComplete}
+        initialResponses={savedResponse?.responses as Record<string, any> || {}}
+        initialSectionStates={[]}
+        onQuestionChange={(question, section) => {
+          setCurrentQuestion(question);
+          setCurrentSection(section);
+        }}
+        language={selectedLanguage}
+      />
+
+      {showChat && (
+        <AIAssistantChat
+          isOpen={showChat}
+          onClose={() => setShowChat(false)}
+          isMinimized={isChatMinimized}
+          onMinimize={() => setIsChatMinimized(!isChatMinimized)}
+          currentQuestion={currentQuestion}
+          currentSection={currentSection}
+          employeeName="User"
+          language={selectedLanguage}
+        />
+      )}
+    </div>
   );
 }
