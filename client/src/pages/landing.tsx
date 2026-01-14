@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   CheckCircle2, 
   Users, 
@@ -47,18 +48,65 @@ import {
 } from "lucide-react";
 
 export default function LandingPage() {
-  const [annualHires, setAnnualHires] = useState(100);
-  const [avgWage, setAvgWage] = useState(15);
-  const [eligiblePercent, setEligiblePercent] = useState(15);
+  const [annualHires, setAnnualHires] = useState(500);
+  const [selectedState, setSelectedState] = useState("California");
+  const [selectedIndustry, setSelectedIndustry] = useState("Restaurants");
 
-  const calculateCredits = () => {
-    const eligibleEmployees = Math.round(annualHires * (eligiblePercent / 100));
-    const avgCreditPerEmployee = 2400;
-    const totalCredits = eligibleEmployees * avgCreditPerEmployee;
-    return { eligibleEmployees, totalCredits };
+  const industryData: Record<string, { avgCredit: number; eligiblePercent: number }> = {
+    "Restaurants": { avgCredit: 1200, eligiblePercent: 0.20 },
+    "Retail": { avgCredit: 1000, eligiblePercent: 0.17 },
+    "Construction": { avgCredit: 1850, eligiblePercent: 0.17 },
+    "Trucking & Transportation": { avgCredit: 2000, eligiblePercent: 0.30 },
+    "Home Health": { avgCredit: 650, eligiblePercent: 0.30 },
+    "Light Industrial": { avgCredit: 850, eligiblePercent: 0.20 },
+    "Manufacturing": { avgCredit: 850, eligiblePercent: 0.20 },
+    "Warehousing & Distribution": { avgCredit: 850, eligiblePercent: 0.20 },
+    "Nursing & Medical": { avgCredit: 1500, eligiblePercent: 0.06 },
+    "Grocery & Convenience": { avgCredit: 1250, eligiblePercent: 0.15 },
+    "Temporary Staffing": { avgCredit: 1250, eligiblePercent: 0.15 },
+    "Hospitality & Hotels": { avgCredit: 1100, eligiblePercent: 0.22 },
+    "Call Centers": { avgCredit: 950, eligiblePercent: 0.25 },
   };
 
-  const { eligibleEmployees, totalCredits } = calculateCredits();
+  const stateCertRates: Record<string, number> = {
+    "Alabama": 0.71, "Alaska": 0.65, "Arizona": 0.65, "Arkansas": 0.65,
+    "California": 0.65, "Colorado": 0.65, "Connecticut": 0.65, "Delaware": 0.65,
+    "District of Columbia": 0.65, "Florida": 0.65, "Georgia": 0.65, "Hawaii": 0.65,
+    "Idaho": 0.65, "Illinois": 0.69, "Indiana": 0.65, "Iowa": 0.63,
+    "Kansas": 0.65, "Kentucky": 0.65, "Louisiana": 0.70, "Maine": 0.65,
+    "Maryland": 0.72, "Massachusetts": 0.65, "Michigan": 0.75, "Minnesota": 0.65,
+    "Mississippi": 0.75, "Missouri": 0.63, "Montana": 0.65, "Nebraska": 0.63,
+    "Nevada": 0.59, "New Hampshire": 0.80, "New Jersey": 0.63, "New Mexico": 0.75,
+    "New York": 0.60, "North Carolina": 0.65, "North Dakota": 0.63, "Ohio": 0.63,
+    "Oklahoma": 0.61, "Oregon": 0.67, "Pennsylvania": 0.59, "Rhode Island": 0.65,
+    "South Carolina": 0.65, "South Dakota": 0.63, "Tennessee": 0.65, "Texas": 0.65,
+    "Utah": 0.65, "Vermont": 0.65, "Virginia": 0.65, "Washington": 0.67,
+    "West Virginia": 0.65, "Wisconsin": 0.65, "Wyoming": 0.65,
+  };
+
+  const screeningRate = 0.95;
+
+  const calculateCredits = () => {
+    const industry = industryData[selectedIndustry] || { avgCredit: 1200, eligiblePercent: 0.20 };
+    const stateCertRate = stateCertRates[selectedState] || 0.65;
+    
+    const screenedHires = annualHires * screeningRate;
+    const eligibleEmployees = Math.round(screenedHires * industry.eligiblePercent);
+    const certifiedEmployees = Math.round(eligibleEmployees * stateCertRate);
+    const totalCredits = Math.round(certifiedEmployees * industry.avgCredit);
+    
+    return { 
+      screenedHires: Math.round(screenedHires),
+      eligibleEmployees, 
+      certifiedEmployees,
+      totalCredits,
+      avgCredit: industry.avgCredit,
+      eligiblePercent: industry.eligiblePercent,
+      stateCertRate
+    };
+  };
+
+  const calculatorResults = calculateCredits();
 
   const industries = [
     { icon: ShoppingCart, name: "Retail", eligibility: "18-25%", description: "High turnover with entry-level positions" },
@@ -319,70 +367,76 @@ export default function LandingPage() {
                   WOTC Credit Estimator
                 </CardTitle>
                 <CardDescription>
-                  Adjust the sliders based on your hiring volume
+                  Select your state, industry, and enter your annual hires
                 </CardDescription>
               </CardHeader>
-              <CardContent className="px-0 space-y-8">
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="annual-hires" className="text-base">Annual New Hires</Label>
-                    <span className="text-2xl font-bold text-primary">{annualHires.toLocaleString()}</span>
-                  </div>
-                  <Slider
-                    id="annual-hires"
-                    value={[annualHires]}
-                    onValueChange={(value) => setAnnualHires(value[0])}
-                    min={10}
-                    max={5000}
-                    step={10}
-                    className="w-full"
-                    data-testid="slider-annual-hires"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>10</span>
-                    <span>5,000</span>
-                  </div>
+              <CardContent className="px-0 space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="state" className="text-base font-medium">Step 1: Select Your State</Label>
+                  <Select value={selectedState} onValueChange={setSelectedState}>
+                    <SelectTrigger data-testid="select-state">
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(stateCertRates).sort().map((state) => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    State certification rate: {Math.round(calculatorResults.stateCertRate * 100)}%
+                  </p>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="avg-wage" className="text-base">Average Hourly Wage</Label>
-                    <span className="text-2xl font-bold text-primary">${avgWage}/hr</span>
+                <div className="space-y-2">
+                  <Label htmlFor="annual-hires" className="text-base font-medium">Step 2: Annual New Hires</Label>
+                  <div className="flex items-center gap-4">
+                    <Slider
+                      id="annual-hires"
+                      value={[annualHires]}
+                      onValueChange={(value) => setAnnualHires(value[0])}
+                      min={10}
+                      max={5000}
+                      step={10}
+                      className="flex-1"
+                      data-testid="slider-annual-hires"
+                    />
+                    <span className="text-2xl font-bold text-primary w-20 text-right">
+                      {annualHires.toLocaleString()}
+                    </span>
                   </div>
-                  <Slider
-                    id="avg-wage"
-                    value={[avgWage]}
-                    onValueChange={(value) => setAvgWage(value[0])}
-                    min={8}
-                    max={30}
-                    step={1}
-                    className="w-full"
-                    data-testid="slider-avg-wage"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>$8/hr</span>
-                    <span>$30/hr</span>
-                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Include full-time, part-time, and seasonal W2 hires
+                  </p>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="eligible-percent" className="text-base">Estimated Eligible %</Label>
-                    <span className="text-2xl font-bold text-primary">{eligiblePercent}%</span>
-                  </div>
-                  <Slider
-                    id="eligible-percent"
-                    value={[eligiblePercent]}
-                    onValueChange={(value) => setEligiblePercent(value[0])}
-                    min={5}
-                    max={40}
-                    step={1}
-                    className="w-full"
-                    data-testid="slider-eligible-percent"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>5%</span>
-                    <span>40%</span>
+                <div className="space-y-2">
+                  <Label htmlFor="industry" className="text-base font-medium">Step 3: Select Your Industry</Label>
+                  <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
+                    <SelectTrigger data-testid="select-industry">
+                      <SelectValue placeholder="Select industry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.keys(industryData).map((industry) => (
+                        <SelectItem key={industry} value={industry}>{industry}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Avg. credit: ${calculatorResults.avgCredit.toLocaleString()} | 
+                    Eligible rate: {Math.round(calculatorResults.eligiblePercent * 100)}%
+                  </p>
+                </div>
+
+                <div className="bg-muted/50 rounded-lg p-4 mt-4">
+                  <p className="text-sm font-medium mb-2">Calculation Breakdown</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                    <span>Screened (95%):</span>
+                    <span className="text-right font-medium">{calculatorResults.screenedHires.toLocaleString()}</span>
+                    <span>WOTC Eligible:</span>
+                    <span className="text-right font-medium">{calculatorResults.eligibleEmployees.toLocaleString()}</span>
+                    <span>State Certified:</span>
+                    <span className="text-right font-medium">{calculatorResults.certifiedEmployees.toLocaleString()}</span>
                   </div>
                 </div>
               </CardContent>
@@ -390,24 +444,31 @@ export default function LandingPage() {
 
             <Card className="p-6 bg-primary text-primary-foreground" data-testid="card-calculator-results">
               <CardHeader className="px-0 pt-0">
-                <CardTitle className="text-primary-foreground">Your Estimated Annual Savings</CardTitle>
+                <CardTitle className="text-primary-foreground">Your Estimated Annual WOTC Credit</CardTitle>
+                <CardDescription className="text-primary-foreground/70">
+                  Based on {selectedState} rates and {selectedIndustry} industry averages
+                </CardDescription>
               </CardHeader>
               <CardContent className="px-0 space-y-6">
                 <div className="text-center py-6">
                   <p className="text-6xl md:text-7xl font-bold">
-                    ${totalCredits.toLocaleString()}
+                    ${calculatorResults.totalCredits.toLocaleString()}
                   </p>
-                  <p className="text-lg opacity-90 mt-2">potential tax credits per year</p>
+                  <p className="text-lg opacity-90 mt-2">projected WOTC tax credits per year</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-primary-foreground/10 rounded-lg p-4 text-center">
-                    <p className="text-3xl font-bold">{eligibleEmployees}</p>
-                    <p className="text-sm opacity-80">Eligible Employees</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold">{calculatorResults.eligibleEmployees}</p>
+                    <p className="text-xs opacity-80">Eligible</p>
                   </div>
-                  <div className="bg-primary-foreground/10 rounded-lg p-4 text-center">
-                    <p className="text-3xl font-bold">$2,400</p>
-                    <p className="text-sm opacity-80">Avg. Credit Each</p>
+                  <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold">{calculatorResults.certifiedEmployees}</p>
+                    <p className="text-xs opacity-80">Certified</p>
+                  </div>
+                  <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+                    <p className="text-2xl font-bold">${calculatorResults.avgCredit.toLocaleString()}</p>
+                    <p className="text-xs opacity-80">Avg Credit</p>
                   </div>
                 </div>
 
@@ -424,6 +485,11 @@ export default function LandingPage() {
                     <CheckCircle2 className="h-4 w-4" />
                     No limit on the number of eligible employees
                   </p>
+                </div>
+
+                <div className="text-xs opacity-60 pt-2">
+                  This estimate is based on national and industry-specific averages. 
+                  Actual credits may vary based on employee eligibility and retention.
                 </div>
 
                 <Button 
