@@ -2,18 +2,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   CheckCircle2, 
   Users, 
-  FileText, 
   TrendingUp, 
   Shield, 
   Zap,
-  BarChart3,
   Clock,
   DollarSign,
   Globe,
@@ -30,10 +27,8 @@ import {
   Server,
   Webhook,
   PieChart,
-  Target,
   Award,
   ArrowRight,
-  CheckCheck,
   Star,
   ShoppingCart,
   Utensils,
@@ -44,7 +39,14 @@ import {
   Heart,
   HardHat,
   Package,
-  Calculator
+  Calculator,
+  ChevronRight,
+  Play,
+  Coins,
+  Target,
+  Gem,
+  Crown,
+  Rocket
 } from "lucide-react";
 
 export default function LandingPage() {
@@ -109,200 +111,200 @@ export default function LandingPage() {
   const calculatorResults = calculateCredits();
 
   const industries = [
-    { icon: ShoppingCart, name: "Retail", eligibility: "18-25%", description: "High turnover with entry-level positions" },
-    { icon: Utensils, name: "Restaurants & Food Service", eligibility: "20-30%", description: "Seasonal and part-time workforce" },
-    { icon: Hotel, name: "Hospitality & Hotels", eligibility: "15-25%", description: "Front desk, housekeeping, service staff" },
-    { icon: Package, name: "Warehousing & Distribution", eligibility: "20-28%", description: "Fulfillment centers and logistics hubs" },
-    { icon: Factory, name: "Manufacturing", eligibility: "12-20%", description: "Production and assembly line workers" },
-    { icon: Headphones, name: "Call Centers", eligibility: "22-35%", description: "Customer service representatives" },
-    { icon: Heart, name: "Healthcare", eligibility: "10-18%", description: "CNAs, home health aides, support staff" },
-    { icon: Truck, name: "Transportation & Logistics", eligibility: "15-22%", description: "Drivers, dispatchers, dock workers" },
-    { icon: HardHat, name: "Construction", eligibility: "12-18%", description: "Laborers and skilled trades" },
-    { icon: Users, name: "Staffing Agencies", eligibility: "25-40%", description: "Temporary and contract workers" },
+    { icon: Utensils, name: "Restaurants", eligibility: "20-30%" },
+    { icon: ShoppingCart, name: "Retail", eligibility: "17-25%" },
+    { icon: Hotel, name: "Hospitality", eligibility: "15-25%" },
+    { icon: Package, name: "Warehousing", eligibility: "20-28%" },
+    { icon: Factory, name: "Manufacturing", eligibility: "12-20%" },
+    { icon: Headphones, name: "Call Centers", eligibility: "22-35%" },
+    { icon: Heart, name: "Healthcare", eligibility: "10-18%" },
+    { icon: Truck, name: "Transportation", eligibility: "15-22%" },
+    { icon: HardHat, name: "Construction", eligibility: "12-18%" },
+    { icon: Users, name: "Staffing", eligibility: "25-40%" },
   ];
 
   const coreFeatures = [
     {
-      icon: Users,
-      title: "Multi-Portal Platform",
-      description: "Dedicated portals for employees, employers, and administrators with intelligent role-based access control.",
-    },
-    {
       icon: Brain,
       title: "AI-Powered Screening",
-      description: "Smart questionnaire wizard with reading-level adjustment, eligibility prediction, and confidence scoring.",
+      description: "Smart questionnaire wizard with reading-level adjustment and eligibility prediction.",
     },
     {
       icon: Languages,
-      title: "9-Language Support",
-      description: "Complete multilingual experience: English, Spanish, French, Chinese, Vietnamese, Korean, Portuguese, German, Japanese.",
+      title: "9 Languages",
+      description: "English, Spanish, French, Chinese, Vietnamese, Korean, Portuguese, German, Japanese.",
     },
     {
       icon: FileSearch,
       title: "Document OCR",
-      description: "AI-powered document scanning extracts data from determination letters, DD-214s, and TANF documents automatically.",
+      description: "AI-powered scanning extracts data from DD-214s, TANF docs, and determination letters.",
     },
     {
       icon: Bot,
-      title: "AI Chat Assistant",
-      description: "Built-in AI assistant helps users navigate the platform, answer WOTC questions, and troubleshoot issues.",
+      title: "AI Assistant",
+      description: "Built-in AI helps users navigate the platform and answer WOTC questions instantly.",
     },
     {
       icon: LineChart,
       title: "Predictive Analytics",
-      description: "Advanced forecasting with employer comparisons, trend analysis, and credit optimization recommendations.",
-    },
-    {
-      icon: Workflow,
-      title: "Zero-Touch Processing",
-      description: "Fully automated workflow from screening to certification with intelligent queue management.",
+      description: "Advanced forecasting with trend analysis and credit optimization recommendations.",
     },
     {
       icon: Lock,
       title: "Compliance Automation",
-      description: "Scheduled audit scans, violation detection, and automated remediation with complete audit trails.",
+      description: "Scheduled audit scans, violation detection, and automated remediation.",
     },
   ];
 
   const advancedFeatures = [
     {
       icon: Building2,
-      title: "State Portal Automation",
-      description: "Production-ready bots for 56 state portals with OCR parsing, credential encryption, and MFA handling.",
+      title: "56 State Portals",
+      description: "Production-ready automation with OCR parsing and MFA handling.",
     },
     {
-      icon: Upload,
-      title: "Bulk Import Tools",
-      description: "CSV upload for employee lists and payroll hours with intelligent column detection and reusable templates.",
-    },
-    {
-      icon: Sparkles,
-      title: "Self-Service Onboarding",
-      description: "6-step employer setup wizard with branding, payroll integration, and team management in minutes.",
-    },
-    {
-      icon: Award,
-      title: "Certification Automation",
-      description: "Automatic processing from determination letters to certified credits with billing reconciliation.",
+      icon: Workflow,
+      title: "Zero-Touch Processing",
+      description: "Fully automated workflow from screening to certification.",
     },
     {
       icon: Server,
       title: "Enterprise Integrations",
-      description: "Bidirectional sync with ADP, Paychex, Gusto, QuickBooks, Greenhouse, BambooHR, and more.",
+      description: "ADP, Paychex, Gusto, QuickBooks, Greenhouse, BambooHR sync.",
     },
     {
       icon: Webhook,
-      title: "Developer API Platform",
-      description: "Secure REST API with webhooks, scope-based permissions, rate limiting, and interactive documentation.",
-    },
-    {
-      icon: PieChart,
-      title: "Multi-Credit Bundling",
-      description: "Stack WOTC with R&D credits and state/local incentives for maximum tax savings.",
-    },
-    {
-      icon: Globe,
-      title: "White-Label Ready",
-      description: "Full branding customization with logos, colors, domains, and revenue sharing for licensee partners.",
+      title: "Developer API",
+      description: "Secure REST API with webhooks and interactive docs.",
     },
   ];
 
   const stats = [
+    { value: "$9,600", label: "Max Credit Per Employee", icon: DollarSign },
+    { value: "56", label: "State Portals Automated", icon: Building2 },
     { value: "9", label: "Languages Supported", icon: Languages },
-    { value: "56", label: "State Portals", icon: Building2 },
-    { value: "$9,600", label: "Max Credit/Employee", icon: DollarSign },
     { value: "100%", label: "Automated Processing", icon: Zap },
-  ];
-
-  const targetGroups = [
-    "TANF Recipients",
-    "Veterans (5 subcategories)",
-    "Ex-Felons",
-    "Designated Community Residents",
-    "Vocational Rehabilitation",
-    "SNAP Recipients",
-    "SSI Recipients",
-    "Summer Youth Employees",
-    "Long-Term Unemployment",
   ];
 
   const workflowSteps = [
     {
-      step: "1",
-      title: "Employee Screening",
-      description: "Employees complete our gamified questionnaire in their preferred language with AI-powered question simplification and real-time eligibility prediction.",
+      step: "01",
+      title: "Screen",
+      description: "Employees complete gamified questionnaires in their language with AI simplification.",
+      icon: Users,
     },
     {
-      step: "2",
-      title: "Automated Determination",
-      description: "Our eligibility engine analyzes responses, identifies qualifying target groups, and calculates potential credits with confidence scores.",
+      step: "02", 
+      title: "Analyze",
+      description: "AI engine identifies qualifying groups and calculates potential credits instantly.",
+      icon: Brain,
     },
     {
-      step: "3",
-      title: "State Submission",
-      description: "Zero-touch processing automatically submits to state portals, handles MFA, and tracks status through intelligent queue management.",
+      step: "03",
+      title: "Submit",
+      description: "Zero-touch processing submits to state portals automatically with MFA handling.",
+      icon: Rocket,
     },
     {
-      step: "4",
-      title: "Credit Certification",
-      description: "OCR scans determination letters, updates certifications, calculates actual credits, and reconciles billing automatically.",
+      step: "04",
+      title: "Collect",
+      description: "OCR scans determination letters and certifies credits for your tax return.",
+      icon: Coins,
     },
   ];
 
-  const differentiators = [
-    "Most comprehensive multilingual support in the industry",
-    "AI-powered document processing and eligibility prediction",
-    "Only platform with 56-state portal automation",
-    "Enterprise-grade security with SOC 2 compliance",
-    "Real-time predictive analytics and forecasting",
-    "Self-service onboarding in under 10 minutes",
+  const testimonials = [
+    {
+      quote: "Rockerbox increased our WOTC capture rate by 340% in the first quarter.",
+      author: "Sarah Chen",
+      role: "HR Director",
+      company: "FastFood Corp",
+    },
+    {
+      quote: "The AI screening saves our team 20 hours per week on manual data entry.",
+      author: "Michael Torres",
+      role: "Payroll Manager",
+      company: "StaffRight Solutions",
+    },
+    {
+      quote: "Finally, a WOTC platform that actually works. State automation is a game-changer.",
+      author: "Jennifer Walsh",
+      role: "CFO",
+      company: "Hospitality Group LLC",
+    },
   ];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background overflow-x-hidden">
+      {/* Navigation */}
+      <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-border/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                <Gem className="w-6 h-6 text-primary-foreground" />
+              </div>
+              <span className="text-xl font-bold gradient-text">Rockerbox</span>
+            </div>
+            <div className="hidden md:flex items-center gap-6">
+              <a href="#calculator" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Calculator</a>
+              <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
+              <a href="#industries" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Industries</a>
+              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" asChild data-testid="button-login-nav">
+                <a href="/api/login">Log In</a>
+              </Button>
+              <Button size="sm" asChild data-testid="button-get-started-nav">
+                <a href="/api/login">
+                  Get Started
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       {/* Hero Section */}
-      <section className="relative py-24 px-4 md:px-8 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
+      <section className="relative pt-32 pb-24 px-4 md:px-8 hero-gradient overflow-hidden">
+        {/* Animated background elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-float" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-float" style={{ animationDelay: '-3s' }} />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-radial from-primary/5 to-transparent rounded-full" />
+        </div>
+
         <div className="max-w-6xl mx-auto text-center space-y-8 relative">
-          <div className="flex justify-center gap-2">
-            <Badge variant="outline" className="text-sm px-4 py-1">
-              <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
-              Industry-Leading WOTC Platform
-            </Badge>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+            <Crown className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">The #1 WOTC Optimization Platform</span>
           </div>
           
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
-            The World's Most Advanced
-            <span className="block text-primary mt-2">WOTC Optimization System</span>
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none">
+            <span className="block">Unlock Hidden</span>
+            <span className="block gradient-text mt-2">Tax Credits</span>
           </h1>
           
-          <p className="text-xl md:text-2xl text-muted-foreground max-w-4xl mx-auto leading-relaxed">
-            Automate your entire Work Opportunity Tax Credit lifecycle with AI-powered screening, 
-            56-state portal automation, and real-time predictive analytics. 
-            Available in 9 languages.
+          <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+            Automate your entire WOTC lifecycle with AI-powered screening, 
+            <span className="text-foreground font-medium"> 56-state portal automation</span>, and 
+            <span className="text-foreground font-medium"> predictive analytics</span>. 
+            Available in <span className="text-primary font-semibold">9 languages</span>.
           </p>
-          
-          {/* Key Highlights */}
-          <div className="flex flex-wrap justify-center gap-4 pt-4">
-            {differentiators.slice(0, 3).map((item, index) => (
-              <Badge key={index} variant="secondary" className="text-sm py-2 px-4">
-                <CheckCircle2 className="h-4 w-4 mr-2 text-green-600" />
-                {item}
-              </Badge>
-            ))}
-          </div>
 
-          {/* Login Buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6">
+          {/* CTA Buttons */}
+          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
             <Button 
               size="lg" 
               asChild
               data-testid="button-employer-login"
-              className="min-w-[220px] h-14 text-lg"
+              className="h-14 px-8 text-lg font-semibold animate-pulse-glow"
             >
               <a href="/api/login">
                 <Building2 className="mr-2 h-5 w-5" />
-                Employer Portal
+                Start Capturing Credits
                 <ArrowRight className="ml-2 h-5 w-5" />
               </a>
             </Button>
@@ -310,71 +312,73 @@ export default function LandingPage() {
               size="lg" 
               variant="outline"
               asChild
-              data-testid="button-admin-login"
-              className="min-w-[220px] h-14 text-lg"
+              data-testid="button-watch-demo"
+              className="h-14 px-8 text-lg"
             >
-              <a href="/api/login">
-                <Shield className="mr-2 h-5 w-5" />
-                Admin Portal
+              <a href="#how-it-works">
+                <Play className="mr-2 h-5 w-5" />
+                See How It Works
               </a>
             </Button>
           </div>
 
-          <p className="text-sm text-muted-foreground pt-4">
-            Employees access their screening questionnaire through their employer's personalized invitation link
+          <p className="text-sm text-muted-foreground">
+            No credit card required. Setup in under 10 minutes.
           </p>
         </div>
       </section>
 
       {/* Stats Section */}
-      <section className="py-16 px-4 md:px-8 bg-muted/50">
+      <section className="py-16 px-4 md:px-8 bg-card border-y border-border">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((stat, index) => (
-              <Card key={index} className="text-center" data-testid={`stat-${index}`}>
-                <CardHeader className="pb-2">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-2">
-                    <stat.icon className="w-6 h-6 text-primary" />
-                  </div>
-                  <CardTitle className="text-4xl font-bold">{stat.value}</CardTitle>
-                  <CardDescription className="text-sm">{stat.label}</CardDescription>
-                </CardHeader>
-              </Card>
+              <div key={index} className="text-center" data-testid={`stat-${index}`}>
+                <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 mb-4">
+                  <stat.icon className="w-7 h-7 text-primary" />
+                </div>
+                <p className="text-4xl md:text-5xl font-black gradient-text">{stat.value}</p>
+                <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* WOTC Calculator Section */}
-      <section className="py-24 px-4 md:px-8">
+      {/* Calculator Section */}
+      <section id="calculator" className="py-24 px-4 md:px-8 scroll-mt-20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center space-y-4 mb-12">
-            <Badge variant="outline" className="mb-4">
+            <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
               <Calculator className="h-3 w-3 mr-1" />
-              Savings Calculator
+              Free Savings Calculator
             </Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">Calculate Your WOTC Savings</h2>
+            <h2 className="text-4xl md:text-6xl font-black">
+              How Much Could <span className="gradient-text">You Save?</span>
+            </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              See how much your organization could save with WOTC tax credits
+              Calculate your potential WOTC tax credits in seconds
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            <Card className="p-6" data-testid="card-wotc-calculator">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 items-start">
+            <Card className="lg:col-span-3 p-6 border-2" data-testid="card-wotc-calculator">
               <CardHeader className="px-0 pt-0">
-                <CardTitle className="flex items-center gap-2">
-                  <Calculator className="h-5 w-5" />
+                <CardTitle className="text-2xl font-bold flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Calculator className="h-5 w-5 text-primary" />
+                  </div>
                   WOTC Credit Estimator
                 </CardTitle>
-                <CardDescription>
-                  Select your state, industry, and enter your annual hires
-                </CardDescription>
               </CardHeader>
-              <CardContent className="px-0 space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="state" className="text-base font-medium">Step 1: Select Your State</Label>
+              <CardContent className="px-0 space-y-8">
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm flex items-center justify-center font-bold">1</span>
+                    Select Your State
+                  </Label>
                   <Select value={selectedState} onValueChange={setSelectedState}>
-                    <SelectTrigger data-testid="select-state">
+                    <SelectTrigger className="h-12" data-testid="select-state">
                       <SelectValue placeholder="Select state" />
                     </SelectTrigger>
                     <SelectContent>
@@ -384,15 +388,17 @@ export default function LandingPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    State certification rate: {Math.round(calculatorResults.stateCertRate * 100)}%
+                    State certification rate: <span className="font-semibold text-primary">{Math.round(calculatorResults.stateCertRate * 100)}%</span>
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="annual-hires" className="text-base font-medium">Step 2: Annual New Hires</Label>
-                  <div className="flex items-center gap-4">
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm flex items-center justify-center font-bold">2</span>
+                    Annual New Hires
+                  </Label>
+                  <div className="flex items-center gap-6">
                     <Slider
-                      id="annual-hires"
                       value={[annualHires]}
                       onValueChange={(value) => setAnnualHires(value[0])}
                       min={10}
@@ -401,19 +407,19 @@ export default function LandingPage() {
                       className="flex-1"
                       data-testid="slider-annual-hires"
                     />
-                    <span className="text-2xl font-bold text-primary w-20 text-right">
+                    <div className="text-4xl font-black text-primary min-w-[100px] text-right">
                       {annualHires.toLocaleString()}
-                    </span>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Include full-time, part-time, and seasonal W2 hires
-                  </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="industry" className="text-base font-medium">Step 3: Select Your Industry</Label>
+                <div className="space-y-3">
+                  <Label className="text-base font-semibold flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm flex items-center justify-center font-bold">3</span>
+                    Select Your Industry
+                  </Label>
                   <Select value={selectedIndustry} onValueChange={setSelectedIndustry}>
-                    <SelectTrigger data-testid="select-industry">
+                    <SelectTrigger className="h-12" data-testid="select-industry">
                       <SelectValue placeholder="Select industry" />
                     </SelectTrigger>
                     <SelectContent>
@@ -423,79 +429,66 @@ export default function LandingPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    Avg. credit: ${calculatorResults.avgCredit.toLocaleString()} | 
-                    Eligible rate: {Math.round(calculatorResults.eligiblePercent * 100)}%
+                    Avg credit: <span className="font-semibold">${calculatorResults.avgCredit.toLocaleString()}</span> | 
+                    Eligible rate: <span className="font-semibold">{Math.round(calculatorResults.eligiblePercent * 100)}%</span>
                   </p>
-                </div>
-
-                <div className="bg-muted/50 rounded-lg p-4 mt-4">
-                  <p className="text-sm font-medium mb-2">Calculation Breakdown</p>
-                  <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                    <span>Screened (95%):</span>
-                    <span className="text-right font-medium">{calculatorResults.screenedHires.toLocaleString()}</span>
-                    <span>WOTC Eligible:</span>
-                    <span className="text-right font-medium">{calculatorResults.eligibleEmployees.toLocaleString()}</span>
-                    <span>State Certified:</span>
-                    <span className="text-right font-medium">{calculatorResults.certifiedEmployees.toLocaleString()}</span>
-                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="p-6 bg-primary text-primary-foreground" data-testid="card-calculator-results">
-              <CardHeader className="px-0 pt-0">
-                <CardTitle className="text-primary-foreground">Your Estimated Annual WOTC Credit</CardTitle>
-                <CardDescription className="text-primary-foreground/70">
-                  Based on {selectedState} rates and {selectedIndustry} industry averages
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="px-0 space-y-6">
-                <div className="text-center py-6">
-                  <p className="text-6xl md:text-7xl font-bold">
+            <Card className="lg:col-span-2 p-6 bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 text-white border-0 shadow-2xl" data-testid="card-calculator-results">
+              <CardContent className="p-0 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                    <Coins className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm opacity-80">Estimated Annual</p>
+                    <p className="text-lg font-semibold">WOTC Tax Credits</p>
+                  </div>
+                </div>
+
+                <div className="py-6">
+                  <p className="text-7xl md:text-8xl font-black tracking-tight">
                     ${calculatorResults.totalCredits.toLocaleString()}
                   </p>
-                  <p className="text-lg opacity-90 mt-2">projected WOTC tax credits per year</p>
+                  <p className="text-lg opacity-90 mt-2">per year in tax savings</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+                  <div className="bg-white/10 backdrop-blur rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold">{calculatorResults.eligibleEmployees}</p>
                     <p className="text-xs opacity-80">Eligible</p>
                   </div>
-                  <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+                  <div className="bg-white/10 backdrop-blur rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold">{calculatorResults.certifiedEmployees}</p>
                     <p className="text-xs opacity-80">Certified</p>
                   </div>
-                  <div className="bg-primary-foreground/10 rounded-lg p-3 text-center">
+                  <div className="bg-white/10 backdrop-blur rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold">${calculatorResults.avgCredit.toLocaleString()}</p>
                     <p className="text-xs opacity-80">Avg Credit</p>
                   </div>
                 </div>
 
-                <div className="pt-4 space-y-2 text-sm opacity-80">
-                  <p className="flex items-center gap-2">
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4" />
-                    Credits up to $9,600 for certain veteran categories
-                  </p>
-                  <p className="flex items-center gap-2">
+                    <span>Up to $9,600 for veteran categories</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4" />
-                    Dollar-for-dollar reduction in federal tax liability
-                  </p>
-                  <p className="flex items-center gap-2">
+                    <span>Dollar-for-dollar tax liability reduction</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
                     <CheckCircle2 className="h-4 w-4" />
-                    No limit on the number of eligible employees
-                  </p>
-                </div>
-
-                <div className="text-xs opacity-60 pt-2">
-                  This estimate is based on national and industry-specific averages. 
-                  Actual credits may vary based on employee eligibility and retention.
+                    <span>No limit on eligible employees</span>
+                  </div>
                 </div>
 
                 <Button 
                   variant="secondary" 
                   size="lg" 
-                  className="w-full mt-4"
+                  className="w-full h-14 text-lg font-semibold bg-white text-amber-700 hover:bg-white/90"
                   asChild
                   data-testid="button-get-started-calculator"
                 >
@@ -504,6 +497,10 @@ export default function LandingPage() {
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </a>
                 </Button>
+
+                <p className="text-xs opacity-60 text-center">
+                  Based on industry averages. Actual results may vary.
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -511,230 +508,195 @@ export default function LandingPage() {
       </section>
 
       {/* Industries Section */}
-      <section className="py-24 px-4 md:px-8 bg-muted/50">
+      <section id="industries" className="py-24 px-4 md:px-8 bg-muted/50 scroll-mt-20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center space-y-4 mb-12">
-            <Badge variant="outline" className="mb-4">Top Industries</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">Industries That Benefit Most</h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              WOTC delivers the highest ROI for industries with high turnover, 
-              entry-level positions, and wages close to minimum wage
+            <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+              <Target className="h-3 w-3 mr-1" />
+              High-Impact Industries
+            </Badge>
+            <h2 className="text-4xl md:text-6xl font-black">
+              Industries We <span className="gradient-text">Serve</span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              WOTC delivers the highest ROI for industries with high turnover and entry-level positions
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {industries.map((industry, index) => (
-              <Card key={index} className="hover-elevate" data-testid={`industry-${index}`}>
-                <CardHeader className="pb-2">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
-                    <industry.icon className="w-6 h-6 text-primary" />
+              <Card key={index} className="hover-elevate group cursor-pointer transition-all duration-300" data-testid={`industry-${index}`}>
+                <CardContent className="p-6 text-center">
+                  <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4 group-hover:bg-primary/20 transition-colors">
+                    <industry.icon className="w-7 h-7 text-primary" />
                   </div>
-                  <CardTitle className="text-base">{industry.name}</CardTitle>
-                  <Badge variant="secondary" className="w-fit mt-1">
-                    {industry.eligibility} eligible
-                  </Badge>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <p className="text-xs text-muted-foreground">{industry.description}</p>
+                  <p className="font-semibold text-sm">{industry.name}</p>
+                  <p className="text-xs text-primary mt-1 font-medium">{industry.eligibility} eligible</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section id="features" className="py-24 px-4 md:px-8 scroll-mt-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center space-y-4 mb-16">
+            <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+              <Sparkles className="h-3 w-3 mr-1" />
+              Platform Features
+            </Badge>
+            <h2 className="text-4xl md:text-6xl font-black">
+              Everything You <span className="gradient-text">Need</span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              A complete solution for WOTC management from screening to certification
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {coreFeatures.map((feature, index) => (
+              <Card key={index} className="hover-elevate group" data-testid={`feature-${index}`}>
+                <CardContent className="p-6">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                    <feature.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
                 </CardContent>
               </Card>
             ))}
           </div>
 
-          <div className="mt-12 text-center">
-            <p className="text-muted-foreground mb-4">
-              Don't see your industry? WOTC applies to all employers regardless of industry.
-            </p>
-            <Button variant="outline" asChild data-testid="button-check-eligibility">
-              <a href="/api/login">
-                Check Your Eligibility
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </a>
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      {/* Core Features Section */}
-      <section className="py-24 px-4 md:px-8">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center space-y-4 mb-16">
-            <Badge variant="outline" className="mb-4">Core Capabilities</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">Intelligent Automation at Every Step</h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              From AI-powered screening to automatic credit certification, our platform handles 
-              the entire WOTC lifecycle with zero manual intervention
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {coreFeatures.map((feature, index) => (
-              <Card key={index} className="hover-elevate" data-testid={`core-feature-${index}`}>
-                <CardHeader>
-                  <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
-                    <feature.icon className="w-7 h-7 text-primary" />
+          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {advancedFeatures.map((feature, index) => (
+              <Card key={index} className="bg-muted/50 hover-elevate" data-testid={`advanced-feature-${index}`}>
+                <CardContent className="p-5 flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <feature.icon className="w-5 h-5 text-primary" />
                   </div>
-                  <CardTitle className="text-lg">{feature.title}</CardTitle>
-                  <CardDescription className="text-sm leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
-                </CardHeader>
+                  <div>
+                    <h3 className="font-bold text-sm">{feature.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{feature.description}</p>
+                  </div>
+                </CardContent>
               </Card>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Workflow Section */}
-      <section className="py-24 px-4 md:px-8 bg-muted/50">
+      {/* How It Works Section */}
+      <section id="how-it-works" className="py-24 px-4 md:px-8 bg-card border-y border-border scroll-mt-20">
         <div className="max-w-6xl mx-auto">
           <div className="text-center space-y-4 mb-16">
-            <Badge variant="outline" className="mb-4">How It Works</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">End-to-End Automation</h2>
+            <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+              <Workflow className="h-3 w-3 mr-1" />
+              Simple Process
+            </Badge>
+            <h2 className="text-4xl md:text-6xl font-black">
+              How <span className="gradient-text">Rockerbox</span> Works
+            </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              From employee screening to certified credits, fully automated in four seamless steps
+              From employee screening to certified tax credits in four simple steps
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {workflowSteps.map((item, index) => (
-              <Card key={index} className="relative" data-testid={`workflow-step-${index}`}>
-                <CardHeader>
-                  <div className="w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center mb-4 text-2xl font-bold">
-                    {item.step}
-                  </div>
-                  <CardTitle className="text-xl">{item.title}</CardTitle>
-                  <CardDescription className="leading-relaxed">
-                    {item.description}
-                  </CardDescription>
-                </CardHeader>
+            {workflowSteps.map((step, index) => (
+              <div key={index} className="relative" data-testid={`workflow-step-${index}`}>
                 {index < workflowSteps.length - 1 && (
-                  <div className="hidden lg:block absolute top-12 -right-4 text-muted-foreground">
-                    <ArrowRight className="w-8 h-8" />
-                  </div>
+                  <div className="hidden lg:block absolute top-12 left-[60%] w-[80%] h-0.5 bg-gradient-to-r from-primary/50 to-primary/10" />
                 )}
-              </Card>
+                <Card className="relative hover-elevate bg-background">
+                  <CardContent className="p-6 text-center">
+                    <div className="relative inline-block mb-4">
+                      <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                        <step.icon className="w-8 h-8 text-primary" />
+                      </div>
+                      <span className="absolute -top-2 -right-2 w-8 h-8 rounded-full bg-primary text-primary-foreground text-sm font-bold flex items-center justify-center">
+                        {step.step}
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">{step.title}</h3>
+                    <p className="text-sm text-muted-foreground">{step.description}</p>
+                  </CardContent>
+                </Card>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Advanced Features Section */}
+      {/* Testimonials Section */}
       <section className="py-24 px-4 md:px-8">
         <div className="max-w-6xl mx-auto">
           <div className="text-center space-y-4 mb-16">
-            <Badge variant="outline" className="mb-4">Enterprise Features</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">Built for Scale</h2>
-            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
-              Advanced capabilities for enterprise employers, staffing agencies, and white-label partners
-            </p>
+            <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+              <Star className="h-3 w-3 mr-1 fill-primary" />
+              Customer Stories
+            </Badge>
+            <h2 className="text-4xl md:text-6xl font-black">
+              Trusted by <span className="gradient-text">Industry Leaders</span>
+            </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {advancedFeatures.map((feature, index) => (
-              <Card key={index} className="hover-elevate" data-testid={`advanced-feature-${index}`}>
-                <CardHeader>
-                  <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center mb-4">
-                    <feature.icon className="w-7 h-7 text-secondary-foreground" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {testimonials.map((testimonial, index) => (
+              <Card key={index} className="hover-elevate" data-testid={`testimonial-${index}`}>
+                <CardContent className="p-6">
+                  <div className="flex gap-1 mb-4">
+                    {[...Array(5)].map((_, i) => (
+                      <Star key={i} className="w-4 h-4 fill-primary text-primary" />
+                    ))}
                   </div>
-                  <CardTitle className="text-lg">{feature.title}</CardTitle>
-                  <CardDescription className="text-sm leading-relaxed">
-                    {feature.description}
-                  </CardDescription>
-                </CardHeader>
+                  <p className="text-lg mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                      <span className="text-sm font-bold text-primary">
+                        {testimonial.author.split(' ').map(n => n[0]).join('')}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{testimonial.author}</p>
+                      <p className="text-xs text-muted-foreground">{testimonial.role}, {testimonial.company}</p>
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Target Groups Section */}
-      <section className="py-24 px-4 md:px-8 bg-muted/50">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center space-y-4 mb-12">
-            <Badge variant="outline" className="mb-4">Complete Coverage</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">All 9 WOTC Target Groups</h2>
-            <p className="text-lg text-muted-foreground">
-              Screen for every eligible Work Opportunity Tax Credit category
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {targetGroups.map((group, index) => (
-              <div 
-                key={index} 
-                className="flex items-center gap-3 p-4 bg-background rounded-lg border"
-                data-testid={`target-group-${index}`}
-              >
-                <CheckCheck className="w-5 h-5 text-green-600 shrink-0" />
-                <span className="font-medium">{group}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-12 text-center">
-            <Card className="inline-block">
-              <CardContent className="flex items-center gap-6 py-6">
-                <div className="text-left">
-                  <p className="text-3xl font-bold text-primary">14 Subcategories</p>
-                  <p className="text-muted-foreground">Including 5 veteran classifications</p>
-                </div>
-                <div className="h-12 w-px bg-border" />
-                <div className="text-left">
-                  <p className="text-3xl font-bold text-primary">$2,400 - $9,600</p>
-                  <p className="text-muted-foreground">Credit range per employee</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Why Choose Us Section */}
-      <section className="py-24 px-4 md:px-8">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center space-y-4 mb-12">
-            <Badge variant="outline" className="mb-4">Why Choose Us</Badge>
-            <h2 className="text-3xl md:text-5xl font-bold">Industry-Leading Capabilities</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {differentiators.map((item, index) => (
-              <div 
-                key={index} 
-                className="flex items-start gap-4 p-6 bg-muted/50 rounded-xl"
-                data-testid={`differentiator-${index}`}
-              >
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <Target className="w-5 h-5 text-primary" />
-                </div>
-                <p className="text-lg font-medium">{item}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-24 px-4 md:px-8 bg-primary text-primary-foreground">
+      {/* Final CTA Section */}
+      <section className="py-24 px-4 md:px-8 hero-gradient">
         <div className="max-w-4xl mx-auto text-center space-y-8">
-          <h2 className="text-3xl md:text-5xl font-bold">
-            Ready to Maximize Your WOTC Credits?
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
+            <Gem className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">Start Your Free Trial Today</span>
+          </div>
+          
+          <h2 className="text-4xl md:text-6xl font-black">
+            Ready to Capture Your
+            <span className="block gradient-text mt-2">Hidden Tax Credits?</span>
           </h2>
-          <p className="text-xl opacity-90 max-w-2xl mx-auto">
-            Join leading employers who trust our AI-powered platform to automate their 
-            entire WOTC lifecycle and capture every eligible credit
+          
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Join thousands of employers who are maximizing their WOTC credits with Rockerbox. 
+            Setup takes less than 10 minutes.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button 
               size="lg" 
-              variant="secondary"
               asChild
-              data-testid="button-employer-login-cta"
-              className="min-w-[220px] h-14 text-lg"
+              className="h-14 px-10 text-lg font-semibold"
+              data-testid="button-final-cta"
             >
               <a href="/api/login">
-                Get Started Now
+                Get Started Free
                 <ArrowRight className="ml-2 h-5 w-5" />
               </a>
             </Button>
@@ -742,51 +704,51 @@ export default function LandingPage() {
               size="lg" 
               variant="outline"
               asChild
-              data-testid="button-admin-login-cta"
-              className="min-w-[220px] h-14 text-lg bg-transparent border-primary-foreground text-primary-foreground hover:bg-primary-foreground/10"
+              className="h-14 px-10 text-lg"
+              data-testid="button-admin-portal"
             >
-              <a href="/api/login">Admin Portal</a>
+              <a href="/api/login">
+                <Shield className="mr-2 h-5 w-5" />
+                Admin Portal
+              </a>
             </Button>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-6 pt-8 text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              No credit card required
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              Setup in 10 minutes
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-primary" />
+              Free savings calculation
+            </span>
           </div>
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-12 px-4 md:px-8 border-t">
+      <footer className="py-12 px-4 md:px-8 bg-card border-t border-border">
         <div className="max-w-6xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-            <div>
-              <h3 className="font-bold text-lg mb-4">WOTC Platform</h3>
-              <p className="text-muted-foreground text-sm">
-                The world's most advanced Work Opportunity Tax Credit optimization system. 
-                AI-powered, multilingual, fully automated.
-              </p>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                <Gem className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <span className="text-lg font-bold">Rockerbox</span>
             </div>
-            <div>
-              <h3 className="font-bold text-lg mb-4">Features</h3>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>AI-Powered Screening</li>
-                <li>56-State Portal Automation</li>
-                <li>9-Language Support</li>
-                <li>Predictive Analytics</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-bold text-lg mb-4">Enterprise</h3>
-              <ul className="text-sm text-muted-foreground space-y-2">
-                <li>Developer API</li>
-                <li>White-Label Solutions</li>
-                <li>Enterprise Integrations</li>
-                <li>Compliance Automation</li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="text-center pt-8 border-t text-sm text-muted-foreground">
-            <p>© 2026 Rockerbox. All rights reserved.</p>
-            <p className="mt-2">
-              Enterprise-grade WOTC screening, certification, and credit optimization platform
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} Rockerbox. All rights reserved. The WOTC Optimization Platform.
             </p>
+            <div className="flex items-center gap-4">
+              <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Privacy</a>
+              <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Terms</a>
+              <a href="#" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Contact</a>
+            </div>
           </div>
         </div>
       </footer>

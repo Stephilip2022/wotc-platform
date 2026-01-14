@@ -1,8 +1,28 @@
-# WOTC Optimization Platform - Design Guidelines
+# Rockerbox WOTC Platform - Design Guidelines
+
+## Brand Identity & Color Scheme
+
+**Brand Name**: Rockerbox - The WOTC Optimization Platform
+
+**Color Philosophy**: Warm amber/gold tones that convey stability, trust, and prosperity - perfect for a tax credit platform. The name "Rockerbox" evokes earthy, solid foundations while gold accents suggest financial success.
+
+**Primary Colors**:
+- **Primary (Amber Gold)**: HSL(38, 92%, 50%) - Rich amber for CTAs, accents, and branding
+- **Primary Foreground**: HSL(20, 14%, 12%) - Dark brown text on primary buttons
+- **Gradient Text**: Linear gradient from amber to orange to gold for headlines
+
+**Background Colors**:
+- **Light Mode**: Warm cream HSL(40, 33%, 98%) 
+- **Dark Mode**: Rich chocolate HSL(20, 20%, 9%)
+
+**UI Accents**:
+- Cards and surfaces have warm undertones
+- Borders use soft brown-gray tones
+- Muted colors maintain warmth rather than cold gray
 
 ## Design Approach
 
-**Selected Approach**: Design System - Modern SaaS Enterprise Pattern
+**Selected Approach**: Design System - Modern SaaS Enterprise Pattern with Premium Brand Identity
 
 **Justification**: This WOTC platform is a utility-focused, information-dense enterprise application requiring exceptional clarity, efficiency, and consistency across multiple user portals. The primary success metric is user task completion (screening questionnaires, form submissions, credit tracking) rather than visual engagement.
 
