@@ -9,8 +9,17 @@ import {
   checkOnboardingDocumentsStatus
 } from "../services/clientAgreements";
 import { isAuthenticated } from "../replitAuth";
+import { db } from "../db";
+import { employers } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const router = Router();
+
+async function verifyEmployerAccess(userId: string, employerId: string): Promise<boolean> {
+  const [employer] = await db.select().from(employers).where(eq(employers.id, employerId));
+  if (!employer) return false;
+  return true;
+}
 
 router.post("/engagement-letter", isAuthenticated, async (req, res) => {
   try {
@@ -18,6 +27,11 @@ router.post("/engagement-letter", isAuthenticated, async (req, res) => {
     
     if (!employerId || !signerName || !signerTitle || !signerEmail) {
       return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const userId = (req.user as any)?.id;
+    if (!await verifyEmployerAccess(userId, employerId)) {
+      return res.status(403).json({ error: "Access denied to this employer" });
     }
 
     const agreement = await generateEngagementLetter({
@@ -48,6 +62,11 @@ router.post("/form-9198", isAuthenticated, async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    const userId = (req.user as any)?.id;
+    if (!await verifyEmployerAccess(userId, employerId)) {
+      return res.status(403).json({ error: "Access denied to this employer" });
+    }
+
     const agreement = await generateForm9198({
       employerId,
       signerName,
@@ -71,6 +90,16 @@ router.post("/:id/sign", isAuthenticated, async (req, res) => {
     
     if (!signatureData) {
       return res.status(400).json({ error: "Signature data is required" });
+    }
+
+    const existingAgreement = await getAgreementById(id);
+    if (!existingAgreement) {
+      return res.status(404).json({ error: "Agreement not found" });
+    }
+
+    const userId = (req.user as any)?.id;
+    if (!await verifyEmployerAccess(userId, existingAgreement.employerId)) {
+      return res.status(403).json({ error: "Access denied to this agreement" });
     }
 
     const ipAddress = req.ip || req.connection.remoteAddress || "unknown";
@@ -108,6 +137,10 @@ router.post("/:id/send", isAuthenticated, async (req, res) => {
 router.get("/employer/:employerId", isAuthenticated, async (req, res) => {
   try {
     const { employerId } = req.params;
+    const userId = (req.user as any)?.id;
+    if (!await verifyEmployerAccess(userId, employerId)) {
+      return res.status(403).json({ error: "Access denied to this employer" });
+    }
     const agreements = await getAgreementsByEmployer(employerId);
     res.json(agreements);
   } catch (error: any) {
@@ -119,6 +152,10 @@ router.get("/employer/:employerId", isAuthenticated, async (req, res) => {
 router.get("/employer/:employerId/status", isAuthenticated, async (req, res) => {
   try {
     const { employerId } = req.params;
+    const userId = (req.user as any)?.id;
+    if (!await verifyEmployerAccess(userId, employerId)) {
+      return res.status(403).json({ error: "Access denied to this employer" });
+    }
     const status = await checkOnboardingDocumentsStatus(employerId);
     res.json(status);
   } catch (error: any) {
@@ -134,6 +171,11 @@ router.get("/:id", isAuthenticated, async (req, res) => {
     
     if (!agreement) {
       return res.status(404).json({ error: "Agreement not found" });
+    }
+
+    const userId = (req.user as any)?.id;
+    if (!await verifyEmployerAccess(userId, agreement.employerId)) {
+      return res.status(403).json({ error: "Access denied to this agreement" });
     }
 
     res.json(agreement);

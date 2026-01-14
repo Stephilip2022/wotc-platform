@@ -26,11 +26,16 @@ import {
   CreditCard,
   Shield,
   Sparkles,
+  PenTool,
+  FileSignature,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const ONBOARDING_STEPS = [
   { id: "company", title: "Company Info", icon: Building2, description: "Basic company details" },
   { id: "branding", title: "Branding", icon: Sparkles, description: "Logo and colors" },
+  { id: "agreements", title: "Agreements", icon: FileSignature, description: "Sign service agreements" },
   { id: "payroll", title: "Payroll", icon: CreditCard, description: "Connect payroll system" },
   { id: "questionnaire", title: "Questionnaire", icon: FileText, description: "Configure screening" },
   { id: "users", title: "Team", icon: Users, description: "Invite team members" },
@@ -56,7 +61,18 @@ export default function OnboardingWizardPage() {
     payrollConnected: false,
     questionnaireEnabled: true,
     teamEmails: "",
+    signerName: "",
+    signerTitle: "",
   });
+  
+  const [agreementsAccepted, setAgreementsAccepted] = useState({
+    engagementLetter: false,
+    form9198: false,
+    termsOfService: false,
+  });
+  
+  const [signatureData, setSignatureData] = useState("");
+  const [isDrawing, setIsDrawing] = useState(false);
 
   const progress = ((currentStep + 1) / ONBOARDING_STEPS.length) * 100;
 
@@ -401,6 +417,191 @@ export default function OnboardingWizardPage() {
           </div>
         );
 
+      case "agreements":
+        return (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="signerName">Authorized Signer Name</Label>
+                <Input
+                  id="signerName"
+                  value={formData.signerName}
+                  onChange={(e) => updateField("signerName", e.target.value)}
+                  placeholder="John Smith"
+                  data-testid="input-signer-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="signerTitle">Title</Label>
+                <Input
+                  id="signerTitle"
+                  value={formData.signerTitle}
+                  onChange={(e) => updateField("signerTitle", e.target.value)}
+                  placeholder="CEO, HR Director, etc."
+                  data-testid="input-signer-title"
+                />
+              </div>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileSignature className="h-5 w-5" />
+                  WOTC Services Engagement Letter
+                </CardTitle>
+                <CardDescription>
+                  Review and accept the service agreement between your company and Rockerbox
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ScrollArea className="h-48 border rounded-lg p-4 bg-muted/30">
+                  <div className="text-sm space-y-3">
+                    <p className="font-semibold">WOTC SERVICES ENGAGEMENT LETTER</p>
+                    <p>This agreement is between Rockerbox Technologies, LLC ("Rockerbox") and {formData.companyName || "[Your Company]"} ("Client").</p>
+                    <p className="font-medium">1. SCOPE OF SERVICES</p>
+                    <p>Rockerbox agrees to provide Work Opportunity Tax Credit (WOTC) services including:</p>
+                    <ul className="list-disc pl-6 space-y-1">
+                      <li>Automated WOTC eligibility screening for all new hires</li>
+                      <li>Preparation and submission of IRS Form 8850 and ETA Forms</li>
+                      <li>Electronic submission to state workforce agencies</li>
+                      <li>Real-time credit tracking and reporting</li>
+                      <li>Secure document storage and compliance management</li>
+                    </ul>
+                    <p className="font-medium">2. FEE STRUCTURE</p>
+                    <p>Client agrees to pay Rockerbox 25% of all WOTC tax credits successfully certified and claimed.</p>
+                    <p className="font-medium">3. TERM</p>
+                    <p>This Agreement is effective for one (1) year and automatically renews unless terminated with 30 days written notice.</p>
+                    <p className="font-medium">4. CONFIDENTIALITY</p>
+                    <p>Both parties agree to maintain confidentiality of all proprietary information and employee data.</p>
+                  </div>
+                </ScrollArea>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="engagementLetter"
+                    checked={agreementsAccepted.engagementLetter}
+                    onCheckedChange={(checked) => 
+                      setAgreementsAccepted(prev => ({ ...prev, engagementLetter: !!checked }))
+                    }
+                    data-testid="checkbox-engagement-letter"
+                  />
+                  <Label htmlFor="engagementLetter" className="text-sm leading-relaxed">
+                    I have read and agree to the WOTC Services Engagement Letter on behalf of {formData.companyName || "my company"}
+                  </Label>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  ETA Form 9198 - Employer Representative Declaration
+                </CardTitle>
+                <CardDescription>
+                  Authorize Rockerbox to submit WOTC forms on your behalf
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ScrollArea className="h-48 border rounded-lg p-4 bg-muted/30">
+                  <div className="text-sm space-y-3">
+                    <p className="font-semibold">ETA FORM 9198 - EMPLOYER REPRESENTATIVE DECLARATION</p>
+                    <p className="font-medium">EMPLOYER INFORMATION</p>
+                    <p>Employer: {formData.companyName || "[Your Company]"}</p>
+                    <p>EIN: {formData.ein || "[Tax ID]"}</p>
+                    <p className="font-medium">REPRESENTATIVE INFORMATION</p>
+                    <p>Rockerbox Technologies, LLC</p>
+                    <p>1234 Tax Credit Drive, Suite 500, Austin, TX 78701</p>
+                    <p className="font-medium">AUTHORIZATION SCOPE</p>
+                    <p>The employer authorizes the representative to:</p>
+                    <ul className="list-disc pl-6 space-y-1">
+                      <li>Submit IRS Form 8850 (Pre-Screening Notice)</li>
+                      <li>Submit ETA Form 9061 (Individual Characteristics Form)</li>
+                      <li>Submit ETA Form 9062 (Conditional Certification)</li>
+                      <li>Receive and respond to State Workforce Agency correspondence</li>
+                      <li>Request certification status information</li>
+                      <li>Submit appeals for denied certifications</li>
+                      <li>Access WOTC portal systems on employer's behalf</li>
+                    </ul>
+                    <p className="font-medium">CERTIFICATION</p>
+                    <p>I certify that I am authorized to sign on behalf of the employer and that the information provided is true and accurate.</p>
+                  </div>
+                </ScrollArea>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="form9198"
+                    checked={agreementsAccepted.form9198}
+                    onCheckedChange={(checked) => 
+                      setAgreementsAccepted(prev => ({ ...prev, form9198: !!checked }))
+                    }
+                    data-testid="checkbox-form-9198"
+                  />
+                  <Label htmlFor="form9198" className="text-sm leading-relaxed">
+                    I authorize Rockerbox to act as our representative for WOTC submissions (ETA Form 9198)
+                  </Label>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <PenTool className="h-5 w-5" />
+                  Electronic Signature
+                </CardTitle>
+                <CardDescription>
+                  Type your full legal name to sign the agreements above
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signature">Signature (Type your full name)</Label>
+                  <Input
+                    id="signature"
+                    value={signatureData}
+                    onChange={(e) => setSignatureData(e.target.value)}
+                    placeholder="Type your full legal name"
+                    className="text-lg font-signature"
+                    data-testid="input-signature"
+                  />
+                </div>
+                {signatureData && (
+                  <div className="border rounded-lg p-4 bg-white dark:bg-gray-900">
+                    <p className="text-xs text-muted-foreground mb-2">Signature Preview:</p>
+                    <p className="text-2xl italic font-serif">{signatureData}</p>
+                  </div>
+                )}
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="termsOfService"
+                    checked={agreementsAccepted.termsOfService}
+                    onCheckedChange={(checked) => 
+                      setAgreementsAccepted(prev => ({ ...prev, termsOfService: !!checked }))
+                    }
+                    data-testid="checkbox-terms"
+                  />
+                  <Label htmlFor="termsOfService" className="text-sm leading-relaxed">
+                    By typing my name above, I confirm this constitutes my legal electronic signature and I agree to be bound by the terms of both agreements
+                  </Label>
+                </div>
+              </CardContent>
+            </Card>
+
+            {agreementsAccepted.engagementLetter && agreementsAccepted.form9198 && agreementsAccepted.termsOfService && signatureData && (
+              <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-green-800 dark:text-green-200">Agreements Complete</p>
+                    <p className="text-sm text-green-700 dark:text-green-300">
+                      All required agreements have been signed. You can proceed to the next step.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+
       case "users":
         return (
           <div className="space-y-6">
@@ -476,6 +677,19 @@ export default function OnboardingWizardPage() {
                       {formData.payrollProvider ? formData.payrollProvider.toUpperCase() : "Not set"}
                       {formData.payrollConnected && " (Connected)"}
                     </p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-muted-foreground mb-2">Agreements Status</p>
+                  <div className="flex flex-wrap gap-2">
+                    {agreementsAccepted.engagementLetter && agreementsAccepted.form9198 && signatureData ? (
+                      <Badge variant="default" className="bg-green-600">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        All Agreements Signed
+                      </Badge>
+                    ) : (
+                      <Badge variant="destructive">Agreements Pending</Badge>
+                    )}
                   </div>
                 </div>
                 <div className="pt-4 border-t">
