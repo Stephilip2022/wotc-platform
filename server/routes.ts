@@ -44,6 +44,7 @@ import multiCreditRouter from "./routes/multiCredit";
 import integrationsRouter from "./routes/integrations";
 import analyticsRouter from "./routes/analytics";
 import auditRouter, { logAuditEvent } from "./routes/audit";
+import certificationRouter from "./routes/certification";
 import { 
   translateText, 
   translateToSpanish, 
@@ -149,6 +150,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount audit routes  
   app.use("/api/audit", isAuthenticated, auditRouter);
+
+  // Mount certification automation routes
+  app.use("/api/certification", isAuthenticated, certificationRouter);
 
   // ============================================================================
   // TRANSLATION ROUTES

@@ -44,6 +44,8 @@ import AuditLogsPage from "@/pages/admin/audit-logs";
 import IntegrationsPage from "@/pages/employer/integrations";
 import DocumentOCRPage from "@/pages/admin/document-ocr";
 import MultiCreditPage from "@/pages/employer/multi-credit";
+import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
+import BulkImportPage from "@/pages/employer/bulk-import";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -127,6 +129,8 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/employer/api-docs" component={ApiDocsPage} />
                   <Route path="/employer/api-usage" component={ApiUsagePage} />
                   <Route path="/employer/multi-credit" component={MultiCreditPage} />
+                  <Route path="/employer/onboarding" component={OnboardingWizardPage} />
+                  <Route path="/employer/import" component={BulkImportPage} />
                   <Route component={NotFound} />
                 </>
               )}
