@@ -42,7 +42,29 @@ import webhooksRouter from "./routes/webhooks";
 import retentionRouter from "./routes/retention";
 import multiCreditRouter from "./routes/multiCredit";
 import integrationsRouter from "./routes/integrations";
-import { translateToSpanish, batchTranslateToSpanish, spanishUIStrings } from "./services/translationService";
+import { 
+  translateText, 
+  translateToSpanish, 
+  batchTranslate,
+  batchTranslateToSpanish, 
+  uiStrings,
+  spanishUIStrings,
+  getSupportedLanguages,
+  detectLanguage,
+  SupportedLanguage,
+} from "./services/translationService";
+import {
+  extractDeterminationLetterData,
+  processAndStoreDeterminationLetter,
+  analyzeDocumentType,
+} from "./services/documentOCR";
+import {
+  getQuestionnaireHelp,
+  simplifyQuestion,
+  explainTerm,
+  logAIInteraction,
+  WOTC_TERMS,
+} from "./services/conversationalAI";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -124,14 +146,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TRANSLATION ROUTES
   // ============================================================================
 
-  // Translate single text to Spanish
+  // Get supported languages
+  app.get("/api/translate/languages", async (req: any, res) => {
+    res.json(getSupportedLanguages());
+  });
+
+  // Translate single text to any supported language
   app.post("/api/translate", isAuthenticated, async (req: any, res) => {
     try {
-      const { text } = req.body;
+      const { text, targetLanguage = "es" } = req.body;
       if (!text) {
         return res.status(400).json({ error: "Text is required" });
       }
-      const result = await translateToSpanish(text);
+      const result = await translateText(text, targetLanguage as SupportedLanguage);
       res.json(result);
     } catch (error) {
       console.error("Translation error:", error);
@@ -139,14 +166,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Batch translate multiple texts to Spanish
+  // Batch translate multiple texts
   app.post("/api/translate/batch", isAuthenticated, async (req: any, res) => {
     try {
-      const { texts } = req.body;
+      const { texts, targetLanguage = "es" } = req.body;
       if (!texts || !Array.isArray(texts)) {
         return res.status(400).json({ error: "Texts array is required" });
       }
-      const result = await batchTranslateToSpanish(texts);
+      const result = await batchTranslate(texts, targetLanguage as SupportedLanguage);
       res.json(result);
     } catch (error) {
       console.error("Batch translation error:", error);
@@ -154,9 +181,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get pre-translated UI strings
+  // Detect language of text
+  app.post("/api/translate/detect", isAuthenticated, async (req: any, res) => {
+    try {
+      const { text } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: "Text is required" });
+      }
+      const result = await detectLanguage(text);
+      res.json(result);
+    } catch (error) {
+      console.error("Language detection error:", error);
+      res.status(500).json({ error: "Failed to detect language" });
+    }
+  });
+
+  // Get pre-translated UI strings for a language
   app.get("/api/translate/ui-strings", isAuthenticated, async (req: any, res) => {
-    res.json(spanishUIStrings);
+    const language = (req.query.language as SupportedLanguage) || "es";
+    res.json(uiStrings[language] || spanishUIStrings);
+  });
+
+  // ============================================================================
+  // DOCUMENT OCR ROUTES
+  // ============================================================================
+
+  // Analyze document type
+  app.post("/api/ocr/analyze", isAuthenticated, upload.single("document"), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Document file is required" });
+      }
+      const imageBase64 = req.file.buffer.toString("base64");
+      const result = await analyzeDocumentType(imageBase64, req.file.mimetype);
+      res.json(result);
+    } catch (error) {
+      console.error("Document analysis error:", error);
+      res.status(500).json({ error: "Failed to analyze document" });
+    }
+  });
+
+  // Extract data from determination letter
+  app.post("/api/ocr/extract", isAuthenticated, upload.single("document"), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Document file is required" });
+      }
+      const imageBase64 = req.file.buffer.toString("base64");
+      const result = await extractDeterminationLetterData(imageBase64, req.file.mimetype);
+      res.json(result);
+    } catch (error) {
+      console.error("OCR extraction error:", error);
+      res.status(500).json({ error: "Failed to extract document data" });
+    }
+  });
+
+  // Process and store determination letter
+  app.post("/api/ocr/process/:screeningId", isAuthenticated, upload.single("document"), async (req: any, res) => {
+    try {
+      const { screeningId } = req.params;
+      if (!req.file) {
+        return res.status(400).json({ error: "Document file is required" });
+      }
+      const imageBase64 = req.file.buffer.toString("base64");
+      const result = await processAndStoreDeterminationLetter(
+        screeningId,
+        imageBase64,
+        req.file.mimetype,
+        req.file.originalname
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Document processing error:", error);
+      res.status(500).json({ error: "Failed to process document" });
+    }
+  });
+
+  // ============================================================================
+  // CONVERSATIONAL AI ROUTES
+  // ============================================================================
+
+  // Get AI help with questionnaire
+  app.post("/api/ai/help", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const { message, context, history } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+      
+      const result = await getQuestionnaireHelp(message, context || {}, history || []);
+      
+      // Log the interaction
+      if (userId) {
+        await logAIInteraction(userId, context?.screeningId, "help", message, result.message, result.tokensUsed);
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("AI help error:", error);
+      res.status(500).json({ error: "Failed to get AI assistance" });
+    }
+  });
+
+  // Simplify a question
+  app.post("/api/ai/simplify", isAuthenticated, async (req: any, res) => {
+    try {
+      const { question, readingLevel, language } = req.body;
+      
+      if (!question) {
+        return res.status(400).json({ error: "Question is required" });
+      }
+      
+      const result = await simplifyQuestion(question, readingLevel || 8, language || "en");
+      res.json(result);
+    } catch (error) {
+      console.error("Question simplification error:", error);
+      res.status(500).json({ error: "Failed to simplify question" });
+    }
+  });
+
+  // Explain a WOTC term
+  app.post("/api/ai/explain-term", isAuthenticated, async (req: any, res) => {
+    try {
+      const { term, language } = req.body;
+      
+      if (!term) {
+        return res.status(400).json({ error: "Term is required" });
+      }
+      
+      // Check quick dictionary first
+      if (WOTC_TERMS[term.toUpperCase()] && (!language || language === "en")) {
+        return res.json({
+          definition: WOTC_TERMS[term.toUpperCase()],
+          examples: [],
+          relatedTerms: [],
+          fromDictionary: true,
+        });
+      }
+      
+      const result = await explainTerm(term, language || "en");
+      res.json(result);
+    } catch (error) {
+      console.error("Term explanation error:", error);
+      res.status(500).json({ error: "Failed to explain term" });
+    }
+  });
+
+  // Get WOTC terms dictionary
+  app.get("/api/ai/terms", async (req: any, res) => {
+    res.json(WOTC_TERMS);
   });
 
   // ============================================================================
