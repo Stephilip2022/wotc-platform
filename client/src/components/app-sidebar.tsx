@@ -33,6 +33,8 @@ import {
   Bot,
   BarChart3,
   Shield,
+  ScanLine,
+  Layers,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -53,6 +55,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "White-Label", url: "/admin/licensees", icon: Palette },
     { title: "Submissions", url: "/admin/submissions", icon: Bot },
     { title: "Audit Logs", url: "/admin/audit", icon: Shield },
+    { title: "Document OCR", url: "/admin/document-ocr", icon: ScanLine },
     { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "State Automation", url: "/admin/automation", icon: Settings },
     { title: "State Credentials", url: "/admin/state-credentials", icon: KeyRound },
@@ -65,6 +68,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Screenings", url: "/employer/screenings", icon: ClipboardCheck },
     { title: "Hours", url: "/employer/hours", icon: Clock },
     { title: "Retention", url: "/employer/retention", icon: TrendingUp },
+    { title: "Multi-Credit", url: "/employer/multi-credit", icon: Layers },
     { title: "Integrations", url: "/employer/integrations", icon: Link2 },
     { title: "Documents", url: "/employer/documents", icon: FolderOpen },
     { title: "Credits", url: "/employer/credits", icon: DollarSign },

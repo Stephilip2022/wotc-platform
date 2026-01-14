@@ -2,7 +2,7 @@
 
 ## Overview
 
-The WOTC Optimization Platform is a multi-tenant enterprise SaaS application designed to streamline the end-to-end management of Work Opportunity Tax Credits for employers. It serves employees, employers, internal administrators, and white-label licensees by automating WOTC screening, submission, tracking, and credit calculation. The platform integrates AI-powered questionnaire simplification and provides comprehensive analytics dashboards, aiming to automate complex workflows and maximize tax credit capture.
+The WOTC Optimization Platform is a multi-tenant enterprise SaaS application designed to automate the end-to-end management of Work Opportunity Tax Credits (WOTC) for employers. It streamlines WOTC screening, submission, tracking, and credit calculation for employees, employers, administrators, and white-label licensees. The platform incorporates AI for questionnaire simplification, eligibility prediction, and credit forecasting, alongside comprehensive analytics dashboards. Its core purpose is to automate complex workflows, maximize tax credit capture, and integrate seamlessly with existing enterprise systems like ATS/HCM and payroll providers.
 
 ## User Preferences
 
@@ -12,88 +12,47 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-**Framework & UI**: React 18 with TypeScript, Vite, and Shadcn/ui (based on Radix UI) for a clear, utility-focused design. Styling uses Tailwind CSS with light/dark themes and tenant-specific customization.
-**State Management**: TanStack Query for server state caching and optimistic updates.
-**Routing**: Wouter for lightweight, role-based client-side routing.
-**Form Handling**: React Hook Form with Zod for type-safe form validation.
+The frontend is built with React 18 and TypeScript, utilizing Vite for tooling and Shadcn/ui (based on Radix UI) for a utility-focused design. Styling is managed with Tailwind CSS, supporting light/dark themes and tenant-specific customizations. TanStack Query handles server state, Wouter manages client-side routing, and React Hook Form with Zod ensures type-safe form validation.
 
 ### Backend Architecture
 
-**Runtime & API**: Node.js with Express.js for a RESTful API, organized by domain. Supports file uploads via Multer.
-**Business Logic**: Implements WOTC eligibility determination based on IRS and ETA rules, a credit calculation engine for various target groups, and multi-tenant isolation with role-based access control.
-**Session Management**: Express-session with PostgreSQL store for persistent cookie-based sessions.
-**AI Integration**: Utilizes OpenAI API for intelligent questionnaire assistance, including question rewording and contextual help.
+The backend uses Node.js with Express.js to provide a RESTful API organized by domain, supporting file uploads via Multer. It implements WOTC eligibility and credit calculation logic, multi-tenant isolation, and role-based access control. Session management is handled by Express-session with a PostgreSQL store. AI integration leverages the OpenAI API for intelligent questionnaire assistance.
 
 ### Data Storage
 
-**Database**: PostgreSQL accessed via Neon serverless driver.
-**ORM**: Drizzle ORM with a schema-first approach, TypeScript-defined schemas, and Drizzle Kit for migrations.
-**Schema Design**: Multi-tenant data model with employer isolation, Replit Auth compatibility, and core entities for employers, employees, screenings, documents, and credit calculations. Uses JSONB for flexible data storage.
-**Security**: Includes provisions for PII encryption, audit trails, and data retention policies.
+PostgreSQL, accessed via Neon serverless driver, is the primary database. Drizzle ORM is used with a schema-first approach, TypeScript-defined schemas, and Drizzle Kit for migrations. The multi-tenant data model includes core entities for employers, employees, screenings, and credit calculations, utilizing JSONB for flexible data storage and ensuring PII encryption, audit trails, and data retention.
 
 ### Authentication & Authorization
 
-**Provider**: Replit Auth (OpenID Connect) integrated with Passport.js.
-**Session Strategy**: Cookie-based sessions stored in PostgreSQL with HTTP-only, secure cookies, and CSRF protection.
-**Role System**: Supports four distinct roles (employee, employer, admin, licensee) with role-based access control enforced via Express middleware.
+Replit Auth (OpenID Connect) integrated with Passport.js provides authentication. Cookie-based sessions are stored in PostgreSQL with secure, HTTP-only cookies and CSRF protection. A role-based access control system supports employee, employer, admin, and licensee roles, enforced via Express middleware.
 
 ### Core Features
 
-- **WOTC Compliance**: Automated ETA Form 9198 intake with digital signatures, QR codes, and questionnaire URLs.
-- **Employee Screening**: Gamified, conditional logic questionnaire covering all WOTC target groups.
-- **Document Management**: Secure file upload system for IRS letters and supporting documents.
-- **Credit Calculation & Tracking**: Auto-calculation of WOTC credits based on hours worked, determination tracking, and an admin interface for status updates.
-- **Payroll Integration**: Enhanced CSV parser with intelligent column detection, employee matching, and reusable mapping templates for importing payroll data.
-- **Billing & Subscriptions**: Comprehensive billing schema, subscription plans, and Stripe integration for payments and invoicing.
-- **Analytics & Reporting**: Comprehensive dashboards for employers (KPIs, credit projections) and administrators (system-wide statistics, revenue tracking, MRR/ARR, churn rates).
-- **Email Notifications**: Resend integration for transactional emails (screening invites, status updates, invoices) with responsive, branded templates.
-- **State Automation (Phase 4 - Complete)**: Production-ready state portal automation with Playwright-based submission bots, OCR-powered determination letter parsing, credential management with AES-256-GCM encryption, comprehensive MFA token handling, and automatic credential rotation with audit trail. 56 state portals configured (7 automation-enabled: CA, TX, NY, FL, IL, OH, PA).
-- **AI-Powered Intelligence (Phase 5 - Complete)**: 
-  - **Eligibility Prediction Engine**: AI analyzes applicant data (demographics, employment history, questionnaire responses) to predict WOTC eligibility with confidence scores (0-100%), target group recommendations, and detailed reasoning.
-  - **Smart Questionnaire Optimization**: Real-time question simplification using OpenAI to adjust reading level (6th-14th grade), Spanish translation support, Flesch-Kincaid readability analysis, and batch processing capabilities.
-  - **Prediction Tracking & Analytics**: Comprehensive validation system comparing AI predictions against actual determinations to measure accuracy rates, with detailed statistics on token usage and performance metrics.
-  - **Predictive Credit Forecasting**: Historical data analysis with conversion rate tracking, hiring pipeline projections, and automated credit estimates based on target group distribution and typical hours worked patterns.
-- **Enterprise Integrations (Phase 6 - Complete)**: 
-  - **OAuth 2.0 Infrastructure**: Complete token management system with AES-256-GCM encryption, automatic refresh logic, webhook validation, and exponential backoff retry mechanisms.
-  - **Integration Framework**: Field mapping engine, sync logging, connection health monitoring, and comprehensive error tracking for all external system integrations.
-  - **ATS/HCM Connectors**: Production-ready bidirectional sync for Greenhouse (candidate import, WOTC results export) and BambooHR (employee sync, certification status updates) with auto-creation of employee records and screening workflows.
-  - **Payroll Integrations**: Real-time hours and wages sync from ADP, Gusto, and QuickBooks Payroll with automatic credit recalculation. Employee matching via integrationSyncedRecords ensures accurate data attribution. Enhanced hoursWorked schema stores both hours (decimal 10,2) and wages (decimal 12,2) for precise WOTC credit calculations.
-  - **Accounting Exports**: QuickBooks and Xero integrations for pushing certified WOTC credits as journal entries with detailed supporting documentation, credit memos, and tax filing attachments for CPA workflows.
-  - **Integration Monitoring**: Comprehensive dashboard tracking sync status, error logs, data flow statistics, connection health metrics, and API rate limit monitoring across all connected systems.
-  - **Automated Sync Scheduler**: Configurable sync intervals (real-time webhooks, hourly, daily) with intelligent retry logic using exponential backoff, connection health checks, and automatic pause/resume for unhealthy connections.
-- **Zero-Touch Processing (Phase 7 - Complete)**: 
-  - **Submission Readiness Detection**: Automated monitoring engine that validates screening completion (eligible status, forms generated, state credentials present), assigns readiness scores (0-100), identifies missing fields, and calculates submission priority (1-10) based on hire date urgency and certification deadlines.
-  - **Intelligent Queue Manager**: Batch optimization system that groups screenings by state/employer/submission window, respects state portal limits (maxBatchSize), implements priority escalation for urgent items (priority ≥8), and uses database transactions for race-condition-safe job creation ensuring single-claim guarantees.
-  - **Automated Submission Orchestrator**: Production-ready background worker that polls for pending jobs, enforces concurrency limits (max 5 simultaneous submissions), integrates with Playwright bots for automated state portal submission, implements exponential backoff retry logic (3 attempts with 5-second base delay), and automatically handles MFA challenges using TOTP/authenticator apps.
-  - **Monitoring & Alerting System**: Comprehensive analytics dashboard with real-time metrics (success rates, processing times, job statistics), automated anomaly detection (high failure rates, stuck jobs, repeated failures), email notifications for submission success/failure, state-by-state performance breakdown, and auto-refreshing admin UI with detailed failure logs and filtering capabilities.
-- **Public API & Developer Platform (Phase 8 Part B - Complete)**:
-  - **API Key Management**: Secure API key generation with crypto.randomBytes (64 bytes hex), database-backed key storage with bcrypt hashing, scope-based permissions (employees:read/write, screenings:read/write, credits:read), configurable expiration, rate limiting (100 req/hour default), usage tracking, and key rotation endpoints.
-  - **API Authentication & Rate Limiting**: apiKeyAuth middleware validates Bearer tokens, requireAnyScope() enforces OR-based permission checks, per-endpoint rate limiting via route-level middleware composition, canonical endpoint normalization (/:id → /:id format), atomic SQL increment for usage statistics, and 429 responses with Retry-After headers.
-  - **Public REST API (v1)**: Production-ready RESTful endpoints for employees, screenings, and credits with pagination (page/limit), filtering (status, dateRange), sorting (any field + asc/desc), tenant isolation via API key employerId, standard HTTP codes (200/201/400/401/403/404/429/500), TypeScript-safe Drizzle ORM column mapping for sort operations, and comprehensive error handling.
-  - **Webhook System**: HMAC-SHA256 signed webhooks for 15 event types (screening.completed, submission.certified, credit.calculated, etc.), database-backed delivery queue (webhookEndpoints, webhookDeliveries), automatic retry worker with exponential backoff (60-second poll interval, configurable maxRetries), single-delivery persistence (updates same record across retries), atomic stats accounting (totalDeliveries, successfulDeliveries, failedDeliveries), secret rotation, test delivery endpoint, and delivery history with pagination.
-  - **Developer Portal UI**: Complete developer experience with 4 integrated pages: (1) API Keys - CRUD interface with scope selection, masked display, expiration config, localStorage persistence for auto-populating docs; (2) Webhooks - split-pane UI for endpoint management, event subscription from live API, delivery history, test webhook, secret regeneration; (3) API Docs - interactive documentation with 6 endpoints, code examples in cURL/Node.js/Python, manual API key input with localStorage fallback, real-time example updates; (4) API Usage - analytics dashboard with KPIs (total requests, avg response time, error rate), per-key utilization tracking, top-10 endpoint performance metrics.
-- **Retention-Based Credit Optimization (Phase 9 - Complete)**:
-  - **400-Hour Milestone Tracking**: Database tables for retention_milestones with status progression (approaching, at_risk, reached, missed), automated monitoring for employees nearing critical thresholds.
-  - **AI Turnover Prediction**: Machine learning integration via turnover_predictions table storing confidence scores (0-100), risk levels (low/medium/high/critical), and contributing factors.
-  - **Retention Alerts System**: Proactive alerting with retention_alerts table tracking alert types, delivery status, and acknowledgment workflow.
-  - **Multi-Credit Bundling**: Support for other_tax_credits table covering R&D credits, state/local incentives, and NMTC opportunities with eligibility tracking.
-- **Enterprise Platform Features (Phase 9 Extensions)**:
-  - **Employer Integrations UI**: Full-featured page for managing ATS/HRIS/payroll connections (Greenhouse, BambooHR, ADP, Gusto) with API key configuration, sync controls, connection status monitoring, and manual sync triggers.
-  - **White-Label Licensee Management**: Admin portal for managing white-label partners with custom branding (logos, colors, domains), commission rate configuration, billing model selection (percentage/per-screening/flat-rate), and revenue sharing dashboard.
-  - **Spanish Translation Service**: AI-powered translation using OpenAI GPT-4 with workplace/tax terminology specialization, batch translation support, pre-translated UI strings for questionnaire, and translation API endpoints.
-  - **Integration Security**: Zod validation for all integration endpoints, AES-256-GCM credential encryption, employer-scoped data isolation, and masked credential display in UI.
+-   **WOTC Compliance & Screening**: Automated ETA Form 9198 intake, digital signatures, and a gamified, conditional logic questionnaire covering all WOTC target groups.
+-   **Document Management**: Secure file upload system for IRS letters and supporting documents, including AI-powered OCR for data extraction.
+-   **Credit Calculation & Tracking**: Automatic calculation of WOTC credits based on hours worked, determination tracking, and an admin interface for status updates. Includes advanced features like 400-hour milestone tracking and multi-credit bundling (R&D, state/local incentives).
+-   **Payroll & Accounting Integration**: Enhanced CSV parser with intelligent column detection, employee matching, and reusable mapping templates. Bidirectional sync with major payroll providers (ADP, Gusto, QuickBooks Payroll) for real-time hours/wages and accounting exports to QuickBooks and Xero.
+-   **Analytics & Reporting**: Comprehensive dashboards for employers and administrators, covering KPIs, credit projections, system-wide statistics, revenue tracking, and churn rates.
+-   **Email Notifications**: Transactional emails for screening invites, status updates, and invoices via Resend.
+-   **State Automation**: Production-ready state portal automation using Playwright bots, OCR for determination letter parsing, credential management with encryption, and MFA handling for 56 configured state portals.
+-   **AI-Powered Intelligence**: Eligibility prediction engine with confidence scores, smart questionnaire optimization (reading level adjustment, Spanish translation), prediction tracking, and predictive credit forecasting based on historical data. Includes AI turnover prediction.
+-   **Enterprise Integrations**: Robust OAuth 2.0 infrastructure, a flexible integration framework, and production-ready bidirectional connectors for ATS/HCM (Greenhouse, BambooHR) and payroll systems. Includes comprehensive monitoring and automated sync schedulers.
+-   **Zero-Touch Processing**: Automated submission readiness detection, intelligent queue management, and an orchestrator for automated state portal submissions with retry logic and MFA handling.
+-   **Public API & Developer Platform**: Secure REST API (v1) for employees, screenings, and credits with API key management, scope-based permissions, rate limiting, and a robust webhook system. A developer portal UI provides key management, webhook configuration, interactive API docs, and usage analytics.
+-   **White-Label & Enterprise Features**: Admin portal for white-label licensee management (branding, billing, revenue sharing), a Spanish translation service, and enhanced integration security.
+-   **UI Components**: AI Chat Assistant, Document OCR Page, Multi-Credit Bundling Page, and a White-Label Preview Component.
 
 ## External Dependencies
 
 ### Third-Party Services
 
--   **Authentication**: Replit Auth (OpenID Connect).
--   **AI Services**: OpenAI API for questionnaire assistance.
--   **Payment Processing**: Stripe for billing, invoicing, and subscription management.
--   **Database**: Neon Serverless PostgreSQL.
--   **Email**: Resend for transactional email notifications.
+-   **Authentication**: Replit Auth (OpenID Connect)
+-   **AI Services**: OpenAI API
+-   **Payment Processing**: Stripe
+-   **Database**: Neon Serverless PostgreSQL
+-   **Email**: Resend
 
 ### Key NPM Dependencies
 
--   **Frontend**: react, react-dom, wouter, @radix-ui/*, shadcn/ui, react-hook-form, zod, @tanstack/react-query, tailwindcss.
--   **Backend**: express, drizzle-orm, @neondatabase/serverless, passport, openid-client, express-session, connect-pg-simple, multer, openai.
+-   **Frontend**: react, react-dom, wouter, @radix-ui/*, shadcn/ui, react-hook-form, zod, @tanstack/react-query, tailwindcss
+-   **Backend**: express, drizzle-orm, @neondatabase/serverless, passport, openid-client, express-session, connect-pg-simple, multer, openai

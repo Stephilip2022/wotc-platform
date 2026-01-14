@@ -42,6 +42,8 @@ import LicenseesPage from "@/pages/admin/licensees";
 import AnalyticsPage from "@/pages/admin/analytics";
 import AuditLogsPage from "@/pages/admin/audit-logs";
 import IntegrationsPage from "@/pages/employer/integrations";
+import DocumentOCRPage from "@/pages/admin/document-ocr";
+import MultiCreditPage from "@/pages/employer/multi-credit";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -105,6 +107,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/admin/licensees" component={LicenseesPage} />
                   <Route path="/admin/analytics" component={AnalyticsPage} />
                   <Route path="/admin/audit" component={AuditLogsPage} />
+                  <Route path="/admin/document-ocr" component={DocumentOCRPage} />
                   <Route component={NotFound} />
                 </>
               ) : (
@@ -123,6 +126,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
                   <Route path="/employer/webhooks" component={WebhooksPage} />
                   <Route path="/employer/api-docs" component={ApiDocsPage} />
                   <Route path="/employer/api-usage" component={ApiUsagePage} />
+                  <Route path="/employer/multi-credit" component={MultiCreditPage} />
                   <Route component={NotFound} />
                 </>
               )}

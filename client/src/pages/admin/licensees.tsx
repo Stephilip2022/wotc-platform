@@ -15,9 +15,10 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { 
   Building2, Plus, Edit, Trash2, Palette, Globe, DollarSign,
-  Users, Settings, ExternalLink, Copy, CheckCircle2
+  Users, Settings, ExternalLink, Copy, CheckCircle2, Eye
 } from "lucide-react";
 import { format } from "date-fns";
+import WhiteLabelPreview from "@/components/WhiteLabelPreview";
 
 interface Licensee {
   id: string;
@@ -41,6 +42,7 @@ export default function LicenseesPage() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingLicensee, setEditingLicensee] = useState<Licensee | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [previewLicensee, setPreviewLicensee] = useState<Licensee | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
@@ -546,6 +548,15 @@ export default function LicenseesPage() {
                       <Button
                         size="sm"
                         variant="ghost"
+                        onClick={() => setPreviewLicensee(licensee)}
+                        title="Preview branding"
+                        data-testid={`button-preview-${licensee.id}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         onClick={() => {
                           const url = licensee.customDomain || `${window.location.origin}/${licensee.slug}`;
                           copyToClipboard(url, licensee.id);
@@ -575,6 +586,19 @@ export default function LicenseesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      {previewLicensee && (
+        <WhiteLabelPreview
+          config={{
+            name: previewLicensee.name,
+            logoUrl: previewLicensee.logoUrl || undefined,
+            primaryColor: previewLicensee.primaryColor,
+            secondaryColor: previewLicensee.secondaryColor,
+            customDomain: previewLicensee.customDomain || undefined,
+          }}
+          onClose={() => setPreviewLicensee(null)}
+        />
+      )}
     </div>
   );
 }

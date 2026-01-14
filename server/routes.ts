@@ -214,14 +214,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // DOCUMENT OCR ROUTES
   // ============================================================================
 
-  // Analyze document type
-  app.post("/api/ocr/analyze", isAuthenticated, upload.single("document"), async (req: any, res) => {
+  // Analyze document type (accepts file upload or JSON with base64)
+  app.post("/api/ocr/analyze", isAuthenticated, async (req: any, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ error: "Document file is required" });
+      let imageBase64: string;
+      let mimeType: string;
+      
+      if (req.body.imageBase64) {
+        imageBase64 = req.body.imageBase64;
+        mimeType = req.body.mimeType || "image/png";
+      } else {
+        return res.status(400).json({ error: "imageBase64 is required" });
       }
-      const imageBase64 = req.file.buffer.toString("base64");
-      const result = await analyzeDocumentType(imageBase64, req.file.mimetype);
+      
+      const result = await analyzeDocumentType(imageBase64, mimeType);
       res.json(result);
     } catch (error) {
       console.error("Document analysis error:", error);
@@ -229,14 +235,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Extract data from determination letter
-  app.post("/api/ocr/extract", isAuthenticated, upload.single("document"), async (req: any, res) => {
+  // Extract data from determination letter (accepts file upload or JSON with base64)
+  app.post("/api/ocr/extract", isAuthenticated, async (req: any, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ error: "Document file is required" });
+      let imageBase64: string;
+      let mimeType: string;
+      
+      if (req.body.imageBase64) {
+        imageBase64 = req.body.imageBase64;
+        mimeType = req.body.mimeType || "image/png";
+      } else {
+        return res.status(400).json({ error: "imageBase64 is required" });
       }
-      const imageBase64 = req.file.buffer.toString("base64");
-      const result = await extractDeterminationLetterData(imageBase64, req.file.mimetype);
+      
+      const result = await extractDeterminationLetterData(imageBase64, mimeType);
       res.json(result);
     } catch (error) {
       console.error("OCR extraction error:", error);
@@ -340,6 +352,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get WOTC terms dictionary
   app.get("/api/ai/terms", async (req: any, res) => {
     res.json(WOTC_TERMS);
+  });
+
+  // Chat with AI assistant (for questionnaire help)
+  app.post("/api/ai/chat", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const { message, context, conversationHistory } = req.body;
+      
+      if (!message) {
+        return res.status(400).json({ error: "Message is required" });
+      }
+      
+      const result = await getQuestionnaireHelp(message, context || {}, conversationHistory || []);
+      
+      // Log the interaction
+      if (userId) {
+        await logAIInteraction(userId, context?.screeningId, "chat", message, result.message, result.tokensUsed);
+      }
+      
+      res.json(result);
+    } catch (error) {
+      console.error("AI chat error:", error);
+      res.status(500).json({ error: "Failed to get AI response" });
+    }
   });
 
   // ============================================================================
