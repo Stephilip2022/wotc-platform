@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { isAuthenticated } from "../replitAuth";
 import { db } from "../db";
-import { users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { users, employers } from "@shared/schema";
+import { eq, or, and } from "drizzle-orm";
 import {
   createPricingPlan,
   getPricingPlans,
@@ -22,6 +22,14 @@ const router = Router();
 async function isAdmin(userId: string): Promise<boolean> {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
   return user?.role === "admin";
+}
+
+async function canAccessEmployerBilling(userId: string, employerId: string): Promise<boolean> {
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (user.role === "employer" && user.employerId === employerId) return true;
+  return false;
 }
 
 router.get("/plans", isAuthenticated, async (req, res) => {
@@ -97,12 +105,20 @@ router.put("/plans/:id", isAuthenticated, async (req, res) => {
 router.post("/employer/:employerId/assign", isAuthenticated, async (req, res) => {
   try {
     const userId = (req.user as any)?.id;
-    if (!await isAdmin(userId)) {
-      return res.status(403).json({ error: "Admin access required" });
+    const { employerId } = req.params;
+    
+    if (!await canAccessEmployerBilling(userId, employerId)) {
+      return res.status(403).json({ error: "Access denied" });
     }
 
     const { pricingPlanId, customOverrides } = req.body;
-    const billing = await assignPricingPlanToEmployer(req.params.employerId, pricingPlanId, customOverrides);
+    
+    const userIsAdmin = await isAdmin(userId);
+    if (customOverrides && !userIsAdmin) {
+      return res.status(403).json({ error: "Custom overrides require admin access" });
+    }
+
+    const billing = await assignPricingPlanToEmployer(employerId, pricingPlanId, userIsAdmin ? customOverrides : undefined);
     res.json(billing);
   } catch (error: any) {
     console.error("Error assigning pricing plan:", error);
@@ -112,7 +128,14 @@ router.post("/employer/:employerId/assign", isAuthenticated, async (req, res) =>
 
 router.get("/employer/:employerId", isAuthenticated, async (req, res) => {
   try {
-    const billing = await getEmployerBilling(req.params.employerId);
+    const userId = (req.user as any)?.id;
+    const { employerId } = req.params;
+    
+    if (!await canAccessEmployerBilling(userId, employerId)) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+    
+    const billing = await getEmployerBilling(employerId);
     res.json(billing || { billing: null, plan: null });
   } catch (error: any) {
     console.error("Error fetching employer billing:", error);
