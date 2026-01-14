@@ -45,6 +45,7 @@ import integrationsRouter from "./routes/integrations";
 import analyticsRouter from "./routes/analytics";
 import auditRouter, { logAuditEvent } from "./routes/audit";
 import certificationRouter from "./routes/certification";
+import clientAgreementsRouter from "./routes/clientAgreements";
 import { 
   translateText, 
   translateToSpanish, 
@@ -153,6 +154,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Mount certification automation routes
   app.use("/api/certification", isAuthenticated, certificationRouter);
+
+  // Client Agreements (Engagement Letters & ETA Form 9198)
+  app.use("/api/agreements", isAuthenticated, clientAgreementsRouter);
 
   // ============================================================================
   // TRANSLATION ROUTES

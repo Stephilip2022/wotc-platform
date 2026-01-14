@@ -783,7 +783,7 @@ export default function LandingPage() {
           </div>
           
           <div className="text-center pt-8 border-t text-sm text-muted-foreground">
-            <p>© 2026 WOTC Optimization System. All rights reserved.</p>
+            <p>© 2026 Rockerbox. All rights reserved.</p>
             <p className="mt-2">
               Enterprise-grade WOTC screening, certification, and credit optimization platform
             </p>
