@@ -22,7 +22,6 @@ import {
 } from "recharts";
 import { 
   TrendingUp, 
-  TrendingDown, 
   Users, 
   FileCheck, 
   DollarSign, 
@@ -46,6 +45,44 @@ interface OverviewData {
   certificationRate: number;
 }
 
+interface TrendData {
+  period: string;
+  eligible: number;
+  certified: number;
+  denied: number;
+  total: number;
+}
+
+interface CreditTrendData {
+  period: string;
+  totalCredits: number;
+  count: number;
+}
+
+interface TargetGroupData {
+  targetGroup: string;
+  count: number;
+  totalCredits: string;
+}
+
+interface StatePerformanceData {
+  stateCode: string;
+  total: number;
+  successful: number;
+  failed: number;
+  successRate: number;
+  avgProcessingTime: number | null;
+}
+
+interface LeaderboardData {
+  employerId: number;
+  employerName: string;
+  totalScreenings: number;
+  eligibleScreenings: number;
+  certifiedScreenings: number;
+  totalCredits: string;
+}
+
 export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("30d");
   const [groupBy, setGroupBy] = useState<"day" | "week" | "month">("day");
@@ -65,61 +102,24 @@ export default function AnalyticsPage() {
     queryKey: ["/api/analytics/overview"],
   });
 
-  const { data: screeningTrends, isLoading: loadingTrends } = useQuery({
-    queryKey: ["/api/analytics/trends/screenings", startDate.toISOString(), groupBy],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/analytics/trends/screenings?startDate=${startDate.toISOString()}&groupBy=${groupBy}`,
-        { credentials: "include" }
-      );
-      if (!res.ok) throw new Error("Failed to fetch trends");
-      return res.json();
-    },
+  const { data: screeningTrends, isLoading: loadingTrends } = useQuery<TrendData[]>({
+    queryKey: [`/api/analytics/trends/screenings?startDate=${startDate.toISOString()}&groupBy=${groupBy}`],
   });
 
-  const { data: creditTrends, isLoading: loadingCredits } = useQuery({
-    queryKey: ["/api/analytics/trends/credits", startDate.toISOString(), "month"],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/analytics/trends/credits?startDate=${startDate.toISOString()}&groupBy=month`,
-        { credentials: "include" }
-      );
-      if (!res.ok) throw new Error("Failed to fetch credit trends");
-      return res.json();
-    },
+  const { data: creditTrends, isLoading: loadingCredits } = useQuery<CreditTrendData[]>({
+    queryKey: [`/api/analytics/trends/credits?startDate=${startDate.toISOString()}&groupBy=month`],
   });
 
-  const { data: targetGroups, isLoading: loadingGroups } = useQuery({
+  const { data: targetGroups, isLoading: loadingGroups } = useQuery<TargetGroupData[]>({
     queryKey: ["/api/analytics/distribution/target-groups"],
-    queryFn: async () => {
-      const res = await fetch("/api/analytics/distribution/target-groups", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch distribution");
-      return res.json();
-    },
   });
 
-  const { data: statePerformance, isLoading: loadingStates } = useQuery({
+  const { data: statePerformance, isLoading: loadingStates } = useQuery<StatePerformanceData[]>({
     queryKey: ["/api/analytics/performance/states"],
-    queryFn: async () => {
-      const res = await fetch("/api/analytics/performance/states", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch state performance");
-      return res.json();
-    },
   });
 
-  const { data: leaderboard, isLoading: loadingLeaderboard } = useQuery({
+  const { data: leaderboard, isLoading: loadingLeaderboard } = useQuery<LeaderboardData[]>({
     queryKey: ["/api/analytics/leaderboard/employers"],
-    queryFn: async () => {
-      const res = await fetch("/api/analytics/leaderboard/employers", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("Failed to fetch leaderboard");
-      return res.json();
-    },
   });
 
   const handleExport = async (type: "screenings" | "credits") => {
@@ -136,7 +136,7 @@ export default function AnalyticsPage() {
 
   if (loadingOverview) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64" data-testid="loading-spinner">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
@@ -144,7 +144,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-3xl font-bold" data-testid="text-page-title">Advanced Analytics</h1>
           <p className="text-muted-foreground">Comprehensive insights into WOTC program performance</p>
@@ -175,7 +175,7 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card data-testid="card-total-screenings">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Screenings</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
@@ -184,13 +184,13 @@ export default function AnalyticsPage() {
             <div className="text-2xl font-bold" data-testid="text-total-screenings">
               {overview?.totalScreenings?.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground" data-testid="text-conversion-rate">
               {overview?.conversionRate?.toFixed(1)}% conversion rate
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-testid="card-eligible">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Eligible</CardTitle>
             <FileCheck className="h-4 w-4 text-green-500" />
@@ -199,13 +199,13 @@ export default function AnalyticsPage() {
             <div className="text-2xl font-bold text-green-600" data-testid="text-eligible">
               {overview?.eligibleScreenings?.toLocaleString() || 0}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground" data-testid="text-certification-rate">
               {overview?.certificationRate?.toFixed(1)}% certified
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-testid="card-total-credits">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
             <DollarSign className="h-4 w-4 text-blue-500" />
@@ -220,7 +220,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-testid="card-pending">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pending</CardTitle>
             <Clock className="h-4 w-4 text-yellow-500" />
@@ -238,19 +238,19 @@ export default function AnalyticsPage() {
 
       <Tabs defaultValue="trends" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="trends" className="flex items-center gap-2">
+          <TabsTrigger value="trends" className="flex items-center gap-2" data-testid="tab-trends">
             <BarChart3 className="h-4 w-4" />
             Trends
           </TabsTrigger>
-          <TabsTrigger value="distribution" className="flex items-center gap-2">
+          <TabsTrigger value="distribution" className="flex items-center gap-2" data-testid="tab-distribution">
             <PieChartIcon className="h-4 w-4" />
             Distribution
           </TabsTrigger>
-          <TabsTrigger value="performance" className="flex items-center gap-2">
+          <TabsTrigger value="performance" className="flex items-center gap-2" data-testid="tab-performance">
             <TrendingUp className="h-4 w-4" />
             Performance
           </TabsTrigger>
-          <TabsTrigger value="leaderboard" className="flex items-center gap-2">
+          <TabsTrigger value="leaderboard" className="flex items-center gap-2" data-testid="tab-leaderboard">
             <Users className="h-4 w-4" />
             Leaderboard
           </TabsTrigger>
@@ -258,7 +258,7 @@ export default function AnalyticsPage() {
 
         <TabsContent value="trends" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <Card>
+            <Card data-testid="card-screening-trends">
               <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <div>
                   <CardTitle>Screening Trends</CardTitle>
@@ -298,7 +298,7 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-credit-trends">
               <CardHeader className="flex flex-row items-center justify-between gap-2">
                 <div>
                   <CardTitle>Credit Trends</CardTitle>
@@ -346,7 +346,7 @@ export default function AnalyticsPage() {
 
         <TabsContent value="distribution" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <Card>
+            <Card data-testid="card-target-group-chart">
               <CardHeader>
                 <CardTitle>Target Group Distribution</CardTitle>
                 <CardDescription>Screenings by WOTC target group</CardDescription>
@@ -369,10 +369,10 @@ export default function AnalyticsPage() {
                         dataKey="count"
                         nameKey="targetGroup"
                         label={({ targetGroup, percent }) => 
-                          `${targetGroup?.substring(0, 10) || "Unknown"}... ${(percent * 100).toFixed(0)}%`
+                          `${(targetGroup as string)?.substring(0, 10) || "Unknown"}... ${(percent * 100).toFixed(0)}%`
                         }
                       >
-                        {(targetGroups || []).map((_: any, index: number) => (
+                        {(targetGroups || []).map((_, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -383,15 +383,19 @@ export default function AnalyticsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card data-testid="card-target-group-details">
               <CardHeader>
                 <CardTitle>Target Group Details</CardTitle>
                 <CardDescription>Credits by target group</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {(targetGroups || []).map((group: any, index: number) => (
-                    <div key={group.targetGroup} className="flex items-center justify-between">
+                  {(targetGroups || []).map((group, index) => (
+                    <div 
+                      key={group.targetGroup} 
+                      className="flex items-center justify-between"
+                      data-testid={`row-target-group-${index}`}
+                    >
                       <div className="flex items-center gap-2">
                         <div 
                           className="w-3 h-3 rounded-full" 
@@ -403,8 +407,8 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="flex items-center gap-4">
                         <Badge variant="secondary">{group.count} screenings</Badge>
-                        <span className="text-sm text-green-600 font-medium">
-                          ${parseFloat(group.totalCredits || 0).toLocaleString()}
+                        <span className="text-sm text-green-600 font-medium" data-testid={`text-credits-${index}`}>
+                          ${parseFloat(group.totalCredits || "0").toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -416,7 +420,7 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-4">
-          <Card>
+          <Card data-testid="card-state-performance">
             <CardHeader>
               <CardTitle>State Submission Performance</CardTitle>
               <CardDescription>Success rates and processing times by state</CardDescription>
@@ -428,8 +432,12 @@ export default function AnalyticsPage() {
                 </div>
               ) : (statePerformance || []).length > 0 ? (
                 <div className="space-y-3">
-                  {(statePerformance || []).map((state: any) => (
-                    <div key={state.stateCode} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                  {(statePerformance || []).map((state) => (
+                    <div 
+                      key={state.stateCode} 
+                      className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      data-testid={`row-state-${state.stateCode}`}
+                    >
                       <div className="flex items-center gap-3">
                         <Badge variant="outline" className="font-mono">{state.stateCode}</Badge>
                         <div>
@@ -441,7 +449,10 @@ export default function AnalyticsPage() {
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="text-right">
-                          <p className={`font-medium ${state.successRate > 80 ? "text-green-600" : state.successRate > 50 ? "text-yellow-600" : "text-red-600"}`}>
+                          <p 
+                            className={`font-medium ${state.successRate > 80 ? "text-green-600" : state.successRate > 50 ? "text-yellow-600" : "text-red-600"}`}
+                            data-testid={`text-success-rate-${state.stateCode}`}
+                          >
                             {state.successRate?.toFixed(1)}%
                           </p>
                           <p className="text-xs text-muted-foreground">Success rate</p>
@@ -457,14 +468,16 @@ export default function AnalyticsPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-muted-foreground py-8">No submission data available</p>
+                <p className="text-center text-muted-foreground py-8" data-testid="text-no-state-data">
+                  No submission data available
+                </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="leaderboard" className="space-y-4">
-          <Card>
+          <Card data-testid="card-leaderboard">
             <CardHeader>
               <CardTitle>Employer Leaderboard</CardTitle>
               <CardDescription>Top employers by screening volume and credits</CardDescription>
@@ -476,10 +489,11 @@ export default function AnalyticsPage() {
                 </div>
               ) : (leaderboard || []).length > 0 ? (
                 <div className="space-y-3">
-                  {(leaderboard || []).map((employer: any, index: number) => (
+                  {(leaderboard || []).map((employer, index) => (
                     <div 
                       key={employer.employerId} 
                       className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                      data-testid={`row-employer-${employer.employerId}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
@@ -491,7 +505,9 @@ export default function AnalyticsPage() {
                           {index + 1}
                         </div>
                         <div>
-                          <p className="font-medium">{employer.employerName}</p>
+                          <p className="font-medium" data-testid={`text-employer-name-${employer.employerId}`}>
+                            {employer.employerName}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {employer.eligibleScreenings} eligible / {employer.totalScreenings} total
                           </p>
@@ -501,15 +517,20 @@ export default function AnalyticsPage() {
                         <Badge variant={employer.certifiedScreenings > 0 ? "default" : "secondary"}>
                           {employer.certifiedScreenings} certified
                         </Badge>
-                        <span className="font-bold text-green-600">
-                          ${parseFloat(employer.totalCredits || 0).toLocaleString()}
+                        <span 
+                          className="font-bold text-green-600"
+                          data-testid={`text-employer-credits-${employer.employerId}`}
+                        >
+                          ${parseFloat(employer.totalCredits || "0").toLocaleString()}
                         </span>
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-muted-foreground py-8">No employer data available</p>
+                <p className="text-center text-muted-foreground py-8" data-testid="text-no-employer-data">
+                  No employer data available
+                </p>
               )}
             </CardContent>
           </Card>
