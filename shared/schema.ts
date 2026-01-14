@@ -135,6 +135,65 @@ export type InsertEmployer = z.infer<typeof insertEmployerSchema>;
 export type Employer = typeof employers.$inferSelect;
 
 // ============================================================================
+// CLIENT AGREEMENTS (Engagement Letters & ETA Form 9198)
+// ============================================================================
+
+export const clientAgreements = pgTable("client_agreements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  
+  // Document type
+  documentType: text("document_type").notNull(), // 'engagement_letter', 'eta_form_9198'
+  documentVersion: text("document_version").default("1.0"),
+  
+  // Document content
+  documentContent: text("document_content"), // Generated HTML/text content
+  pdfUrl: text("pdf_url"), // Stored PDF URL
+  
+  // Signer information
+  signerName: text("signer_name"),
+  signerTitle: text("signer_title"),
+  signerEmail: text("signer_email"),
+  
+  // Signature data
+  signatureData: text("signature_data"), // Base64 encoded signature image
+  signedAt: timestamp("signed_at"),
+  signatureIpAddress: text("signature_ip_address"),
+  signatureUserAgent: text("signature_user_agent"),
+  
+  // Status tracking
+  status: text("status").default("draft"), // 'draft', 'sent', 'viewed', 'signed', 'expired', 'revoked'
+  sentAt: timestamp("sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  expiresAt: timestamp("expires_at"),
+  
+  // For ETA Form 9198 specific fields
+  representativeName: text("representative_name"), // Rockerbox representative
+  representativeTitle: text("representative_title"),
+  representativeAddress: text("representative_address"),
+  representativePhone: text("representative_phone"),
+  representativeEmail: text("representative_email"),
+  authorizationScope: text("authorization_scope"), // What actions are authorized
+  authorizationStartDate: text("authorization_start_date"),
+  authorizationEndDate: text("authorization_end_date"),
+  
+  // Engagement letter specific fields
+  feeStructure: text("fee_structure"), // 'percentage', 'flat_fee', 'hybrid'
+  feePercentage: decimal("fee_percentage", { precision: 5, scale: 2 }),
+  flatFeeAmount: decimal("flat_fee_amount", { precision: 10, scale: 2 }),
+  minimumFee: decimal("minimum_fee", { precision: 10, scale: 2 }),
+  paymentTerms: text("payment_terms"), // 'upon_certification', 'monthly', 'quarterly'
+  contractDuration: text("contract_duration"), // '1_year', '2_year', 'ongoing'
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertClientAgreementSchema = createInsertSchema(clientAgreements).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertClientAgreement = z.infer<typeof insertClientAgreementSchema>;
+export type ClientAgreement = typeof clientAgreements.$inferSelect;
+
+// ============================================================================
 // EMPLOYEES
 // ============================================================================
 
