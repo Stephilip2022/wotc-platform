@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { 
   CheckCircle2, 
   Users, 
@@ -29,10 +33,45 @@ import {
   Award,
   ArrowRight,
   CheckCheck,
-  Star
+  Star,
+  ShoppingCart,
+  Utensils,
+  Hotel,
+  Truck,
+  Factory,
+  Headphones,
+  Heart,
+  HardHat,
+  Package,
+  Calculator
 } from "lucide-react";
 
 export default function LandingPage() {
+  const [annualHires, setAnnualHires] = useState(100);
+  const [avgWage, setAvgWage] = useState(15);
+  const [eligiblePercent, setEligiblePercent] = useState(15);
+
+  const calculateCredits = () => {
+    const eligibleEmployees = Math.round(annualHires * (eligiblePercent / 100));
+    const avgCreditPerEmployee = 2400;
+    const totalCredits = eligibleEmployees * avgCreditPerEmployee;
+    return { eligibleEmployees, totalCredits };
+  };
+
+  const { eligibleEmployees, totalCredits } = calculateCredits();
+
+  const industries = [
+    { icon: ShoppingCart, name: "Retail", eligibility: "18-25%", description: "High turnover with entry-level positions" },
+    { icon: Utensils, name: "Restaurants & Food Service", eligibility: "20-30%", description: "Seasonal and part-time workforce" },
+    { icon: Hotel, name: "Hospitality & Hotels", eligibility: "15-25%", description: "Front desk, housekeeping, service staff" },
+    { icon: Package, name: "Warehousing & Distribution", eligibility: "20-28%", description: "Fulfillment centers and logistics hubs" },
+    { icon: Factory, name: "Manufacturing", eligibility: "12-20%", description: "Production and assembly line workers" },
+    { icon: Headphones, name: "Call Centers", eligibility: "22-35%", description: "Customer service representatives" },
+    { icon: Heart, name: "Healthcare", eligibility: "10-18%", description: "CNAs, home health aides, support staff" },
+    { icon: Truck, name: "Transportation & Logistics", eligibility: "15-22%", description: "Drivers, dispatchers, dock workers" },
+    { icon: HardHat, name: "Construction", eligibility: "12-18%", description: "Laborers and skilled trades" },
+    { icon: Users, name: "Staffing Agencies", eligibility: "25-40%", description: "Temporary and contract workers" },
+  ];
 
   const coreFeatures = [
     {
@@ -254,6 +293,198 @@ export default function LandingPage() {
                 </CardHeader>
               </Card>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WOTC Calculator Section */}
+      <section className="py-24 px-4 md:px-8">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center space-y-4 mb-12">
+            <Badge variant="outline" className="mb-4">
+              <Calculator className="h-3 w-3 mr-1" />
+              Savings Calculator
+            </Badge>
+            <h2 className="text-3xl md:text-5xl font-bold">Calculate Your WOTC Savings</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              See how much your organization could save with WOTC tax credits
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            <Card className="p-6" data-testid="card-wotc-calculator">
+              <CardHeader className="px-0 pt-0">
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5" />
+                  WOTC Credit Estimator
+                </CardTitle>
+                <CardDescription>
+                  Adjust the sliders based on your hiring volume
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-0 space-y-8">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="annual-hires" className="text-base">Annual New Hires</Label>
+                    <span className="text-2xl font-bold text-primary">{annualHires.toLocaleString()}</span>
+                  </div>
+                  <Slider
+                    id="annual-hires"
+                    value={[annualHires]}
+                    onValueChange={(value) => setAnnualHires(value[0])}
+                    min={10}
+                    max={5000}
+                    step={10}
+                    className="w-full"
+                    data-testid="slider-annual-hires"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>10</span>
+                    <span>5,000</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="avg-wage" className="text-base">Average Hourly Wage</Label>
+                    <span className="text-2xl font-bold text-primary">${avgWage}/hr</span>
+                  </div>
+                  <Slider
+                    id="avg-wage"
+                    value={[avgWage]}
+                    onValueChange={(value) => setAvgWage(value[0])}
+                    min={8}
+                    max={30}
+                    step={1}
+                    className="w-full"
+                    data-testid="slider-avg-wage"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>$8/hr</span>
+                    <span>$30/hr</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Label htmlFor="eligible-percent" className="text-base">Estimated Eligible %</Label>
+                    <span className="text-2xl font-bold text-primary">{eligiblePercent}%</span>
+                  </div>
+                  <Slider
+                    id="eligible-percent"
+                    value={[eligiblePercent]}
+                    onValueChange={(value) => setEligiblePercent(value[0])}
+                    min={5}
+                    max={40}
+                    step={1}
+                    className="w-full"
+                    data-testid="slider-eligible-percent"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>5%</span>
+                    <span>40%</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="p-6 bg-primary text-primary-foreground" data-testid="card-calculator-results">
+              <CardHeader className="px-0 pt-0">
+                <CardTitle className="text-primary-foreground">Your Estimated Annual Savings</CardTitle>
+              </CardHeader>
+              <CardContent className="px-0 space-y-6">
+                <div className="text-center py-6">
+                  <p className="text-6xl md:text-7xl font-bold">
+                    ${totalCredits.toLocaleString()}
+                  </p>
+                  <p className="text-lg opacity-90 mt-2">potential tax credits per year</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-primary-foreground/10 rounded-lg p-4 text-center">
+                    <p className="text-3xl font-bold">{eligibleEmployees}</p>
+                    <p className="text-sm opacity-80">Eligible Employees</p>
+                  </div>
+                  <div className="bg-primary-foreground/10 rounded-lg p-4 text-center">
+                    <p className="text-3xl font-bold">$2,400</p>
+                    <p className="text-sm opacity-80">Avg. Credit Each</p>
+                  </div>
+                </div>
+
+                <div className="pt-4 space-y-2 text-sm opacity-80">
+                  <p className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Credits up to $9,600 for certain veteran categories
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Dollar-for-dollar reduction in federal tax liability
+                  </p>
+                  <p className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4" />
+                    No limit on the number of eligible employees
+                  </p>
+                </div>
+
+                <Button 
+                  variant="secondary" 
+                  size="lg" 
+                  className="w-full mt-4"
+                  asChild
+                  data-testid="button-get-started-calculator"
+                >
+                  <a href="/api/login">
+                    Start Capturing Credits
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Industries Section */}
+      <section className="py-24 px-4 md:px-8 bg-muted/50">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center space-y-4 mb-12">
+            <Badge variant="outline" className="mb-4">Top Industries</Badge>
+            <h2 className="text-3xl md:text-5xl font-bold">Industries That Benefit Most</h2>
+            <p className="text-lg text-muted-foreground max-w-3xl mx-auto">
+              WOTC delivers the highest ROI for industries with high turnover, 
+              entry-level positions, and wages close to minimum wage
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {industries.map((industry, index) => (
+              <Card key={index} className="hover-elevate" data-testid={`industry-${index}`}>
+                <CardHeader className="pb-2">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
+                    <industry.icon className="w-6 h-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-base">{industry.name}</CardTitle>
+                  <Badge variant="secondary" className="w-fit mt-1">
+                    {industry.eligibility} eligible
+                  </Badge>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-xs text-muted-foreground">{industry.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="mt-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              Don't see your industry? WOTC applies to all employers regardless of industry.
+            </p>
+            <Button variant="outline" asChild data-testid="button-check-eligibility">
+              <a href="/api/login">
+                Check Your Eligibility
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
           </div>
         </div>
       </section>
