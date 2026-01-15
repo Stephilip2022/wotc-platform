@@ -145,55 +145,105 @@ export default function LandingPage() {
     {
       icon: Brain,
       title: "AI-Powered Screening",
-      description: "Smart questionnaire wizard with reading-level adjustment and eligibility prediction.",
+      description: "Smart questionnaire wizard with reading-level adjustment, eligibility prediction, and confidence scoring.",
     },
     {
       icon: Languages,
-      title: "9 Languages",
-      description: "English, Spanish, French, Chinese, Vietnamese, Korean, Portuguese, German, Japanese.",
+      title: "9-Language Support",
+      description: "Complete multilingual experience: English, Spanish, French, Chinese, Vietnamese, Korean, Portuguese, German, Japanese.",
     },
     {
       icon: FileSearch,
-      title: "Document OCR",
-      description: "AI-powered scanning extracts data from DD-214s, TANF docs, and determination letters.",
+      title: "Document OCR & AI Extraction",
+      description: "AI-powered scanning extracts data from DD-214s, TANF documents, and determination letters automatically.",
     },
     {
       icon: Bot,
-      title: "AI Assistant",
-      description: "Built-in AI helps users navigate the platform and answer WOTC questions instantly.",
+      title: "AI Chat Assistant",
+      description: "Built-in AI assistant helps users navigate the platform and answer WOTC questions instantly.",
     },
     {
       icon: LineChart,
-      title: "Predictive Analytics",
-      description: "Advanced forecasting with trend analysis and credit optimization recommendations.",
+      title: "Predictive Analytics & Forecasting",
+      description: "Advanced credit forecasting with trend analysis, employer comparisons, and optimization recommendations.",
     },
     {
       icon: Lock,
       title: "Compliance Automation",
-      description: "Scheduled audit scans, violation detection, and automated remediation.",
+      description: "Scheduled audit scans, violation detection, automated remediation with complete audit trails.",
+    },
+    {
+      icon: Building2,
+      title: "56 State Portal Automation",
+      description: "Production-ready bots for all state workforce agencies with OCR parsing and MFA handling.",
+    },
+    {
+      icon: Workflow,
+      title: "Zero-Touch Processing",
+      description: "Fully automated workflow from screening to state submission to certification with intelligent queue management.",
+    },
+    {
+      icon: Award,
+      title: "ETA Form 9198 Automation",
+      description: "Digital intake, e-signatures, and automated form generation for WOTC authorization.",
+    },
+    {
+      icon: PieChart,
+      title: "Multi-Credit Bundling",
+      description: "Stack WOTC with R&D tax credits and state/local incentives for maximum tax savings.",
+    },
+    {
+      icon: TrendingUp,
+      title: "Retention & Turnover Analytics",
+      description: "AI-powered turnover prediction, 400-hour milestone tracking, and retention optimization.",
+    },
+    {
+      icon: Upload,
+      title: "Bulk Import Tools",
+      description: "CSV upload with intelligent column detection, employee matching, and reusable mapping templates.",
     },
   ];
 
   const advancedFeatures = [
     {
-      icon: Building2,
-      title: "56 State Portals",
-      description: "Production-ready automation with OCR parsing and MFA handling.",
-    },
-    {
-      icon: Workflow,
-      title: "Zero-Touch Processing",
-      description: "Fully automated workflow from screening to certification.",
-    },
-    {
       icon: Server,
       title: "Enterprise Integrations",
-      description: "ADP, Paychex, Gusto, QuickBooks, Greenhouse, BambooHR sync.",
+      description: "Bidirectional sync with ADP, Paychex, Gusto, QuickBooks, Greenhouse, and BambooHR.",
     },
     {
       icon: Webhook,
-      title: "Developer API",
-      description: "Secure REST API with webhooks and interactive docs.",
+      title: "Developer API & Webhooks",
+      description: "Secure REST API with scope-based permissions, rate limiting, and real-time webhooks.",
+    },
+    {
+      icon: Globe,
+      title: "White-Label Platform",
+      description: "Full branding customization with logos, colors, domains, and revenue sharing for licensees.",
+    },
+    {
+      icon: Sparkles,
+      title: "Self-Service Onboarding",
+      description: "6-step employer setup wizard with branding, payroll integration, and team management.",
+    },
+    {
+      icon: DollarSign,
+      title: "Flexible Pricing Models",
+      description: "Percentage-based, milestone flat fees, per-screening volume, or deferred annual billing.",
+    },
+    {
+      icon: Clock,
+      title: "400-Hour Milestone Tracking",
+      description: "Automatic tracking of hours worked to maximize first-year and second-year credits.",
+    },
+    {
+      icon: Shield,
+      title: "Role-Based Access Control",
+      description: "Multi-portal platform with dedicated access for employees, employers, admins, and licensees.",
+    },
+    {
+      icon: Zap,
+      title: "Email & Push Notifications",
+      description: "Automated screening invites, status updates, milestone alerts, and invoice reminders.",
     },
   ];
 
