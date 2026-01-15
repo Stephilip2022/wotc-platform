@@ -44,10 +44,28 @@ import {
   Play,
   Coins,
   Target,
-  Gem,
   Crown,
   Rocket
 } from "lucide-react";
+
+function GoldNugget({ className }: { className?: string }) {
+  return (
+    <svg 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+      className={className}
+    >
+      <path d="M12 2L8 6L4 8L2 12L4 16L8 18L12 22L16 18L20 16L22 12L20 8L16 6L12 2Z" />
+      <path d="M8 10L10 12L8 14" />
+      <path d="M14 9L16 11" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  );
+}
 
 export default function LandingPage() {
   const [annualHires, setAnnualHires] = useState(500);
@@ -242,7 +260,7 @@ export default function LandingPage() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                <Gem className="w-6 h-6 text-primary-foreground" />
+                <GoldNugget className="w-6 h-6 text-primary-foreground" />
               </div>
               <span className="text-xl font-bold gradient-text">Rockerbox</span>
             </div>
@@ -674,7 +692,7 @@ export default function LandingPage() {
       <section className="py-24 px-4 md:px-8 hero-gradient">
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
-            <Gem className="h-4 w-4 text-primary" />
+            <GoldNugget className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium">Start Your Free Trial Today</span>
           </div>
           
@@ -737,7 +755,7 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Gem className="w-4 h-4 text-primary-foreground" />
+                <GoldNugget className="w-4 h-4 text-primary-foreground" />
               </div>
               <span className="text-lg font-bold">Rockerbox</span>
             </div>
