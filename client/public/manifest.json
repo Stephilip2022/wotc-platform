@@ -1,11 +1,11 @@
 {
-  "name": "WOTC Optimization Platform",
-  "short_name": "WOTC Platform",
-  "description": "Complete WOTC lifecycle management with automated screening, submissions, and credit tracking",
+  "name": "Rockerbox - WOTC Optimization Platform",
+  "short_name": "Rockerbox",
+  "description": "The world's most advanced WOTC optimization platform. Automate tax credit screening, state submissions, and certification with AI-powered tools.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
+  "background_color": "#fffbf5",
+  "theme_color": "#D97706",
   "orientation": "portrait-primary",
   "icons": [
     {
