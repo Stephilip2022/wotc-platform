@@ -73,6 +73,58 @@ function EmployeeRouter() {
   );
 }
 
+function AdminRoutes() {
+  return (
+    <Switch>
+      <Route path="/admin" component={AdminDashboard} />
+      <Route path="/admin/revenue" component={RevenuemanagementPage} />
+      <Route path="/admin/employers" component={AdminEmployersPage} />
+      <Route path="/admin/employers/new" component={EtaForm9198Page} />
+      <Route path="/admin/employers/:id/settings" component={EmployerSettingsPage} />
+      <Route path="/admin/screenings" component={AdminScreeningsPage} />
+      <Route path="/admin/questionnaires" component={AdminQuestionnairesPage} />
+      <Route path="/admin/export" component={WOTCExportPage} />
+      <Route path="/admin/automation" component={StateAutomationPage} />
+      <Route path="/admin/state-credentials" component={StateCredentialsPage} />
+      <Route path="/admin/submissions" component={SubmissionMonitoringPage} />
+      <Route path="/admin/licensees" component={LicenseesPage} />
+      <Route path="/admin/analytics" component={AnalyticsPage} />
+      <Route path="/admin/audit" component={AuditLogsPage} />
+      <Route path="/admin/document-ocr" component={DocumentOCRPage} />
+      <Route path="/admin/pricing" component={PricingConfigPage} />
+      <Route path="/admin/settings" component={AdminSettingsPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function EmployerRoutes() {
+  return (
+    <Switch>
+      <Route path="/employer" component={EmployerDashboard} />
+      <Route path="/employer/employees" component={EmployeesPage} />
+      <Route path="/employer/employees/:id" component={EmployeeDetailPage} />
+      <Route path="/employer/screenings" component={ScreeningsPage} />
+      <Route path="/employer/hours" component={EmployerHoursPage} />
+      <Route path="/employer/retention" component={RetentionPage} />
+      <Route path="/employer/integrations" component={IntegrationsPage} />
+      <Route path="/employer/credits" component={EmployerCreditsPage} />
+      <Route path="/employer/billing" component={BillingPage} />
+      <Route path="/employer/invoice/:id" component={InvoiceDetailPage} />
+      <Route path="/employer/api-keys" component={ApiKeysPage} />
+      <Route path="/employer/webhooks" component={WebhooksPage} />
+      <Route path="/employer/api-docs" component={ApiDocsPage} />
+      <Route path="/employer/api-usage" component={ApiUsagePage} />
+      <Route path="/employer/multi-credit" component={MultiCreditPage} />
+      <Route path="/employer/documents" component={EmployerDocumentsPage} />
+      <Route path="/employer/settings" component={EmployerSettingsPortalPage} />
+      <Route path="/employer/onboarding" component={OnboardingWizardPage} />
+      <Route path="/employer/import" component={BulkImportPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function PortalRouter({ role }: { role: "admin" | "employer" }) {
   const style = {
     "--sidebar-width": "16rem",
@@ -92,53 +144,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
             </div>
           </header>
           <main className="flex-1 overflow-auto p-8">
-            <Switch>
-              {role === "admin" ? (
-                <>
-                  <Route path="/admin" component={AdminDashboard} />
-                  <Route path="/admin/revenue" component={RevenuemanagementPage} />
-                  <Route path="/admin/employers" component={AdminEmployersPage} />
-                  <Route path="/admin/employers/new" component={EtaForm9198Page} />
-                  <Route path="/admin/employers/:id/settings" component={EmployerSettingsPage} />
-                  <Route path="/admin/screenings" component={AdminScreeningsPage} />
-                  <Route path="/admin/questionnaires" component={AdminQuestionnairesPage} />
-                  <Route path="/admin/export" component={WOTCExportPage} />
-                  <Route path="/admin/automation" component={StateAutomationPage} />
-                  <Route path="/admin/state-credentials" component={StateCredentialsPage} />
-                  <Route path="/admin/submissions" component={SubmissionMonitoringPage} />
-                  <Route path="/admin/licensees" component={LicenseesPage} />
-                  <Route path="/admin/analytics" component={AnalyticsPage} />
-                  <Route path="/admin/audit" component={AuditLogsPage} />
-                  <Route path="/admin/document-ocr" component={DocumentOCRPage} />
-                  <Route path="/admin/pricing" component={PricingConfigPage} />
-                  <Route path="/admin/settings" component={AdminSettingsPage} />
-                  <Route component={NotFound} />
-                </>
-              ) : (
-                <>
-                  <Route path="/employer" component={EmployerDashboard} />
-                  <Route path="/employer/employees" component={EmployeesPage} />
-                  <Route path="/employer/employees/:id" component={EmployeeDetailPage} />
-                  <Route path="/employer/screenings" component={ScreeningsPage} />
-                  <Route path="/employer/hours" component={EmployerHoursPage} />
-                  <Route path="/employer/retention" component={RetentionPage} />
-                  <Route path="/employer/integrations" component={IntegrationsPage} />
-                  <Route path="/employer/credits" component={EmployerCreditsPage} />
-                  <Route path="/employer/billing" component={BillingPage} />
-                  <Route path="/employer/invoice/:id" component={InvoiceDetailPage} />
-                  <Route path="/employer/api-keys" component={ApiKeysPage} />
-                  <Route path="/employer/webhooks" component={WebhooksPage} />
-                  <Route path="/employer/api-docs" component={ApiDocsPage} />
-                  <Route path="/employer/api-usage" component={ApiUsagePage} />
-                  <Route path="/employer/multi-credit" component={MultiCreditPage} />
-                  <Route path="/employer/documents" component={EmployerDocumentsPage} />
-                  <Route path="/employer/settings" component={EmployerSettingsPortalPage} />
-                  <Route path="/employer/onboarding" component={OnboardingWizardPage} />
-                  <Route path="/employer/import" component={BulkImportPage} />
-                  <Route component={NotFound} />
-                </>
-              )}
-            </Switch>
+            {role === "admin" ? <AdminRoutes /> : <EmployerRoutes />}
           </main>
         </div>
       </div>
