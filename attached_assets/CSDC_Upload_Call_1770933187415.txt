@@ -1,0 +1,52 @@
+# RUN ONCE ONLY after unlock
+$WinSCPCom = "C:\Program Files (x86)\WinSCP\WinSCP.com"
+$CredPath  = "G:\My Drive\StateCreds\csdc.cred"
+$Determinations = "C:\Scripts\CSDC Determinations Download.ps1"
+
+
+
+$HostName  = "hermes.csdco.com"
+$HostKey   = "ssh-rsa 2048 TnYAnkpuJ00RsqFPvvEm6iNHvbussEIpVhOewhxc7gg"
+
+$logPath   = "$env:TEMP\winscp_ls_once.log"
+$tmpScript = Join-Path $env:TEMP ("winscp_" + [Guid]::NewGuid().ToString("N") + ".txt")
+
+$cred = Import-Clixml $CredPath
+$user = $cred.UserName
+$env:WINSCP_PASS = $cred.GetNetworkCredential().Password
+
+@'
+option batch continue
+option confirm off
+open sftp://{USER}:%WINSCP_PASS%@{HOST}/ -hostkey="{HOSTKEY}"
+option preserve timestamp off
+
+pwd
+put "G:\My Drive\Bulk Uploads\CSDC States\ALNOVELEVENTXT.txt" "AL.DIR;1/ALNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\ARNOVELEVENTXT.txt" "AR.DIR;1/ARNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\CONOVELEVENTXT.txt" "CO.DIR;1/CONOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\GANOELEVENTXT.txt" "GA.DIR;1/GANOELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\IDNOVELEVENTXT.txt" "ID.DIR;1/IDNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\OKNOVELEVENTXT.txt" "OK.DIR;1/OKNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\ORNOVELEVENTXT.txt" "OR.DIR;1/ORNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\SCNOVELEVENTXT.txt" "SC.DIR;1/SCNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\VTNOVELEVENTXT.txt" "VT.DIR;1/VTNOVELEVENTXT.txt"
+put "G:\My Drive\Bulk Uploads\CSDC States\WVNOVELEVENTXT.txt" "WV.DIR;1/WVNOVELEVENTXT.txt"
+exit
+'@ `
+-replace '\{USER\}', $user `
+-replace '\{HOST\}', $HostName `
+-replace '\{HOSTKEY\}', $HostKey |
+Set-Content $tmpScript -Encoding ASCII
+
+try {
+    & $WinSCPCom /log="$logPath" /script="$tmpScript" | Out-Null
+
+}
+finally {
+    Remove-Item $tmpScript -Force -ErrorAction SilentlyContinue
+    Remove-Item Env:\WINSCP_PASS -ErrorAction SilentlyContinue
+}
+
+
+& $Determinations

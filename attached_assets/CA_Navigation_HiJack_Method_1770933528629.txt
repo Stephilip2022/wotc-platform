@@ -1,0 +1,213 @@
+# ==============================================================================
+# SCRIPT 2: CA UPLOAD (HIJACK MODE) - DIRECT NAVIGATION UPDATE
+# ==============================================================================
+$ErrorActionPreference = "Stop"
+Write-Host "CONNECTING TO EXISTING BROWSER..." -ForegroundColor Yellow
+
+# --- CONFIGURATION ---
+$UploadFilePath = "G:\My Drive\Bulk Uploads\CA_XML\CA_WOTC_Batch_1.xml"
+$CredPath       = "G:\My Drive\StateCreds\CA-WOTC.cred"
+$RBCreate     = "C:\Scripts\CA Create RB File.ps1"
+# --- DRIVER PATHS ---
+$EdgeDriverExe = "C:\Users\bbyki\Desktop\Latest MSE DRIVER\msedgedriver.exe"
+$DllPath       = "C:\Users\bbyki\Desktop\Latest MSE DRIVER"
+
+Add-Type -Path "$DllPath\WebDriver.dll"
+Add-Type -Path "$DllPath\WebDriver.Support.dll"
+
+# --- HIJACK FUNCTION ---
+function New-HijackDriver {
+    $service = [OpenQA.Selenium.Edge.EdgeDriverService]::CreateDefaultService((Split-Path $EdgeDriverExe -Parent))
+    $service.HideCommandPromptWindow = $true
+    
+    $options = New-Object OpenQA.Selenium.Edge.EdgeOptions
+    # This connects to the browser launched by Script 1
+    $options.DebuggerAddress = "127.0.0.1:9222" 
+
+    return New-Object OpenQA.Selenium.Edge.EdgeDriver($service, $options)
+}
+
+function Wait-Element {
+    param($Driver, $By, [int]$TimeoutSeconds = 10)
+    $end = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $end) {
+        try {
+            $el = $Driver.FindElement($By)
+            if ($el -and $el.Displayed -and $el.Enabled) { return $el }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    return $null
+}
+
+try {
+    # 1. ATTACH TO BROWSER
+    $driver = New-HijackDriver
+    Write-Host "Attached successfully." -ForegroundColor Green
+
+    # 2. LOGIN LOGIC (FIXED)
+    $credObj = Import-Clixml -Path $CredPath
+    
+    # We check for the Username box using FindElements (Plural) so it doesn't crash if missing
+    # We try typical CA EDD IDs: 'username' or just looking for the text 'Username'
+    $loginCheck = $driver.FindElements([OpenQA.Selenium.By]::XPath("//input[contains(@id, 'username') or contains(@id, 'user')]"))
+
+    if ($loginCheck.Count -gt 0) {
+        Write-Host "Login Page Detected. Logging in..." -ForegroundColor Cyan
+        
+        # Enter Username
+        $u = $loginCheck[0]
+        $u.Clear()
+        $u.SendKeys($credObj.UserName)
+        Start-Sleep -Milliseconds 500
+        
+        # Enter Password (More robust XPath used here)
+        $p = Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::XPath("//input[contains(@type, 'password')]"))
+        if ($p) {
+            $p.Clear()
+            $p.SendKeys($credObj.GetNetworkCredential().Password)
+            Start-Sleep -Milliseconds 500
+        }
+        
+        # Click Login Button (Looks for 'Log In' text or button type)
+        try {
+            $loginBtn = $driver.FindElement([OpenQA.Selenium.By]::XPath("//button[contains(., 'Log In')] | //input[@value='Log In']"))
+            $loginBtn.Click()
+        } catch {
+            Write-Host "Clicking Login failed, trying Enter key..." -ForegroundColor Yellow
+            $p.SendKeys([OpenQA.Selenium.Keys]::Enter)
+        }
+        
+        # Wait for redirect
+        Start-Sleep -Seconds 5
+    } else {
+        Write-Host "Already logged in (Login box not found)." -ForegroundColor Green
+    }
+
+
+# 3. NAVIGATE MENU
+    Write-Host "Waiting for Dashboard..." -ForegroundColor Cyan
+
+    # OPTION 1: The most reliable way for text links
+    # This looks for the exact visible text, ignoring the href/url completely.
+    $linkSelector = [OpenQA.Selenium.By]::PartialLinkText("Submit Multiple Applications")
+
+    # Use your Wait-Element function
+    $directLink = Wait-Element -Driver $driver -By $linkSelector -Timeout 30
+
+    if ($directLink) { 
+        Write-Host "Found link. Clicking..." -ForegroundColor Green
+        
+        # Small safety pause for animation/rendering
+        Start-Sleep -Milliseconds 500
+        $directLink.Click() 
+        
+        Write-Host "Navigating to Upload Page." -ForegroundColor Green
+    } else {
+        # DEBUGGING: If it fails, let's see what links ARE on the page
+        Write-Host "Link not found! Listing available links to debug..." -ForegroundColor Red
+        $allLinks = $driver.FindElements([OpenQA.Selenium.By]::TagName("a"))
+        foreach ($l in $allLinks) {
+            try { Write-Host "Link Found: $($l.Text)" -ForegroundColor Gray } catch {}
+        }
+        throw "Could not find 'Submit Multiple Applications' link."
+    }
+    # 4. UPLOAD FILE
+    Write-Host "Uploading File: $UploadFilePath" -ForegroundColor Cyan
+    
+    $fileInput = Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::XPath("//input[@type='file']"))
+    
+    # CRASH PROTECTION CHECK
+    if ($null -eq $fileInput) {
+        throw "Could not find the File Input box. Login may have failed or navigation timed out."
+    }
+
+    $fileInput.SendKeys($UploadFilePath)
+    Start-Sleep -Seconds 1
+    
+    # Find Upload Button (Text based is safer)
+    $uploadBtn = $driver.FindElement([OpenQA.Selenium.By]::XPath("//input[@value='Upload'] | //button[contains(.,'Upload')] | //*[@id='btnUpload']"))
+    $uploadBtn.Click()
+    
+# 5. VALIDATION
+    Write-Host "Waiting for validation results..." -ForegroundColor Cyan
+    Start-Sleep -Seconds 5
+    
+    # Check for Red Errors first
+    $errors = $driver.FindElements([OpenQA.Selenium.By]::CssSelector("#FormValidation > ul > li"))
+    
+    if ($errors.Count -gt 0) {
+        Write-Host "`n!!! ERRORS DETECTED !!!" -ForegroundColor Red
+        foreach ($err in $errors) { Write-Host " -> $($err.Text)" -ForegroundColor Red }
+    } else {
+        # --- SUCCESS: CAPTURE RECEIPT & DETAILS ---
+        Write-Host "`nSUCCESS: File Submitted. Checking for Receipt..." -ForegroundColor Green
+        
+        # 1. Wait a moment for text to appear
+        Start-Sleep -Seconds 2
+        
+        # 2. Find the main message (Batch ID, etc.)
+        $receiptEl = $driver.FindElements([OpenQA.Selenium.By]::Id("lblMessage"))
+        $fullMsg = ""
+
+        if ($receiptEl.Count -gt 0) {
+            $fullMsg += $receiptEl[0].Text
+        }
+
+        # 3. Find "Accepted" Count
+        $acceptEl = $driver.FindElements([OpenQA.Selenium.By]::XPath("//p[contains(., 'successfully accepted')]"))
+        if ($acceptEl.Count -gt 0) {
+            $fullMsg += "`n" + $acceptEl[0].Text
+        }
+
+        # 4. Find "Rejected" Count
+        $rejectEl = $driver.FindElements([OpenQA.Selenium.By]::XPath("//p[contains(., 'rejected')]"))
+        if ($rejectEl.Count -gt 0) {
+            $fullMsg += "`n" + $rejectEl[0].Text
+        }
+
+        # 5. [NEW] Capture Table Details (EIN and SSN)
+        # We look for the table row <tr> that contains data cells <td>
+        $dataRows = $driver.FindElements([OpenQA.Selenium.By]::XPath("//table//tr[td]"))
+        
+        if ($dataRows.Count -gt 0) {
+            $fullMsg += "`n`n--- APPLICATION DETAILS ---"
+            foreach ($row in $dataRows) {
+                # Get all cells in this row
+                $cells = $row.FindElements([OpenQA.Selenium.By]::TagName("td"))
+                
+                # Ensure we have at least 2 columns (EIN and SSN)
+                if ($cells.Count -ge 2) {
+                    $ein = $cells[0].Text
+                    $ssn = $cells[1].Text
+                    # Append formatted line to message
+                    $fullMsg += "`nEIN: $ein  |  SSN: $ssn"
+                }
+            }
+        }
+
+        # 6. Print and Save
+        if ($fullMsg.Length -gt 0) {
+            Write-Host "`n----------------------------------------" -ForegroundColor Cyan
+            Write-Host $fullMsg
+            Write-Host "----------------------------------------" -ForegroundColor Cyan
+
+            # Save to file
+            $receiptPath = "$UploadFilePath.receipt.txt"
+            $fullMsg | Out-File -FilePath $receiptPath -Force
+            Write-Host "Receipt saved to: $receiptPath" -ForegroundColor Gray
+        } else {
+            Write-Host "File submitted, but could not find receipt text." -ForegroundColor Yellow
+        }
+    } # Closes the Else/If block
+
+} catch {
+    # This matches the 'try' from the start of the script
+    Write-Error "SCRIPT ERROR: $($_.Exception.Message)"
+    # Keep browser open so you can see what happened
+    Read-Host "Press Enter to exit..."
+}
+
+
+Start-Sleep -Seconds 5
+& $RBCreate

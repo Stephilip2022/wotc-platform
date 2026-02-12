@@ -261,37 +261,24 @@ export const statePortalSeeds = [
   {
     stateCode: "GA",
     stateName: "Georgia",
-    portalUrl: "https://dol.georgia.gov/wotc",
-    submissionUrl: "https://dol.georgia.gov/wotc/upload",
-    authType: "credentials",
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
     loginFieldSelectors: {
-      username: "#login-email",
-      password: "#login-password",
-      submitButton: "button.btn-primary",
-      successIndicator: ".user-dashboard"
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "GA.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
     },
-    requiredColumns: [
-      "Employee Last Name",
-      "Employee First Name",
-      "SSN",
-      "Date of Birth",
-      "Hire Date",
-      "Target Group Code"
-    ],
-    optionalColumns: [
-      "SNAP Benefits",
-      "Veteran Status",
-      "Phone"
-    ],
-    dateFormat: "MM-DD-YYYY",
-    maxBatchSize: 400,
-    submissionFrequency: "weekly",
-    automationEnabled: true,
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 33,
     supportEmail: "wotc@gdol.ga.gov",
     supportPhone: "(404) 232-3500",
     status: "active",
-    notes: "Georgia prefers weekly batch submissions. No size limit."
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: GANOELEVENTXT.txt. ConsultantID: SCREEN. Default wage: $11.50/hr."
   },
   {
     stateCode: "NC",
@@ -368,15 +355,24 @@ export const statePortalSeeds = [
   {
     stateCode: "AL",
     stateName: "Alabama",
-    portalUrl: "https://labor.alabama.gov/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 200,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "AL.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@labor.alabama.gov",
     supportPhone: "(334) 242-8003",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: ALNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $7.25/hr."
   },
   {
     stateCode: "AK",
@@ -407,28 +403,46 @@ export const statePortalSeeds = [
   {
     stateCode: "AR",
     stateName: "Arkansas",
-    portalUrl: "https://www.dws.arkansas.gov/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 200,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "AR.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@arkansas.gov",
     supportPhone: "(501) 682-2121",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format. File: ARNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $11.00/hr."
   },
   {
     stateCode: "CO",
     stateName: "Colorado",
-    portalUrl: "https://cdle.colorado.gov/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 250,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "CO.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 25,
     supportEmail: "wotc@state.co.us",
     supportPhone: "(303) 318-8000",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format. File: CONOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $15.50/hr."
   },
   {
     stateCode: "CT",
@@ -472,15 +486,24 @@ export const statePortalSeeds = [
   {
     stateCode: "ID",
     stateName: "Idaho",
-    portalUrl: "https://www.labor.idaho.gov/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 150,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "ID.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@labor.idaho.gov",
     supportPhone: "(208) 332-3570",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: IDNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $11.50/hr."
   },
   {
     stateCode: "IN",
@@ -719,28 +742,46 @@ export const statePortalSeeds = [
   {
     stateCode: "OK",
     stateName: "Oklahoma",
-    portalUrl: "https://oklahoma.gov/oesc/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 200,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "OK.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@oesc.ok.gov",
     supportPhone: "(405) 557-7100",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: OKNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $11.50/hr."
   },
   {
     stateCode: "OR",
     stateName: "Oregon",
-    portalUrl: "https://www.oregon.gov/employ/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 250,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "OR.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 28,
     supportEmail: "wotc@oregon.gov",
     supportPhone: "(503) 947-1394",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: ORNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $16.00/hr."
   },
   {
     stateCode: "RI",
@@ -758,15 +799,24 @@ export const statePortalSeeds = [
   {
     stateCode: "SC",
     stateName: "South Carolina",
-    portalUrl: "https://dew.sc.gov/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 200,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "SC.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@dew.sc.gov",
     supportPhone: "(803) 737-2617",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: SCNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $11.50/hr."
   },
   {
     stateCode: "SD",
@@ -810,15 +860,24 @@ export const statePortalSeeds = [
   {
     stateCode: "VT",
     stateName: "Vermont",
-    portalUrl: "https://labor.vermont.gov/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 150,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "VT.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@vermont.gov",
     supportPhone: "(802) 828-4000",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: VTNOVELEVENTXT.txt. ConsultantID: ROCKERBOX. Default wage: $14.50/hr."
   },
   {
     stateCode: "VA",
@@ -849,15 +908,24 @@ export const statePortalSeeds = [
   {
     stateCode: "WV",
     stateName: "West Virginia",
-    portalUrl: "https://workforcewv.org/wotc",
-    authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 200,
+    portalUrl: "sftp://hermes.csdco.com",
+    submissionUrl: "sftp://hermes.csdco.com",
+    authType: "sftp",
+    loginFieldSelectors: {
+      sftpHost: "hermes.csdco.com",
+      sftpPort: "22",
+      remoteDir: "WV.DIR;1",
+      fileFormat: "fixed-width",
+      provider: "csdc"
+    },
+    requiredColumns: ["ConsultantID", "fein", "plain_ssn", "last_name", "first_name", "address", "city", "state", "zip_code", "date_birth", "date_started_job"],
+    dateFormat: "MMddyyyy",
+    maxBatchSize: 500,
     expectedProcessingDays: 30,
     supportEmail: "wotc@wv.gov",
     supportPhone: "(304) 558-2660",
-    status: "active"
+    status: "active",
+    notes: "CSDC SFTP upload. Fixed-width text format (62 columns). File: WVNOVELEVENTXT.txt. ConsultantID: SCREENTECH. Default wage: $11.50/hr."
   },
   {
     stateCode: "WI",

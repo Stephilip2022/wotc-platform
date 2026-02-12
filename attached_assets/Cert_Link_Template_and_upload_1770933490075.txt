@@ -1,0 +1,1141 @@
+Write-Host "RUNNING SCRIPT: $PSCommandPath" -ForegroundColor Yellow
+
+# =====================================================================
+# CERTLINK + POSTGRES EXPORT + RB UPDATE (CLEAN CONSOLIDATED SCRIPT)
+# Based ONLY on what you pasted. Duplicates removed + error/clean logic fixed.
+# =====================================================================
+
+$ErrorActionPreference = "Stop"
+
+# ================================
+# DRIVERS (LOCKED)
+# ================================
+
+# HARD-PIN the working EdgeDriver (143)
+$EdgeDriverExe = "C:\Users\bbyki\Desktop\Latest MSE DRIVER\msedgedriver.exe"
+$EdgeDriverDir = Split-Path $EdgeDriverExe -Parent
+
+# Load Selenium .NET assemblies you already have
+Add-Type -Path "C:\Users\bbyki\Desktop\Latest MSE DRIVER\WebDriver.dll"
+Add-Type -Path "C:\Users\bbyki\Desktop\Latest MSE DRIVER\WebDriver.Support.dll"
+
+function Start-EdgeDriver {
+    if (-not (Test-Path $EdgeDriverExe)) {
+        throw "EdgeDriver not found at: $EdgeDriverExe"
+    }
+
+    $service = [OpenQA.Selenium.Edge.EdgeDriverService]::CreateDefaultService($EdgeDriverDir)
+    $service.HideCommandPromptWindow = $true
+
+    $options = New-Object OpenQA.Selenium.Edge.EdgeOptions
+    $options.AddArgument("start-maximized")
+
+    return New-Object OpenQA.Selenium.Edge.EdgeDriver($service, $options)
+}
+
+# ================================
+# PATHS / DIRS
+# ================================
+$StateCertUpdatePath = "G:\My Drive\Certlink Automation Files\Rockerbox Update File\Update state status.csv"
+$RbUpdateCsv         = "G:\My Drive\Certlink Automation Files\Rockerbox Update File\Update state status.csv"
+$Determinations      = "C:\Scripts\CertLinkDeterminations.ps1"
+
+
+
+$ErrorLogDir = "G:\My Drive\Certlink Automation Files\Rejected Error Logs"
+if (-not (Test-Path -LiteralPath $ErrorLogDir)) { New-Item -ItemType Directory -Path $ErrorLogDir | Out-Null }
+
+$RejectedDir = "G:\My Drive\Certlink Automation Files\Rejected State Records"
+if (-not (Test-Path -LiteralPath $RejectedDir)) { New-Item -ItemType Directory -Path $RejectedDir | Out-Null }
+
+$ExportDir = "G:\My Drive\Certlink Automation Files\Original State Files"
+if (-not (Test-Path -LiteralPath $ExportDir)) { New-Item -ItemType Directory -Path $ExportDir | Out-Null }
+
+$ResubmissionDir = "G:\My Drive\Certlink Automation Files\Resubmission Files"
+if (-not (Test-Path -LiteralPath $ResubmissionDir)) { New-Item -ItemType Directory -Path $ResubmissionDir | Out-Null }
+
+$SummaryDir = "G:\My Drive\Certlink Automation Files\Summary Report (Run Report)"
+if (-not (Test-Path -LiteralPath $SummaryDir)) { New-Item -ItemType Directory -Path $SummaryDir | Out-Null }
+
+# ================================
+# SPEED / MODE
+# ================================
+$HumanMode = $true
+$StepPauseSeconds = 2
+$PollMs = 1200
+
+function Wait-WithProgress {
+    param(
+        [Parameter(Mandatory)][int]$Seconds,
+        [string]$Message = "Waiting..."
+    )
+    for ($i = 1; $i -le $Seconds; $i++) {
+        Write-Progress -Activity $Message -Status "$i / $Seconds" -PercentComplete (($i / $Seconds) * 100)
+        Start-Sleep -Seconds 1
+    }
+    Write-Progress -Activity $Message -Completed
+}
+
+# ================================
+# STATE CONFIG
+# ================================
+$States = @(
+    @{ StateCd="AZ"; StateStr="Arizona";  PortalUrl="https://wotc.azdes.gov/Account/Login"; CredPath="G:\My Drive\StateCreds\AZ-WOTC.cred" },
+    @{ StateCd="IL"; StateStr="Illinois"; PortalUrl="https://illinoiswotc.com/";            CredPath="G:\My Drive\StateCreds\IL-WOTC.cred" },
+    @{ StateCd="KS"; StateStr="Kansas";   PortalUrl="https://kansaswotc.com/";              CredPath="G:\My Drive\StateCreds\KS-WOTC.cred" },
+    @{ StateCd="ME"; StateStr="Maine";    PortalUrl="https://wotc.maine.gov/Account/Login";CredPath="G:\My Drive\StateCreds\ME-WOTC.cred" }
+)
+
+# Per-state constants for this template
+$StateFieldDefaults = @{
+    'AZ' = @('David Young', 'Philip Wentworth, CEO')
+    'IL' = @('Garrett Rinehart','Philip Wentworth, CEO')
+    'KS' = @('David Young','Philip Wentworth')
+    'ME' = @('Philip Wentworth','David Young')
+}
+
+
+# ================================
+# POSTGRES CONFIG
+# ================================
+$LogDllPath = "C:\Users\bbyki\Desktop\microsoft.extensions.logging.abstractions.8.0.3\lib\net8.0\Microsoft.Extensions.Logging.Abstractions.dll"
+$NpDllPath  = "C:\Users\bbyki\Desktop\npgsql.8.0.8\lib\net8.0\Npgsql.dll"
+$CredPath   = "C:\Scripts\PostgresExport.cred"
+
+$Server   = "127.0.0.1"
+$Port     = 5432
+$Database = "rb_prod"
+
+function Get-DbCredential {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Credential file not found at $Path. Run the one-time Get-Credential + Export-Clixml step first."
+    }
+    Import-Clixml -LiteralPath $Path
+}
+
+$dbc     = Get-DbCredential -Path $CredPath
+$User     = $dbc.UserName
+$Password = $dbc.GetNetworkCredential().Password
+
+# LOAD DLLS
+if (-not ("Npgsql.NpgsqlConnection" -as [type])) {
+    if (-not (Test-Path -LiteralPath $LogDllPath)) { throw "Logging DLL not found: $LogDllPath" }
+    if (-not (Test-Path -LiteralPath $NpDllPath))  { throw "Npgsql DLL not found: $NpDllPath" }
+    Add-Type -Path $LogDllPath
+    Add-Type -Path $NpDllPath
+}
+
+$ConnString = "Host=$Server;Port=$Port;Database=$Database;Username=$User;Password=$Password;SSL Mode=Require;Trust Server Certificate=true;"
+"Npgsql loaded: $([bool]('Npgsql.NpgsqlConnection' -as [type]))"
+
+function Invoke-PostgresQuery {
+    param(
+        [Parameter(Mandatory)][string]$ConnString,
+        [Parameter(Mandatory)][string]$Query
+    )
+    $conn = [Npgsql.NpgsqlConnection]::new($ConnString)
+    try {
+        $conn.Open()
+        $cmd = [Npgsql.NpgsqlCommand]::new($Query, $conn)
+        $reader = $cmd.ExecuteReader()
+
+        $table = New-Object System.Data.DataTable
+        $table.Load($reader)
+        return ,$table
+    }
+    finally {
+        if ($conn.State -ne 'Closed') { $conn.Close() }
+        $conn.Dispose()
+    }
+}
+
+# ================================
+# GENERAL HELPERS
+# ================================
+function Convert-StateNameToCode {
+    param([object]$Value)
+
+    if ($null -eq $Value -or $Value -eq [DBNull]::Value) { return "" }
+    $s = $Value.ToString().Trim()
+    if ($s -eq "") { return "" }
+
+    if ($s.Length -eq 2 -and $s -match '^[A-Za-z]{2}$') { return $s.ToUpper() }
+
+    $map = @{
+        "ALABAMA"="AL"; "ALASKA"="AK"; "ARIZONA"="AZ"; "ARKANSAS"="AR"
+        "CALIFORNIA"="CA"; "COLORADO"="CO"; "CONNECTICUT"="CT"; "DELAWARE"="DE"
+        "FLORIDA"="FL"; "GEORGIA"="GA"; "HAWAII"="HI"; "IDAHO"="ID"
+        "ILLINOIS"="IL"; "INDIANA"="IN"; "IOWA"="IA"; "KANSAS"="KS"
+        "KENTUCKY"="KY"; "LOUISIANA"="LA"; "MAINE"="ME"; "MARYLAND"="MD"
+        "MASSACHUSETTS"="MA"; "MICHIGAN"="MI"; "MINNESOTA"="MN"; "MISSISSIPPI"="MS"
+        "MISSOURI"="MO"; "MONTANA"="MT"; "NEBRASKA"="NE"; "NEVADA"="NV"
+        "NEW HAMPSHIRE"="NH"; "NEW JERSEY"="NJ"; "NEW MEXICO"="NM"; "NEW YORK"="NY"
+        "NORTH CAROLINA"="NC"; "NORTH DAKOTA"="ND"; "OHIO"="OH"; "OKLAHOMA"="OK"
+        "OREGON"="OR"; "PENNSYLVANIA"="PA"; "RHODE ISLAND"="RI"; "SOUTH CAROLINA"="SC"
+        "SOUTH DAKOTA"="SD"; "TENNESSEE"="TN"; "TEXAS"="TX"; "UTAH"="UT"
+        "VERMONT"="VT"; "VIRGINIA"="VA"; "WASHINGTON"="WA"; "WEST VIRGINIA"="WV"
+        "WISCONSIN"="WI"; "WYOMING"="WY"
+    }
+
+    $key = $s.ToUpper()
+    if ($map.ContainsKey($key)) { return $map[$key] }
+    return $s
+}
+
+function Format-DateMMDDYYYY {
+    param([object]$Value)
+
+    if ($null -eq $Value -or $Value -eq [DBNull]::Value) { return "" }
+
+    try {
+        return ([datetime]$Value).ToString("MM/dd/yyyy")
+    } catch {
+        try {
+            $dt = [datetime]::Parse($Value.ToString())
+            return $dt.ToString("MM/dd/yyyy")
+        } catch {
+            return ""
+        }
+    }
+}
+
+# ================================
+# CRED HELPERS (SINGLE DEFINITIONS)
+# ================================
+function Get-PortalCredential {
+    param([Parameter(Mandatory)][string]$CredPath)
+    if (-not (Test-Path -LiteralPath $CredPath)) { throw "Credential file not found: $CredPath" }
+    Import-Clixml -LiteralPath $CredPath
+}
+
+# ================================
+# CERTLINK LOG/REJECT HELPERS
+# ================================
+function New-CertLinkErrorLogPath {
+    param(
+        [Parameter(Mandatory)][string]$Dir,
+        [Parameter(Mandatory)][string]$StateAbbr
+    )
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $file  = "{0}_BatchErrors_{1}.csv" -f $StateAbbr.ToUpper(), $stamp
+    Join-Path -Path $Dir -ChildPath $file
+}
+
+function Wait-FileReady {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [int]$TimeoutSeconds = 60
+    )
+    $end = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $end) {
+        try {
+            if (Test-Path -LiteralPath $Path) {
+                $fs = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite')
+                $fs.Close()
+                return $true
+            }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    throw "File not ready after $TimeoutSeconds seconds: $Path"
+}
+
+function New-RejectedFilePath {
+    param(
+        [Parameter(Mandatory)][string]$Dir,
+        [Parameter(Mandatory)][string]$StateName
+    )
+
+    $stamp = Get-Date -Format "MM.dd.yyyy"
+    $safeState = ($StateName -replace '[^\w ]','').Trim()
+
+    Join-Path $Dir ("{0}.{1}.rejected records.csv" -f $safeState, $stamp)
+}
+
+function Append-RejectedRowsToFile {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][object[]]$Rows
+    )
+    if (-not $Rows -or $Rows.Count -eq 0) { return }
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        $Rows | Export-Csv -LiteralPath $Path -NoTypeInformation -Encoding UTF8
+    } else {
+        $Rows | Export-Csv -LiteralPath $Path -NoTypeInformation -Append -Encoding UTF8
+    }
+}
+
+function Get-CsvRowsByRowNumber {
+    param(
+        [Parameter(Mandatory)][string]$CsvPath,
+        [Parameter(Mandatory)][int[]]$RowNumbers
+    )
+    if (-not (Test-Path -LiteralPath $CsvPath)) { return @() }
+    if (-not $RowNumbers -or $RowNumbers.Count -eq 0) { return @() }
+
+    $rows = Import-Csv -LiteralPath $CsvPath
+    if (-not $rows -or $rows.Count -eq 0) { return @() }
+
+    $want = @{}
+    foreach ($n in ($RowNumbers | Where-Object { $_ -gt 0 } | Select-Object -Unique)) { $want[$n] = $true }
+
+    $picked = New-Object System.Collections.Generic.List[object]
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+        $rn = $i + 1
+        if ($want.ContainsKey($rn)) { $picked.Add($rows[$i]) }
+    }
+    return $picked
+}
+
+function Get-NextSignatorName {
+    param(
+        [Parameter(Mandatory)][string[]]$Candidates,
+        [Parameter(Mandatory)][string]$Current
+    )
+
+    if (-not $Candidates -or $Candidates.Count -lt 2) { return $Current }
+
+    $cur = ($Current | Out-String).Trim()
+    $idx = [Array]::IndexOf($Candidates, $cur)
+
+    if ($idx -lt 0) { return $Candidates[1] }
+
+    $nextIdx = ($idx + 1) % $Candidates.Count
+    return $Candidates[$nextIdx]
+}
+
+function New-CertLinkCleanFileFromErrors_WithSignatorFix {
+    param(
+        [Parameter(Mandatory)][string]$UploadFile,
+        [int[]]$RemoveRowNumbers = @(),
+        [int[]]$FixSignatorRows  = @(),
+        [Parameter(Mandatory)][string]$OutDir,
+        [Parameter(Mandatory)][string]$StateAbbr,
+        [Parameter(Mandatory)][string[]]$SignatorCandidates,
+        [int]$Attempt = 1
+    )
+
+    $rows = Import-Csv -LiteralPath $UploadFile
+    if (-not $rows -or $rows.Count -eq 0) { return $null }
+
+    $remove = @{}
+    foreach ($n in ($RemoveRowNumbers | Where-Object { $_ -gt 0 } | Select-Object -Unique)) { $remove[$n] = $true }
+
+    $fix = @{}
+    foreach ($n in ($FixSignatorRows | Where-Object { $_ -gt 0 } | Select-Object -Unique)) { $fix[$n] = $true }
+
+    $clean = New-Object System.Collections.Generic.List[object]
+
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+        $rowNum = $i + 1
+
+        if ($remove.ContainsKey($rowNum)) { continue }
+
+        if ($fix.ContainsKey($rowNum)) {
+            $currentSignator = $rows[$i].ICF_SignatorName
+            $rows[$i].ICF_SignatorName = Get-NextSignatorName -Candidates $SignatorCandidates -Current $currentSignator
+        }
+
+        $clean.Add($rows[$i])
+    }
+
+    if ($clean.Count -eq 0) { return $null }
+
+    if (-not (Test-Path -LiteralPath $OutDir)) { New-Item -ItemType Directory -Path $OutDir | Out-Null }
+
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $newPath = Join-Path $OutDir ("{0}_CLEAN_{1}_Attempt{2}.csv" -f $StateAbbr.ToUpper(), $stamp, $Attempt)
+
+    $clean | Export-Csv -LiteralPath $newPath -NoTypeInformation -Encoding UTF8
+    return $newPath
+}
+
+
+function Get-SubmittedUpdateRowsFromCsv {
+    param([Parameter(Mandatory)][string]$CsvPath)
+
+    $rows = Import-Csv -LiteralPath $CsvPath
+    if (-not $rows) { return @() }
+
+    $out = foreach ($r in $rows) {
+        $ein  = ($r.Form8850_EmployerFEIN | Out-String).Trim()
+        $ssnid = ($r.Form8850_ApplicantSSN | Out-String).Trim()
+        [pscustomobject]@{
+            ein                = $ein
+            ssn                = $ssnid
+            rockerbox_id       = ""
+            state_certification = "Pending"
+        }
+    }
+    return $out
+}
+
+Write-Host "[$StateAbbr] Append -> rows=$($submittedRows.Count) file=$StateCertUpdatePath source=$currentFile" -ForegroundColor Yellow
+
+
+function Append-SubmittedUpdates {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][object[]]$Rows
+    )
+
+    if (-not $Rows -or $Rows.Count -eq 0) {
+        Write-Host "[UpdateCSV] No rows to append." -ForegroundColor DarkYellow
+        return
+    }
+
+    for ($i=1; $i -le 5; $i++) {
+        try {
+            $append = Test-Path -LiteralPath $Path
+            $Rows | Export-Csv -LiteralPath $Path -NoTypeInformation -Append:$append -Encoding UTF8
+            Write-Host "[UpdateCSV] ✅ Appended $($Rows.Count) rows to: $Path" -ForegroundColor Green
+            return
+        } catch {
+            Write-Host "[UpdateCSV] Append failed (try $i/5): $($_.Exception.Message)" -ForegroundColor Yellow
+            Start-Sleep -Seconds 2
+        }
+    }
+
+    throw "[UpdateCSV] Failed to append after 5 retries: $Path"
+}
+
+# ================================
+# SELENIUM WAIT HELPERS
+# ================================
+function Wait-ElementGeneric {
+    param(
+        [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$D,
+        [Parameter(Mandatory)][OpenQA.Selenium.By]$By,
+        [int]$TimeoutSeconds = 20,
+        [string]$Label = "Element"
+    )
+    $end = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $end) {
+        try {
+            $el = $D.FindElement($By)
+            if ($el -and $el.Displayed -and $el.Enabled) { return $el }
+        } catch {}
+        Start-Sleep -Milliseconds 250
+    }
+   throw "Timeout waiting for ${Label}: $By"
+}
+
+# ================================
+# CERTLINK LOGIN (as pasted)
+# ================================
+function Invoke-CertLinkLoginOnly {
+    param(
+        [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$Driver,
+        [Parameter(Mandatory)][string]$PortalUrl,
+        [Parameter(Mandatory)][string]$PortalUser,
+        [Parameter(Mandatory)][string]$PortalPass,
+        [Parameter(Mandatory)][string]$StateAbbr
+    )
+
+    Write-Host "[$StateAbbr] Opening login page" -ForegroundColor Cyan
+    $Driver.Navigate().GoToUrl($PortalUrl)
+
+    $email = Wait-ElementGeneric -D $Driver -By ([OpenQA.Selenium.By]::Id("Email")) -TimeoutSeconds 20 -Label "Email"
+    $email.Click(); $email.Clear(); $email.SendKeys($PortalUser)
+
+    $pw = Wait-ElementGeneric -D $Driver -By ([OpenQA.Selenium.By]::Id("Password")) -TimeoutSeconds 20 -Label "Password"
+    $pw.Click(); $pw.Clear(); $pw.SendKeys($PortalPass)
+
+    $agree = Wait-ElementGeneric -D $Driver -By ([OpenQA.Selenium.By]::Id("Agreement")) -TimeoutSeconds 20 -Label "Agreement"
+    if (-not $agree.Selected) { $agree.Click() }
+
+    $btn = Wait-ElementGeneric -D $Driver -By ([OpenQA.Selenium.By]::CssSelector("div:nth-of-type(4) > button")) -TimeoutSeconds 20 -Label "Login Button"
+    $btn.Click()
+
+    $end2 = (Get-Date).AddSeconds(15)
+    while ((Get-Date) -lt $end2) {
+        if ($Driver.Url -match "/Employer/Dashboard") {
+            Write-Host "[$StateAbbr] Logged in (Dashboard reached)" -ForegroundColor Green
+            return $true
+        }
+        Start-Sleep -Milliseconds 250
+    }
+
+    throw "[$StateAbbr] Login did not reach dashboard. Current URL: $($Driver.Url)"
+}
+
+# ================================
+# CERTLINK DATATABLES NAV (needed by error log reader)
+# ================================
+function Invoke-DataTablesForEachPage {
+    param(
+        [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$Driver,
+        [Parameter(Mandatory)][string]$TableId,
+        [Parameter(Mandatory)][scriptblock]$PerPageAction,
+        [int]$MaxPages = 50
+    )
+
+    function Wait-TableRender {
+        param([int]$TimeoutSeconds = 15)
+        $end = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ((Get-Date) -lt $end) {
+            try {
+                $rows = $Driver.FindElements([OpenQA.Selenium.By]::CssSelector("table#$TableId tbody tr"))
+                if ($rows -and $rows.Count -gt 0) { return $true }
+            } catch {}
+            Start-Sleep -Milliseconds 300
+        }
+        return $true
+    }
+
+    & $PerPageAction
+
+    for ($page = 2; $page -le $MaxPages; $page++) {
+        $link = $null
+        try {
+            $link = $Driver.FindElement([OpenQA.Selenium.By]::CssSelector("a[aria-controls='$TableId'][aria-label='Page $page']"))
+        } catch { break }
+
+        try { $link.Click() } catch { $Driver.ExecuteScript("arguments[0].click();", $link) | Out-Null }
+
+        Start-Sleep -Milliseconds 800
+        Wait-TableRender | Out-Null
+        & $PerPageAction
+    }
+}
+
+function Get-CertLinkBatchErrorLogFromDetails_AllPages {
+    param(
+        [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$Driver,
+        [Parameter(Mandatory)][string]$StateAbbr
+    )
+
+    $TableId = "tblBatchDetails"
+    $all = New-Object System.Collections.Generic.List[object]
+
+    $readPage = {
+        $trs = @()
+        try { $trs = $Driver.FindElements([OpenQA.Selenium.By]::CssSelector("table#$TableId tbody tr")) } catch {}
+
+        $currentApplicant = $null
+        $currentRef       = $null
+
+        foreach ($tr in $trs) {
+            $txt = ($tr.Text | Out-String).Trim()
+            if (-not $txt) { continue }
+
+            if ($txt -match "Applicant Name:\s*(.+?)\s+Reference Number:\s*([a-f0-9]{8})") {
+                $currentApplicant = $matches[1].Trim()
+                $currentRef = $matches[2].ToLower()
+                continue
+            }
+
+            $tds = @()
+            try { $tds = $tr.FindElements([OpenQA.Selenium.By]::CssSelector("td")) } catch {}
+
+            if ($tds.Count -ge 4) {
+                $rowNum   = ($tds[0].Text | Out-String).Trim()
+                $msg      = ($tds[1].Text | Out-String).Trim()
+                $field    = ($tds[2].Text | Out-String).Trim()
+                $severity = ($tds[3].Text | Out-String).Trim()
+
+                if ($severity -eq "Error") {
+                    $all.Add([pscustomobject]@{
+                        RowNumber       = $rowNum
+                        ReferenceNumber = $currentRef
+                        ApplicantName   = $currentApplicant
+                        FieldName       = $field
+                        Severity        = $severity
+                        ErrorMessage    = $msg
+                    })
+                }
+            }
+        }
+    }
+
+    Invoke-DataTablesForEachPage -Driver $Driver -TableId $TableId -PerPageAction $readPage -MaxPages 50
+    return $all | Sort-Object ReferenceNumber, RowNumber, ErrorMessage -Unique
+}
+
+# ================================
+# CERTLINK DELETE BAD BATCH (as pasted)
+# ================================
+function Click-CertLinkDeleteBatchImport {
+    param(
+        [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$Driver,
+        [Parameter(Mandatory)][string]$StateAbbr
+    )
+
+    function Wait-Clickable {
+        param(
+            [Parameter(Mandatory)][OpenQA.Selenium.By]$By,
+            [int]$TimeoutSeconds = 30
+        )
+        $end = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ((Get-Date) -lt $end) {
+            try {
+                $el = $Driver.FindElement($By)
+                if ($el -and $el.Displayed -and $el.Enabled) { return $el }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+        }
+        return $null
+    }
+
+    $delBtn = Wait-Clickable -By ([OpenQA.Selenium.By]::XPath("//button[contains(.,'Delete Batch Import')] | //a[contains(.,'Delete Batch Import')]")) -TimeoutSeconds 60
+    if (-not $delBtn) { throw "[$StateAbbr] Could not find 'Delete Batch Import' button." }
+
+    Write-Host "[$StateAbbr] Clicking 'Delete Batch Import'..." -ForegroundColor Yellow
+    $delBtn.Click()
+
+    $yesBtn = Wait-Clickable -By ([OpenQA.Selenium.By]::XPath("//button[contains(.,'Yes, Delete this batch')] | //a[contains(.,'Yes, Delete this batch')]")) -TimeoutSeconds 60
+    if (-not $yesBtn) { throw "[$StateAbbr] Delete confirmation modal did not appear (missing 'Yes, Delete this batch')." }
+
+    Write-Host "[$StateAbbr] Confirming delete: 'Yes, Delete this batch'..." -ForegroundColor Yellow
+    $yesBtn.Click()
+
+    Start-Sleep -Seconds 3
+    return $true
+}
+
+# ================================
+# CERTLINK BATCH UPLOAD (FIXED ORDER + HASHSET CONVERSION)
+# ================================
+function Invoke-CertLinkBatchUploadNoError {
+    param(
+        [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$Driver,
+        [Parameter(Mandatory)][string]$UploadFile,
+        [Parameter(Mandatory)][string]$StateAbbr,
+        [Parameter(Mandatory)][string]$StateName
+    )
+
+    function Wait-Element {
+        param(
+            [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$D,
+            [Parameter(Mandatory)][OpenQA.Selenium.By]$By,
+            [int]$TimeoutSeconds = 20
+        )
+        $end = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ((Get-Date) -lt $end) {
+            try {
+                $el = $D.FindElement($By)
+                if ($el -and $el.Displayed -and $el.Enabled) { return $el }
+            } catch {}
+            Start-Sleep -Milliseconds 250
+        }
+        throw "[$StateAbbr] Element not found/ready: $By"
+    }
+
+    function Wait-Exists {
+        param(
+            [Parameter(Mandatory)][OpenQA.Selenium.IWebDriver]$D,
+            [Parameter(Mandatory)][OpenQA.Selenium.By]$By,
+            [int]$TimeoutSeconds = 20
+        )
+        $end = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ((Get-Date) -lt $end) {
+            try { return $D.FindElement($By) } catch {}
+            Start-Sleep -Milliseconds 250
+        }
+        throw "[$StateAbbr] Element not found (exists check): $By"
+    }
+
+    # Attempt state file up to 3 times (original then cleaned)
+    $currentFile = $UploadFile
+    $RejectedOriginalPath = $null
+
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+
+        Write-Host "[$StateAbbr] ATTEMPT $attempt/3 using file: $currentFile" -ForegroundColor Cyan
+
+        # Click Batch Applications
+        Write-Host "[$StateAbbr] Clicking Batch Applications" -ForegroundColor Cyan
+        $batchAppsLink = Wait-Element -D $Driver -By ([OpenQA.Selenium.By]::CssSelector("#empAppCollapse ul li:nth-of-type(4) > a"))
+        $batchAppsLink.Click()
+
+        # Find file input
+        $fileInput = Wait-Exists -D $Driver -By ([OpenQA.Selenium.By]::Id("BatchData"))
+        Write-Host "[$StateAbbr] Selecting file: $currentFile" -ForegroundColor Cyan
+        $fileInput.SendKeys($currentFile)
+
+        # Click Batch Import
+        Write-Host "[$StateAbbr] Clicking Batch Import" -ForegroundColor Cyan
+        $uploadBtn = Wait-Element -D $Driver -By ([OpenQA.Selenium.By]::Id("Upload"))
+        $uploadBtn.Click()
+
+        Wait-WithProgress -Seconds 5 -Message "[$StateAbbr] Allowing CertLink to validate batch (Attempt $attempt)"
+
+        # Confirm button should exist once validation is done
+        $confirmBtn = Wait-Element -D $Driver -By ([OpenQA.Selenium.By]::Id("btnProcess")) -TimeoutSeconds 30
+
+        # Parse errors BEFORE confirming
+        $batchLogRows = Get-CertLinkBatchErrorLogFromDetails_AllPages -Driver $Driver -StateAbbr $StateAbbr
+
+
+
+        if ($batchLogRows -and $batchLogRows.Count -gt 0) {
+
+            # Log errors per attempt
+            $thisLogPath = New-CertLinkErrorLogPath -Dir $ErrorLogDir -StateAbbr $StateAbbr
+            $baseLog = [IO.Path]::GetFileNameWithoutExtension($thisLogPath)
+            $logDir  = Split-Path $thisLogPath -Parent
+            $logPathAttempt = Join-Path $logDir ("{0}_Attempt{1}.csv" -f $baseLog, $attempt)
+            $batchLogRows | Export-Csv -LiteralPath $logPathAttempt -NoTypeInformation -Encoding UTF8
+            Write-Host "[$StateAbbr] Errors found -> logged to $logPathAttempt" -ForegroundColor Red
+
+            # --- POA signator handling (FIXED ORDER) ---
+            $poaMsg = "Signator listed is not on employer's Power of Attorney for start date."
+            $signatorCandidates = if ($StateFieldDefaults.ContainsKey($StateAbbr)) { $StateFieldDefaults[$StateAbbr] } else { @() }
+
+            $rowsToFixSignator = New-Object System.Collections.Generic.HashSet[int]
+            $rowsToRemove      = New-Object System.Collections.Generic.HashSet[int]
+
+
+
+
+            $byRow = $batchLogRows |
+                Where-Object { $_.RowNumber -match '^\d+$' } |
+                Group-Object -Property RowNumber
+
+            foreach ($g in $byRow) {
+
+                $rn = [int]$g.Name
+                $hasPoa = $false
+                $hasOther = $false
+
+                foreach ($e in $g.Group) {
+                    $msg = (($e.ErrorMessage | Out-String).Trim())
+                    if ($msg -eq $poaMsg) { $hasPoa = $true }
+                    else { $hasOther = $true }
+                }
+
+                if ($hasOther) { [void]$rowsToRemove.Add($rn) }
+                elseif ($hasPoa) { [void]$rowsToFixSignator.Add($rn) }
+            }
+
+            # Fail-safe: need 2 candidates to fix signator
+            if ($rowsToFixSignator.Count -gt 0 -and ($signatorCandidates.Count -lt 2)) {
+                foreach ($n in $rowsToFixSignator) { [void]$rowsToRemove.Add([int]$n) }
+                $rowsToFixSignator.Clear() | Out-Null
+            }
+
+            # Correct HashSet -> int[] conversion
+            $removeRowNums = @($rowsToRemove | ForEach-Object { [int]$_ })
+            $fixRowNums    = @($rowsToFixSignator | ForEach-Object { [int]$_ })
+
+            Write-Host "[$StateAbbr] rowsToRemove=$($removeRowNums.Count) rowsToFixSignator=$($fixRowNums.Count) currentFile=$currentFile" -ForegroundColor Yellow
+            Write-Host "[$StateAbbr] RejectedDir=$RejectedDir" -ForegroundColor Yellow
+
+            # Rejected rows output (safe)
+            $rejectedRows = @()
+            if ($removeRowNums.Count -gt 0) {
+                $rejectedRows = Get-CsvRowsByRowNumber -CsvPath $currentFile -RowNumbers $removeRowNums
+                if ($rejectedRows -and $rejectedRows.Count -gt 0) {
+                    if (-not $RejectedOriginalPath) {
+                        $RejectedOriginalPath = New-RejectedFilePath -Dir $RejectedDir -StateName $StateName
+                    }
+                    Append-RejectedRowsToFile -Path $RejectedOriginalPath -Rows $rejectedRows
+
+                    Write-Host "[$StateAbbr] Rejected records appended to: $RejectedOriginalPath" -ForegroundColor Yellow
+                }
+            }
+            Write-Host "[$StateAbbr] rejectedRows pulled from file=$($rejectedRows.Count)" -ForegroundColor Magenta
+
+            # Build clean file ONCE (after sets/arrays computed)
+          $cleanFile = New-CertLinkCleanFileFromErrors_WithSignatorFix `
+    -UploadFile $currentFile `
+    -RemoveRowNumbers $removeRowNums `
+    -FixSignatorRows $fixRowNums `
+    -OutDir $ResubmissionDir `
+    -StateAbbr $StateAbbr `
+    -SignatorCandidates $signatorCandidates `
+    -Attempt $attempt
+
+
+
+            if ($cleanFile) {
+                Write-Host "[$StateAbbr] Waiting for clean file to be ready on Drive..." -ForegroundColor Yellow
+                Wait-FileReady -Path $cleanFile -TimeoutSeconds 90
+                Write-Host "[$StateAbbr] Clean file is ready: $cleanFile" -ForegroundColor Green
+            }
+
+            # Delete the bad batch
+            Write-Host "[$StateAbbr] Deleting bad batch (Attempt $attempt)..." -ForegroundColor Yellow
+            $deleted = Click-CertLinkDeleteBatchImport -Driver $Driver -StateAbbr $StateAbbr
+            Write-Host "[$StateAbbr] Delete result: $deleted" -ForegroundColor Yellow
+
+            if (-not $cleanFile) {
+                Write-Host "[$StateAbbr] No clean records remain. Skipping further attempts for this state." -ForegroundColor Yellow
+                return $false
+            }
+
+            if ($attempt -eq 3) {
+                Write-Host "[$StateAbbr] Reached max attempts (3). Moving to next state." -ForegroundColor Yellow
+                return $false
+            }
+
+            $currentFile = $cleanFile
+            continue
+        }
+
+        # No errors -> confirm
+        Write-Host "[$StateAbbr] No errors detected -> confirming batch import." -ForegroundColor Green
+        $confirmBtn.Click()
+
+        # Success: append submitted rows
+        $submittedRows = Get-SubmittedUpdateRowsFromCsv -CsvPath $currentFile
+        if ($submittedRows.Count -gt 0) {
+        
+            Write-Host "[$StateAbbr] Submitted records appended to: $StateCertUpdatePath (Rows: $($submittedRows.Count))" -ForegroundColor Green
+        } else {
+            Write-Host "[$StateAbbr] No submitted rows found to append (file empty?): $currentFile" -ForegroundColor Yellow
+        }
+
+        return $true
+    }
+
+    Write-Host "[$StateAbbr] Failed after 3 attempts. Moving to next state." -ForegroundColor Yellow
+    return $false
+}
+
+# ================================
+# RB UPLOAD (as pasted; selectors unchanged)
+# ================================
+
+
+# ================================
+# RUN SUMMARY
+# ================================
+$RunSummary = New-Object System.Collections.Generic.List[object]
+
+# ================================
+# MAIN EXECUTION (ONE DRIVER LIFECYCLE)
+# ================================
+$Driver = $null
+
+try {
+    # 1) EXPORT FILES PER STATE (POSTGRES)
+    Write-Host "Starting export run... ExportDir = $ExportDir" -ForegroundColor Cyan
+
+    foreach ($st in $States) {
+
+        if ($null -eq $st -or [string]::IsNullOrWhiteSpace([string]$st.StateCd)) {
+            Write-Host "Skipping blank state row in `$States..." -ForegroundColor DarkYellow
+            continue
+        }
+
+        $StateAbbr      = $st.StateCd.ToString().Trim().ToUpper()
+        $QueryStateName = $st.StateStr.ToString().Trim()
+
+        Write-Host "Running state export: $StateAbbr ($QueryStateName)" -ForegroundColor Yellow
+
+        $sum = [ordered]@{
+            State             = $StateAbbr
+            RowsFound         = 0
+            Uploaded          = "FALSE"
+            DashboardUploaded = "FALSE"
+            UploadCsv         = ""
+            DashboardCsv      = ""
+            Notes             = ""
+        }
+
+        $stateKey = $StateAbbr
+        $signatorCandidates = if ($StateFieldDefaults.ContainsKey($stateKey)) { $StateFieldDefaults[$stateKey] } else { @() }
+        $signatorName = if ($signatorCandidates.Count -gt 0) { $signatorCandidates[0] } else { "" }
+
+        $Query = @"
+SELECT
+    e.id          AS employee_id,
+    e.first_name,
+    e.last_name,
+    e.date_started_job::date AS start_date,
+    e.plain_ssn,
+    e.address,
+    e.city,
+    e.state,
+    e.zip_code,
+    e.county,
+    e.phone_number,
+    e.date_birth,
+    e.date_gave_info,
+    e.date_was_offered_job,
+    e.date_was_hired,
+    e.date_started_job,
+    e.hourly_start_wage,
+    e.occupation_code,
+    e.full_name,
+    s.qualifie,
+    c.name,
+    c.fein,
+    c.state AS employer_state,
+    c.address AS employer_address,
+    c.city AS employer_city,
+    c.phone_number AS employer_phone_number,
+    c.zip_code AS employer_zipcode
+FROM employees e
+JOIN v2.sessions s ON s.employee_id = e.id
+JOIN companies c   ON c.id = e.company_id
+WHERE e.date_started_job::date BETWEEN CURRENT_DATE - INTERVAL '27 days' AND CURRENT_DATE
+  AND (
+        s.qualifie ILIKE '%SNAP%'
+     OR s.qualifie ILIKE '%SSI%'
+     OR s.qualifie ILIKE '%TANF%'
+  )
+   AND c.name <> 'Hirschbach Motor Lines, Inc'
+  AND e.state = '$QueryStateName'
+  AND s.dashboard_status = 'completed'
+  AND COALESCE(TRIM(e.state_certification), '') NOT IN ('Yes', 'No', 'Pending')
+ORDER BY e.date_started_job::date;
+"@
+
+        try {
+            $result = Invoke-PostgresQuery -ConnString $ConnString -Query $Query
+
+            if ($null -eq $result -or $result -isnot [System.Data.DataTable]) {
+                $sum.Notes = "Query did not return a DataTable."
+                $RunSummary.Add([pscustomobject]$sum)
+                continue
+            }
+
+            $sum.RowsFound = $result.Rows.Count
+
+            $export = foreach ($r in $result.Rows) {
+
+                $out = [ordered]@{}
+
+                # AGE
+                $ageAtStart = $null
+                $dobRaw   = $r["date_birth"]
+                $startRaw = $r["date_started_job"]
+
+                if ($null -ne $dobRaw -and $dobRaw -ne [DBNull]::Value -and
+                    $null -ne $startRaw -and $startRaw -ne [DBNull]::Value) {
+
+                    $dob   = [datetime]$dobRaw
+                    $start = [datetime]$startRaw
+
+                    $age = $start.Year - $dob.Year
+                    if ($start -lt $dob.AddYears($age)) { $age-- }
+                    $ageAtStart = $age
+                }
+
+                # Column 1..86
+                $out["General_FormVersionID"] = 9
+                $out["General_YourSystemsRecordIdentifier"] = ($r["employee_id"].ToString() -split '-', 2)[0]
+                $out["Form8850_ApplicantFirstName"] = $r["first_name"]
+                $out["Form8850_ApplicantMiddleName"] = ""
+                $out["Form8850_ApplicantLastName"] = $r["last_name"]
+                $out["Form8850_ApplicantSuffix"] = ""
+
+                $rawSsn = $r["plain_ssn"]
+                $out["Form8850_ApplicantSSN"] = if ($null -ne $rawSsn) { $rawSsn.ToString() -replace '[^0-9]', '' } else { "" }
+
+                $out["Form8850_ApplicantAddressLine1"] = $r["address"]
+                $out["Form8850_ApplicantCity"] = $r["city"]
+                $out["Form8850_ApplicantStateCd"] = Convert-StateNameToCode $r["state"]
+
+                $rawZip = $r["zip_code"]
+                $out["Form8850_ApplicantZipCode"] = if ($null -ne $rawZip) { $rawZip.ToString() -replace '[^0-9]', '' } else { "" }
+
+                $out["Form8850_ApplicantCounty"] = $r["county"]
+
+                $rawPhone = $r["phone_number"]
+                $out["Form8850_ApplicantPhone"] = if ($null -ne $rawPhone) { $rawPhone.ToString() -replace '[^0-9]', '' } else { "" }
+
+                $out["Form8850_ApplicantDOB"] = Format-DateMMDDYYYY $r["date_birth"]
+
+                $out["Form8850_Checkbox1"] = "FALSE"
+                $out["Form8850_Checkbox2"] = "TRUE"
+                $out["Form8850_Checkbox3"] = "FALSE"
+                $out["Form8850_Checkbox4"] = "FALSE"
+                $out["Form8850_Checkbox5"] = "FALSE"
+                $out["Form8850_Checkbox6"] = if ($r["qualifie"] -ne $null -and $r["qualifie"].ToString().ToUpper().Contains("LTANF")) { "TRUE" } else { "FALSE" }
+                $out["Form8850_Checkbox7"] = "FALSE"
+
+                $out["Form8850_EmployeeSignatureDate"] = Format-DateMMDDYYYY $r["date_was_hired"]
+
+                $out["Form8850_EmployerName"] = $r["name"]
+
+                $rawPhone2 = $r["employer_phone_number"]
+                $out["Form8850_EmployerPhone"] = if ($null -ne $rawPhone2) { $rawPhone2.ToString() -replace '[^0-9]', '' } else { "" }
+
+                $out["Form8850_EmployerFEIN"] = $r["fein"]
+                $out["Form8850_EmployerAddressLine1"] = $r["employer_address"]
+                $out["Form8850_EmployerCity"] = $r["employer_city"]
+                $out["Form8850_EmployerStateCd"] = Convert-StateNameToCode $r["employer_state"]
+                $out["Form8850_EmployerZipcode"] = $r["employer_zipcode"]
+
+                $out["Form8850_ContactFirstName"] = ""
+                $out["Form8850_ContactLastName"] = ""
+                $out["Form8850_ContactPhone"] = ""
+                $out["Form8850_ContactAddressLine1"] = ""
+                $out["Form8850_ContactCity"] = ""
+                $out["Form8850_ContactStateCd"] = ""
+                $out["Form8850_ContactZipcode"] = ""
+                $out["Form8850_GroupNumber"] = ""
+
+                $out["Form8850_GaveInformationDate"] = Format-DateMMDDYYYY $r["date_gave_info"]
+                $out["Form8850_OfferedJobDate"] = Format-DateMMDDYYYY $r["date_was_offered_job"]
+                $out["Form8850_EmployeeDateHired"] = Format-DateMMDDYYYY $r["date_was_hired"]
+                $out["Form8850_EmployeeStartDate"] = Format-DateMMDDYYYY $r["date_started_job"]
+
+                $out["ICF_Rehire"] = "FALSE"
+                $out["ICF_StartingWage"] = $r["hourly_start_wage"]
+                $out["ICF_OccupationID"] = $r["occupation_code"]
+                $out["ICF_IVA"] = "FALSE"
+                $out["ICF_IVAName"] = ""
+                $out["ICF_IVACity"] = ""
+                $out["ICF_IVAStateCd"] = ""
+                $out["ICF_IVAAdditionalCity"] = ""
+                $out["ICF_IVAAdditionalStateCd"] = ""
+                $out["ICF_Veteran"] = "FALSE"
+                $out["ICF_VeteranSNAPName"] = ""
+                $out["ICF_VeteranSNAPCity"] = ""
+                $out["ICF_VeteranSNAPStateCd"] = ""
+                $out["ICF_VeteranSNAPAdditionalCity"] = ""
+                $out["ICF_VeteranSNAPAdditionalStateCd"] = ""
+                $out["ICF_Felon"] = "FALSE"
+                $out["ICF_Felon_WorkRelease"] = "FALSE"
+                $out["ICF_FelonDateConviction"] = ""
+                $out["ICF_FelonDateRelease"] = ""
+                $out["ICF_FelonType"] = ""
+                $out["ICF_FelonStateCd"] = ""
+                $out["ICF_DCR_RRC"] = "FALSE"
+                $out["ICF_DCR_EZ"] = "FALSE"
+                $out["ICF_VR"] = "FALSE"
+                $out["ICF_SummerYouth"] = "FALSE"
+
+                $out["ICF_SNAP"] = if ($ageAtStart -ne $null -and $ageAtStart -le 39) { "TRUE" } else { "FALSE" }
+                $out["ICF_SNAPName"] = if ($out["ICF_SNAP"] -eq "TRUE") { $r["full_name"] } else { "" }
+                $out["ICF_SNAPCity"] = if ($out["ICF_SNAP"] -eq "TRUE") { $r["city"] } else { "" }
+                $out["ICF_SNAPStateCd"] = if ($out["ICF_SNAP"] -eq "TRUE") { Convert-StateNameToCode $r["state"] } else { "" }
+                $out["ICF_SNAPAdditionalCity"] = ""
+                $out["ICF_SNAPAdditionalStateCd"] = ""
+
+                $out["ICF_SSI"] = if ($ageAtStart -ne $null -and $ageAtStart -ge 40) { "TRUE" } else { "FALSE" }
+
+                $out["ICF_TANF"] = if (
+                    (($r["qualifie"] -ne $null) -and ($r["qualifie"].ToString().ToUpper().Contains("TANF"))) -or
+                    ($out["Form8850_Checkbox6"] -eq "TRUE")
+                ) { "TRUE" } else { "FALSE" }
+
+                $out["ICF_TANFName"] = if ($out["ICF_TANF"] -eq "TRUE") { $r["full_name"] } else { "" }
+                $out["ICF_TANFCity"] = if ($out["ICF_TANF"] -eq "TRUE") { $r["city"] } else { "" }
+                $out["ICF_TANFStateCd"] = if ($out["ICF_TANF"] -eq "TRUE") { Convert-StateNameToCode $r["state"] } else { "" }
+                $out["ICF_TANFAdditionalCity"] = ""
+                $out["ICF_TANFAdditionalStateCd"] = ""
+
+                $out["ICF_LTUR"] = "FALSE"
+                $out["ICF_LTURCity"] = ""
+                $out["ICF_LTURStateCd"] = ""
+                $out["ICF_LTURAdditionalCity"] = ""
+                $out["ICF_LTURAdditionalStateCd"] = ""
+                $out["ICF_EligibilitySources"] = ""
+
+                $out["ICF_SignatorName"] = $signatorName
+
+                [pscustomobject]$out
+            }
+
+            if ($sum.RowsFound -gt 0) {
+                $stamp = Get-Date -Format "MM.dd.yyyy"
+                $safeName = ($QueryStateName -replace '[^\w ]','')
+                $outFile = Join-Path $ExportDir ("{0}{1}.csv" -f $safeName, $stamp)
+
+                $export | Export-Csv -LiteralPath $outFile -NoTypeInformation -Encoding UTF8
+                $sum.UploadCsv = $outFile
+                $sum.Notes = "Exported."
+            } else {
+                $sum.Notes = "No rows to export."
+            }
+
+            $RunSummary.Add([pscustomobject]$sum)
+        }
+        catch {
+            $sum.Notes = $_.Exception.Message
+            $RunSummary.Add([pscustomobject]$sum)
+            continue
+        }
+    }
+
+    $RunSummary | Format-Table -AutoSize
+    Write-Host "Export done. Files saved to: $ExportDir" -ForegroundColor Green
+
+    # 2) SELENIUM: LOGIN + UPLOAD PER STATE
+    $Driver = Start-EdgeDriver
+
+    foreach ($st in $States) {
+
+        $cred = Get-PortalCredential -CredPath $st.CredPath
+        $PortalUser = $cred.UserName
+        $PortalPass = $cred.GetNetworkCredential().Password
+
+        Write-Host "`n==============================" -ForegroundColor Cyan
+        Write-Host "Running state: $($st.StateCd) ($($st.StateStr))" -ForegroundColor Cyan
+
+        Invoke-CertLinkLoginOnly -Driver $Driver `
+            -PortalUrl $st.PortalUrl `
+            -PortalUser $PortalUser `
+            -PortalPass $PortalPass `
+            -StateAbbr $st.StateCd
+
+        # Pick latest export file for this state (by StateStr prefix)
+        $statePrefix = $st.StateStr
+        $files = Get-ChildItem -Path $ExportDir -Filter ($statePrefix + "*.csv") -ErrorAction SilentlyContinue |
+                 Sort-Object LastWriteTime -Descending
+
+        if (-not $files -or $files.Count -eq 0) {
+    Write-Host "[$($st.StateCd)] No export file found in $ExportDir matching: $statePrefix*.csv — skipping state." -ForegroundColor Yellow
+    continue
+}
+
+
+        $uploadFile = $files[0].FullName
+        Write-Host "[$($st.StateCd)] Using upload file: $uploadFile" -ForegroundColor Green
+
+        $ok = Invoke-CertLinkBatchUploadNoError -Driver $Driver -UploadFile $uploadFile -StateAbbr $st.StateCd -StateName $st.StateStr
+        Write-Host "[$($st.StateCd)] Upload result: $ok" -ForegroundColor Yellow
+    }
+
+    # 3) EXPORT RUN SUMMARY
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $SummaryCsv  = Join-Path $SummaryDir ("RunSummary_{0}.csv" -f $stamp)
+
+    $RunSummary |
+        Select-Object State, RowsFound, Uploaded, DashboardUploaded, UploadCsv, DashboardCsv, Notes |
+        Export-Csv -LiteralPath $SummaryCsv -NoTypeInformation -Encoding UTF8
+
+    Write-Host "Run summary exported to: $SummaryCsv" -ForegroundColor Green
+}
+finally {
+
+# Quick sanity: show last 10 exports
+Get-ChildItem $ExportDir | Sort-Object LastWriteTime -Descending | Select-Object -First 10
+
+    if ($Driver) {
+        try { $Driver.Quit() } catch {}
+        try { $Driver.Dispose() } catch {}
+    }
+
+# ================================
+# RUN ROCKERBOX SCRIPT (UNCONDITIONAL)
+# ================================
+
+$NextScriptPath = "C:\Scripts\RB-Dashboard-Upload-Only.ps1"
+
+Write-Host "Launching Rockerbox Dashboard script..." -ForegroundColor Cyan
+
+if (-not (Test-Path -LiteralPath $NextScriptPath)) {
+    throw "Rockerbox script not found: $NextScriptPath"
+}
+
+. $NextScriptPath
+
+
+Write-Host "Rockerbox Dashboard script finished." -ForegroundColor Green
+
+
+    # hard cleanup
+    Get-Process msedgedriver -ErrorAction SilentlyContinue | Stop-Process -Force
+    Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+}
+
+
+#& $Determinations

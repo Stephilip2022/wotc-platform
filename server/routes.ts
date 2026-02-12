@@ -4901,6 +4901,328 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // CSDC SFTP AUTOMATION (AL, AR, CO, GA, ID, OK, OR, SC, VT, WV)
+  // ============================================================================
+
+  app.post("/api/admin/csdc/test-connection", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ error: "SFTP username and password required" });
+      }
+
+      const { testCsdcConnection } = await import('./utils/csdcSftpClient');
+      const result = await testCsdcConnection({ host: 'hermes.csdco.com', port: 22, username, password });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error testing CSDC connection:", error);
+      res.status(500).json({ error: "Failed to test connection", details: error?.message });
+    }
+  });
+
+  app.post("/api/admin/csdc/generate-file", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode, employerId } = req.body;
+      if (!stateCode || !employerId) {
+        return res.status(400).json({ error: "stateCode and employerId required" });
+      }
+
+      const { generateCsdcFile, generateCsdcPreview, getCsdcSupportedStates } = await import('./utils/csdcFileGenerator');
+      const supportedStates = getCsdcSupportedStates();
+      const upper = stateCode.toUpperCase();
+
+      if (!supportedStates.includes(upper)) {
+        return res.status(400).json({ error: `State ${stateCode} is not a CSDC state. Supported: ${supportedStates.join(', ')}` });
+      }
+
+      const { employees: employeesTable, screenings: screeningsTable, employers: employersTable } = await import("@shared/schema");
+
+      const [employer] = await db
+        .select()
+        .from(employersTable)
+        .where(eq(employersTable.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      const empRows = await db
+        .select()
+        .from(employeesTable)
+        .where(eq(employeesTable.employerId, employerId));
+
+      const screeningRows = await db
+        .select()
+        .from(screeningsTable)
+        .where(
+          and(
+            eq(screeningsTable.employerId, employerId),
+            or(
+              eq(screeningsTable.status, 'eligible'),
+              eq(screeningsTable.status, 'completed'),
+              eq(screeningsTable.status, 'certified')
+            )
+          )
+        );
+
+      const empById = new Map(empRows.map((e: any) => [e.id, e]));
+
+      const records = screeningRows
+        .filter((s: any) => empById.has(s.employeeId))
+        .map((s: any) => ({
+          employee: empById.get(s.employeeId)!,
+          screening: s,
+          employerEin: employer.ein || '',
+          employerName: employer.name,
+        }));
+
+      if (records.length === 0) {
+        return res.json({ preview: '', recordCount: 0, message: 'No eligible records found for this state' });
+      }
+
+      const preview = generateCsdcPreview(records, upper);
+      const fullContent = generateCsdcFile(records, upper);
+
+      res.json({
+        ...preview,
+        fullContent,
+      });
+    } catch (error: any) {
+      console.error("Error generating CSDC file:", error);
+      res.status(500).json({ error: "Failed to generate file", details: error?.message });
+    }
+  });
+
+  app.post("/api/admin/csdc/upload", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode, employerId, username, password } = req.body;
+      if (!stateCode || !employerId || !username || !password) {
+        return res.status(400).json({ error: "stateCode, employerId, username, and password required" });
+      }
+
+      const { generateCsdcFile, getCsdcSupportedStates } = await import('./utils/csdcFileGenerator');
+      const supportedStates = getCsdcSupportedStates();
+      const upper = stateCode.toUpperCase();
+
+      if (!supportedStates.includes(upper)) {
+        return res.status(400).json({ error: `State ${stateCode} is not a CSDC state` });
+      }
+
+      const { employees: employeesTable, screenings: screeningsTable, employers: employersTable } = await import("@shared/schema");
+
+      const [employer] = await db
+        .select()
+        .from(employersTable)
+        .where(eq(employersTable.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      const empRows = await db
+        .select()
+        .from(employeesTable)
+        .where(eq(employeesTable.employerId, employerId));
+
+      const screeningRows = await db
+        .select()
+        .from(screeningsTable)
+        .where(
+          and(
+            eq(screeningsTable.employerId, employerId),
+            or(
+              eq(screeningsTable.status, 'eligible'),
+              eq(screeningsTable.status, 'completed'),
+              eq(screeningsTable.status, 'certified')
+            )
+          )
+        );
+
+      const empById = new Map(empRows.map((e: any) => [e.id, e]));
+
+      const records = screeningRows
+        .filter((s: any) => empById.has(s.employeeId))
+        .map((s: any) => ({
+          employee: empById.get(s.employeeId)!,
+          screening: s,
+          employerEin: employer.ein || '',
+          employerName: employer.name,
+        }));
+
+      if (records.length === 0) {
+        return res.json({ success: false, message: 'No eligible records found' });
+      }
+
+      const fileContent = generateCsdcFile(records, upper);
+      const { uploadCsdcFile } = await import('./utils/csdcSftpClient');
+      const result = await uploadCsdcFile(
+        { host: 'hermes.csdco.com', port: 22, username, password },
+        upper,
+        fileContent
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error uploading CSDC file:", error);
+      res.status(500).json({ error: "Failed to upload file", details: error?.message });
+    }
+  });
+
+  app.post("/api/admin/csdc/upload-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employerId, username, password } = req.body;
+      if (!employerId || !username || !password) {
+        return res.status(400).json({ error: "employerId, username, and password required" });
+      }
+
+      const { generateCsdcFile, getCsdcSupportedStates } = await import('./utils/csdcFileGenerator');
+      const { uploadMultipleCsdcFiles } = await import('./utils/csdcSftpClient');
+      const { employees: employeesTable, screenings: screeningsTable, employers: employersTable } = await import("@shared/schema");
+
+      const [employer] = await db
+        .select()
+        .from(employersTable)
+        .where(eq(employersTable.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      const empRows = await db
+        .select()
+        .from(employeesTable)
+        .where(eq(employeesTable.employerId, employerId));
+
+      const screeningRows = await db
+        .select()
+        .from(screeningsTable)
+        .where(
+          and(
+            eq(screeningsTable.employerId, employerId),
+            or(
+              eq(screeningsTable.status, 'eligible'),
+              eq(screeningsTable.status, 'completed'),
+              eq(screeningsTable.status, 'certified')
+            )
+          )
+        );
+
+      const empById = new Map(empRows.map((e: any) => [e.id, e]));
+      const supportedStates = getCsdcSupportedStates();
+      const files: Array<{ stateAbbr: string; content: string }> = [];
+
+      for (const stateAbbr of supportedStates) {
+        const stateRecords = screeningRows
+          .filter((s: any) => {
+            const emp = empById.get(s.employeeId);
+            if (!emp) return false;
+            const empState = (emp.state || '').trim();
+            const stateUpper = empState.length === 2 ? empState.toUpperCase() : '';
+            return stateUpper === stateAbbr;
+          })
+          .map((s: any) => ({
+            employee: empById.get(s.employeeId)!,
+            screening: s,
+            employerEin: employer.ein || '',
+            employerName: employer.name,
+          }));
+
+        if (stateRecords.length > 0) {
+          const content = generateCsdcFile(stateRecords, stateAbbr);
+          files.push({ stateAbbr, content });
+        }
+      }
+
+      if (files.length === 0) {
+        return res.json({ success: false, message: 'No eligible records found for any CSDC state', results: [] });
+      }
+
+      const results = await uploadMultipleCsdcFiles(
+        { host: 'hermes.csdco.com', port: 22, username, password },
+        files
+      );
+
+      res.json({
+        success: results.every(r => r.success),
+        totalStates: files.length,
+        totalRecords: results.reduce((sum, r) => sum + r.recordCount, 0),
+        results,
+      });
+    } catch (error: any) {
+      console.error("Error in bulk CSDC upload:", error);
+      res.status(500).json({ error: "Failed to upload files", details: error?.message });
+    }
+  });
+
+  app.post("/api/admin/csdc/download-determinations", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode, username, password } = req.body;
+      if (!stateCode || !username || !password) {
+        return res.status(400).json({ error: "stateCode, username, and password required" });
+      }
+
+      const { downloadCsdcDeterminations } = await import('./utils/csdcSftpClient');
+      const result = await downloadCsdcDeterminations(
+        { host: 'hermes.csdco.com', port: 22, username, password },
+        stateCode
+      );
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error downloading determinations:", error);
+      res.status(500).json({ error: "Failed to download determinations", details: error?.message });
+    }
+  });
+
+  app.get("/api/admin/csdc/supported-states", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { getCsdcSupportedStates, getCsdcFileName, getCsdcRemotePath, getCsdcStateDefaults } = await import('./utils/csdcFileGenerator');
+      const states = getCsdcSupportedStates();
+      const stateDetails = states.map(st => ({
+        stateCode: st,
+        fileName: getCsdcFileName(st),
+        remotePath: getCsdcRemotePath(st),
+        config: getCsdcStateDefaults(st),
+      }));
+
+      res.json({ states: stateDetails, sftpHost: 'hermes.csdco.com' });
+    } catch (error: any) {
+      console.error("Error getting CSDC states:", error);
+      res.status(500).json({ error: "Failed to get supported states" });
+    }
+  });
+
+  // ============================================================================
   // PHASE 5: AI PREDICTION, QUESTIONNAIRE OPTIMIZATION & CREDIT FORECASTING
   // ============================================================================
 
