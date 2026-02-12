@@ -164,6 +164,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use("/api/pricing", pricingRouter);
 
   // ============================================================================
+  // EMPLOYER REGISTRATION
+  // ============================================================================
+
+  app.post("/api/register/employer", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (user.role === "admin") {
+        return res.status(403).json({ error: "Admin accounts cannot register as employers" });
+      }
+
+      if (user.role === "employer" && user.employerId) {
+        return res.status(400).json({ error: "You are already registered as an employer" });
+      }
+
+      const { companyName, ein, contactEmail, contactPhone, address, city, state, zipCode } = req.body;
+
+      if (!companyName || typeof companyName !== "string" || companyName.trim().length < 2) {
+        return res.status(400).json({ error: "Company name must be at least 2 characters" });
+      }
+
+      if (!ein || !/^\d{2}-?\d{7}$/.test(ein)) {
+        return res.status(400).json({ error: "EIN must be in format XX-XXXXXXX (9 digits)" });
+      }
+
+      if (!contactEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+        return res.status(400).json({ error: "A valid contact email is required" });
+      }
+
+      if (zipCode && !/^\d{5}(-\d{4})?$/.test(zipCode)) {
+        return res.status(400).json({ error: "ZIP code must be 5 digits" });
+      }
+
+      const existingEmployer = await db.select().from(employers).where(eq(employers.ein, ein));
+      if (existingEmployer.length > 0) {
+        return res.status(400).json({ error: "An employer with this EIN is already registered" });
+      }
+
+      const [newEmployer] = await db
+        .insert(employers)
+        .values({
+          name: companyName,
+          ein,
+          contactEmail,
+          contactPhone: contactPhone || null,
+          address: address || null,
+          city: city || null,
+          state: state || null,
+          zipCode: zipCode || null,
+          onboardingStatus: "pending",
+        })
+        .returning();
+
+      await db
+        .update(users)
+        .set({
+          role: "employer",
+          employerId: newEmployer.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, userId));
+
+      const [updatedUser] = await db.select().from(users).where(eq(users.id, userId));
+
+      res.json({ user: updatedUser, employer: newEmployer });
+    } catch (error: any) {
+      console.error("Employer registration error:", error);
+      if (error?.code === "23505") {
+        return res.status(400).json({ error: "An employer with this EIN already exists" });
+      }
+      res.status(500).json({ error: "Failed to register employer" });
+    }
+  });
+
+  // ============================================================================
   // TRANSLATION ROUTES
   // ============================================================================
 

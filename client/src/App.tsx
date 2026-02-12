@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -47,6 +47,7 @@ import PricingConfigPage from "@/pages/admin/pricing-config";
 import MultiCreditPage from "@/pages/employer/multi-credit";
 import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
 import BulkImportPage from "@/pages/employer/bulk-import";
+import RegisterEmployerPage from "@/pages/register-employer";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -142,6 +143,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
 
 function Router() {
   const { user, isLoading, isAuthenticated } = useAuth();
+  const [location] = useLocation();
 
   if (isLoading) {
     return (
@@ -153,6 +155,10 @@ function Router() {
 
   if (!isAuthenticated) {
     return <LandingPage />;
+  }
+
+  if (location === "/register/employer" && user?.role === "employee") {
+    return <RegisterEmployerPage />;
   }
 
   if (user?.role === "employee") {

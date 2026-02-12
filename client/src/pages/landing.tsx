@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SignInButton } from "@clerk/clerk-react";
+import { SignInButton, SignUpButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -327,12 +327,12 @@ export default function LandingPage() {
                   Log In
                 </Button>
               </SignInButton>
-              <SignInButton mode="modal">
-                <Button size="sm" data-testid="button-get-started-nav">
-                  Get Started
+              <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
+                <Button size="sm" data-testid="button-employer-signup-nav">
+                  Employer Sign Up
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
-              </SignInButton>
+              </SignUpButton>
             </div>
           </div>
         </div>
@@ -367,33 +367,32 @@ export default function LandingPage() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <SignInButton mode="modal">
+            <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
               <Button 
                 size="lg" 
-                data-testid="button-employer-login"
+                data-testid="button-employer-signup"
                 className="h-14 px-8 text-lg font-semibold animate-pulse-glow"
               >
                 <Building2 className="mr-2 h-5 w-5" />
-                Start Capturing Credits
+                Employer Sign Up
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
+            </SignUpButton>
+            <SignInButton mode="modal">
+              <Button 
+                size="lg" 
+                variant="outline"
+                data-testid="button-employee-login"
+                className="h-14 px-8 text-lg"
+              >
+                <Users className="mr-2 h-5 w-5" />
+                Employee Login
+              </Button>
             </SignInButton>
-            <Button 
-              size="lg" 
-              variant="outline"
-              asChild
-              data-testid="button-watch-demo"
-              className="h-14 px-8 text-lg"
-            >
-              <a href="#how-it-works">
-                <Play className="mr-2 h-5 w-5" />
-                See How It Works
-              </a>
-            </Button>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            No credit card required. Setup in under 10 minutes.
+            Employers: No credit card required. Setup in under 10 minutes. Employees: Log in to complete your WOTC screening.
           </p>
         </div>
       </section>
@@ -555,7 +554,7 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <SignInButton mode="modal">
+                <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
                   <Button 
                     variant="secondary" 
                     size="lg" 
@@ -565,7 +564,7 @@ export default function LandingPage() {
                     Start Capturing Credits
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
-                </SignInButton>
+                </SignUpButton>
 
                 <p className="text-xs opacity-60 text-center">
                   Based on industry averages. Actual results may vary.
@@ -758,25 +757,25 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <SignInButton mode="modal">
+            <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
               <Button 
                 size="lg" 
                 className="h-14 px-10 text-lg font-semibold"
                 data-testid="button-final-cta"
               >
-                Get Started Free
+                Employer Sign Up
                 <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
-            </SignInButton>
+            </SignUpButton>
             <SignInButton mode="modal">
               <Button 
                 size="lg" 
                 variant="outline"
                 className="h-14 px-10 text-lg"
-                data-testid="button-admin-portal"
+                data-testid="button-employee-login-bottom"
               >
-                <Shield className="mr-2 h-5 w-5" />
-                Admin Portal
+                <Users className="mr-2 h-5 w-5" />
+                Employee Login
               </Button>
             </SignInButton>
           </div>
