@@ -4930,6 +4930,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // CSDC SFTP AUTOMATION (AL, AR, CO, GA, ID, OK, OR, SC, VT, WV)
   // ============================================================================
 
+  app.post("/api/admin/csdc/test-proxy", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { testProxyConnection } = await import('./utils/csdcSftpClient');
+      const result = await testProxyConnection();
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error testing proxy connection:", error);
+      res.status(500).json({ error: "Failed to test proxy", details: error?.message });
+    }
+  });
+
   app.post("/api/admin/csdc/test-connection", isAuthenticated, async (req: any, res) => {
     try {
       const user = await getUserByClerkId(getAuth(req).userId!);
