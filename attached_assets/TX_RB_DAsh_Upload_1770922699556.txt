@@ -1,0 +1,149 @@
+# ==============================================================================
+# SCRIPT: CA ROCKERBOX UPLOAD ONLY (FIXED LOGIN CLICK)
+# ==============================================================================
+# LOGIC:
+# 1. Verify 'TX_RB_Ready.csv' exists.
+# 2. Log in to Rockerbox -> PAUSE.
+# 3. Open Menu -> PAUSE.
+# 4. Click Upload -> PAUSE.
+# 5. Select "Update state certification" -> PAUSE.
+# 6. Upload 'CA_RB_Ready.csv'.
+# ==============================================================================
+
+$ErrorActionPreference = "Stop"
+
+# --- PATH CONFIGURATION ---
+$TargetCsv    = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX_RB_Ready.csv"
+$CredPath     = "G:\My Drive\StateCreds\RB Dash.Cred"
+
+# --- DRIVER PATHS ---
+$EdgeDriverExe = "C:\Users\bbyki\Desktop\Latest MSE DRIVER\msedgedriver.exe"
+$DllPath       = "C:\Users\bbyki\Desktop\Latest MSE DRIVER"
+
+# ==============================================================================
+# PART 1: PRE-FLIGHT CHECK
+# ==============================================================================
+Write-Host "PHASE 1: FILE CHECK" -ForegroundColor Cyan
+
+if (-not (Test-Path $TargetCsv)) { 
+    throw "Target CSV not found: $TargetCsv. Please ensure the file exists before running this script." 
+} else {
+    Write-Host "File found: $TargetCsv" -ForegroundColor Green
+}
+
+# ==============================================================================
+# PART 2: SELENIUM UPLOAD
+# ==============================================================================
+Write-Host "`nPHASE 2: UPLOADING TO ROCKERBOX" -ForegroundColor Cyan
+
+# --- LOAD LIBRARIES ---
+if (-not (Test-Path $DllPath)) { throw "WebDriver DLLs not found at $DllPath" }
+Add-Type -Path "$DllPath\WebDriver.dll"
+Add-Type -Path "$DllPath\WebDriver.Support.dll"
+
+# --- HELPER FUNCTIONS ---
+function Start-EdgeDriver {
+    $service = [OpenQA.Selenium.Edge.EdgeDriverService]::CreateDefaultService((Split-Path $EdgeDriverExe -Parent))
+    $service.HideCommandPromptWindow = $true
+    $options = New-Object OpenQA.Selenium.Edge.EdgeOptions
+    $options.AddArgument("start-maximized")
+    return New-Object OpenQA.Selenium.Edge.EdgeDriver($service, $options)
+}
+
+function Wait-Element {
+    param($Driver, $By, [int]$TimeoutSeconds = 30)
+    $end = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $end) {
+        try {
+            $el = $Driver.FindElement($By)
+            if ($el -and $el.Displayed -and $el.Enabled) { return $el }
+        } catch {}
+        Start-Sleep -Milliseconds 250
+    }
+    throw "Element not found: $By"
+}
+
+function Click-MuiSelectAndChooseOption {
+    param($Driver, $OptionText)
+    # 1. Click Dropdown
+    $select = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::CssSelector("div.MuiSelect-select[role='combobox']"))
+    $select.Click()
+    Start-Sleep -Seconds 2 # Short pause for list to render
+    
+    # 2. Click Option
+    $opt = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//li[contains(., '$OptionText')]"))
+    $opt.Click()
+}
+
+# --- EXECUTION ---
+try {
+    # 1. SETUP & LOGIN
+    $cred = Import-Clixml -LiteralPath $CredPath
+    $driver = Start-EdgeDriver
+
+    $driver.Navigate().GoToUrl("https://app.rockerbox.tech/login")
+    
+    # Check if login needed
+    if ($driver.Url -notmatch "dashboard") {
+        Write-Host "Logging in..." -ForegroundColor Gray
+        $emailEl = Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::CssSelector("#email"))
+        $emailEl.SendKeys($cred.UserName)
+
+        $pwEl = Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::CssSelector("#standard-adornment-password"))
+        $pwEl.SendKeys($cred.GetNetworkCredential().Password)
+
+        # FIX IS HERE: Use JS Click to punch through the Overlay
+        $btn = $driver.FindElement([OpenQA.Selenium.By]::XPath("//button[contains(.,'Sign In')]"))
+        $driver.ExecuteScript("arguments[0].click();", $btn)
+        
+        Write-Host "Login clicked (via JS). Pausing for dashboard load..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 8 
+    }
+
+    # 2. NAVIGATE TO UPLOAD MENU
+    if ($driver.Url -notmatch "dashboard") { 
+        $driver.Navigate().GoToUrl("https://app.rockerbox.tech/dashboard") 
+        Start-Sleep -Seconds 5
+    }
+    
+    # Open Menu
+    Write-Host "Opening Menu..." -ForegroundColor Gray
+    $menuBtn = Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::CssSelector("[data-testid='ExpandMoreIcon']"))
+    $menuBtn.Click()
+    
+    Write-Host "Menu clicked. Pausing for animation..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
+
+    # Click Upload
+    Write-Host "Clicking Upload link..." -ForegroundColor Gray
+    $uploadLink = Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::XPath("//li[contains(.,'Upload file')]"))
+    $uploadLink.Click()
+    
+    Write-Host "Upload page loading. Pausing..." -ForegroundColor Yellow
+    Wait-Element -Driver $driver -By ([OpenQA.Selenium.By]::XPath("//*[contains(text(),'Select File')]")) | Out-Null
+    Start-Sleep -Seconds 4
+
+    # 3. SELECT CERTIFICATION TYPE
+    Write-Host "Selecting Certification Type..." -ForegroundColor Gray
+    Click-MuiSelectAndChooseOption -Driver $driver -OptionText "Update state certification"
+    
+    Write-Host "Selection made. Pausing..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 3
+
+    # 4. PERFORM UPLOAD
+    # Unhide file input
+    $fileInput = $driver.FindElement([OpenQA.Selenium.By]::CssSelector("#upload-dynamic-file"))
+    $driver.ExecuteScript("arguments[0].style.display='block'; arguments[0].style.visibility='visible';", $fileInput)
+    
+    Write-Host "Uploading: $TargetCsv" -ForegroundColor Cyan
+    $fileInput.SendKeys($TargetCsv)
+
+    Write-Host "UPLOAD COMPLETE. Closing browser in 5 seconds..." -ForegroundColor Green
+    Start-Sleep -Seconds 5
+    $driver.Quit()
+
+} catch {
+    Write-Error "SCRIPT ERROR: $($_.Exception.Message)"
+    Read-Host "Press Enter to close..."
+    try { $driver.Quit() } catch {}
+}

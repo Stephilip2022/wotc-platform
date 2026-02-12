@@ -1,0 +1,117 @@
+# --- Configuration ---
+$originalFilePath = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX_WOTC_Upload_Final.csv"
+$errorFilesDir    = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX Error Files"
+$rbReadyFilePath  = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX_RB_Ready.csv"
+$RBDashUpload     = "C:\Scripts\TX_RB_Dash_UPload.ps1"
+
+# --- Step 1: Get the Newest Excel File ---
+$newestErrorFile = Get-ChildItem -Path $errorFilesDir -Include "*.xls", "*.xlsx" -Recurse | 
+                   Where-Object { $_.Name -notmatch "^\~" } |
+                   Sort-Object LastWriteTime -Descending | 
+                   Select-Object -First 1
+
+if (-not $newestErrorFile) {
+    Write-Error "No Excel files found in $errorFilesDir"
+    exit
+}
+
+Write-Host "Processing newest Error File: $($newestErrorFile.Name)" -ForegroundColor Cyan
+
+# --- Step 2: Read Data from Excel (COM Object) ---
+$errorSSNs = New-Object System.Collections.Generic.HashSet[string]
+$excel = New-Object -ComObject Excel.Application
+$excel.Visible = $false
+$excel.DisplayAlerts = $false
+
+try {
+    $workbook = $excel.Workbooks.Open($newestErrorFile.FullName)
+    $sheet = $workbook.Sheets.Item(1)
+
+    $usedRange = $sheet.UsedRange
+    $rowCount = $usedRange.Rows.Count
+    $colCount = $usedRange.Columns.Count
+    $data = $usedRange.Value2
+
+    $ssnColIndex = -1
+    for ($c = 1; $c -le $colCount; $c++) {
+        if ($data[1, $c] -match "SSN") {
+            $ssnColIndex = $c
+            break
+        }
+    }
+
+    if ($ssnColIndex -eq -1) {
+        Write-Warning "Could not find 'SSN' column in Excel. defaulting to Column 2 (B)..."
+        $ssnColIndex = 2 
+    }
+
+    for ($r = 2; $r -le $rowCount; $r++) {
+        $val = $data[$r, $ssnColIndex]
+        if ($val) {
+            $null = $errorSSNs.Add([string]$val.ToString().Trim())
+        }
+    }
+}
+catch {
+    Write-Error "Failed to read Excel file: $_"
+}
+finally {
+    $workbook.Close($false)
+    $excel.Quit()
+    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+    Remove-Variable excel
+}
+
+# --- Step 3: Read Original CSV & Filter ---
+$originalData = Import-Csv -Path $originalFilePath
+
+$cleanRows = $originalData | Where-Object { 
+    $ssn = $_.SSN.Trim()
+    -not $errorSSNs.Contains($ssn)
+}
+
+Write-Host "Found $($originalData.Count) original rows."
+Write-Host "Found $($errorSSNs.Count) errors in Excel."
+Write-Host "Processing $($cleanRows.Count) successful rows..."
+
+# --- Step 4: Map to RB Ready Columns & Format SSN ---
+# We read headers only to map the keys correctly, ensuring we align with the existing file structure
+$rbHeaders = (Get-Content -Path $rbReadyFilePath -TotalCount 1) -split ","
+
+$headerColA = $rbHeaders[0] -replace '"',''
+$headerColB = $rbHeaders[1] -replace '"',''
+$headerColD = $rbHeaders[3] -replace '"',''
+
+$outputData = @()
+
+foreach ($row in $cleanRows) {
+    $newRow = [ordered]@{}
+    
+    # Column A
+    $newRow[$headerColA] = $row.FEIN
+    
+    # Column B: SSN - Format as ###-##-####
+    # Remove any existing hyphens/spaces first, then re-format
+    $rawSSN = $row.SSN -replace "[^0-9]", ""
+    $formattedSSN = $rawSSN -replace "(\d{3})(\d{2})(\d{4})", '$1-$2-$3'
+    $newRow[$headerColB] = $formattedSSN
+    
+    # Column C
+    if ($rbHeaders.Count -gt 2) {
+        $headerColC = $rbHeaders[2] -replace '"',''
+        $newRow[$headerColC] = "" 
+    }
+    
+    # Column D
+    $newRow[$headerColD] = "Pending"
+
+    $outputData += [PSCustomObject]$newRow
+}
+
+# --- Step 5: Append Result ---
+# Changed to -Append to only paste data without changing file structure
+$outputData | Export-Csv -Path $rbReadyFilePath -NoTypeInformation -Append -Force
+
+Write-Host "Success! Clean data appended to $rbReadyFilePath" -ForegroundColor Green
+
+& $RBDashUpload

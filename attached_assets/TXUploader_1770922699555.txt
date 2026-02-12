@@ -1,0 +1,268 @@
+# --- 1. CONFIGURATION ---
+$UploadFilePath = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX_WOTC_Upload_Final.csv"
+$CredPath       = "G:\My Drive\StateCreds\TX-WOTC.cred"
+$SiteUrl        = "https://twcgov.appiancloud.us/suite/sites/work-opportunity-tax-credit"
+$RBCreate	= "C:\Scripts\TX RB Ready Create.ps1"
+$MaxDeletes     = 500 
+
+# --- DATE FORMATTING ---
+$TimeStamp      = Get-Date -Format "MM-dd-yyyy"
+# Fixed double quote typo in your original path
+$ErrorDir       = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX Error Files"
+$ErrorLogPath   = "$ErrorDir\TX_Upload_Errors_$TimeStamp.csv"
+
+# --- 2. DRIVERS ---
+$EdgeDriverExe = "C:\Users\bbyki\Desktop\Latest MSE DRIVER\msedgedriver.exe"
+$EdgeDriverDir = Split-Path $EdgeDriverExe -Parent
+$DllPath       = "C:\Users\bbyki\Desktop\Latest MSE DRIVER"
+
+if (-not (Test-Path "$DllPath\WebDriver.dll")) { throw "WebDriver.dll not found." }
+Add-Type -Path "$DllPath\WebDriver.dll"
+Add-Type -Path "$DllPath\WebDriver.Support.dll"
+
+# --- 3. HELPER FUNCTIONS ---
+function Start-EdgeDriver {
+    param($DownloadPath)
+    if (-not (Test-Path $EdgeDriverExe)) { throw "EdgeDriver not found." }
+    $service = [OpenQA.Selenium.Edge.EdgeDriverService]::CreateDefaultService($EdgeDriverDir)
+    $service.HideCommandPromptWindow = $true
+    
+    $options = New-Object OpenQA.Selenium.Edge.EdgeOptions
+    $options.AddArgument("start-maximized")
+    
+    # Configure Download Preferences for the "Incomplete Applications" file
+    $prefs = @{
+        "download.default_directory" = $DownloadPath
+        "download.prompt_for_download" = $false
+        "safebrowsing.enabled" = $true
+    }
+    $options.AddUserProfilePreference("download.default_directory", $DownloadPath)
+    $options.AddUserProfilePreference("download.prompt_for_download", $false)
+
+    return New-Object OpenQA.Selenium.Edge.EdgeDriver($service, $options)
+}
+
+function Wait-Element {
+    param($Driver, $By, [int]$TimeoutSeconds = 20)
+    $end = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $end) {
+        try {
+            $el = $Driver.FindElement($By)
+            if ($el -and $el.Displayed -and $el.Enabled) { return $el }
+        } catch {}
+        Start-Sleep -Milliseconds 500
+    }
+    return $null
+}
+
+# --- 4. CREDENTIAL LOADING ---
+if (Test-Path $CredPath) {
+    try {
+        # Try to import as a secure XML object first
+        $CredObj = Import-Clixml -Path $CredPath
+        
+        # Scenario A: It is a standard PowerShell Credential Object (Most likely)
+        if ($CredObj.GetType().Name -eq "PSCredential") {
+            $Username = $CredObj.UserName
+            $Password = $CredObj.GetNetworkCredential().Password
+        }
+        # Scenario B: It is a simple array/list saved safely
+        elseif ($CredObj -is [array] -or $CredObj -is [System.Collections.ArrayList]) {
+            $Username = $CredObj[0]
+            $Password = $CredObj[1]
+        }
+        else {
+            throw "The .cred file format is not recognized (not a PSCredential or Array)."
+        }
+    }
+    catch {
+        # Fallback: If Import-Clixml fails, try reading as plain text
+        Write-Warning "Could not import as XML. Attempting plain text read..."
+        $RawContent = Get-Content $CredPath
+        $Username = $RawContent[0]
+        $Password = $RawContent[1]
+    }
+} else {
+    Write-Warning "Cred file not found. Please enter manually."
+    $Username = Read-Host "Enter Username"
+    $Password = Read-Host "Enter Password" -AsSecureString
+    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password)
+    $Password = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+}
+# --- 5. MAIN EXECUTION ---
+try {
+    Write-Host "Starting Driver..." -ForegroundColor Cyan
+    $Driver = Start-EdgeDriver -DownloadPath $ErrorDir
+    $Driver.Navigate().GoToUrl($SiteUrl)
+
+    # --- OKTA LOGIN ---
+    Write-Host "Logging in..." -ForegroundColor Cyan
+    
+    # Username
+    $UserField = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//input[contains(@id, 'input') and @type='text']"))
+    $UserField.SendKeys($Username)
+    
+    # Next Button
+    $NextBtn = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//input[@value='Next']"))
+    $NextBtn.Click()
+
+    # Password
+    $PassField = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//input[contains(@id, 'input') and @type='password']"))
+    $PassField.SendKeys($Password)
+
+    # Verify Button
+    $VerifyBtn = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//input[@value='Verify']"))
+    $VerifyBtn.Click()
+
+    # --- APPIAN NAVIGATION ---
+    Write-Host "Navigating Appian Portal..." -ForegroundColor Cyan
+
+    # 1. Click "New WOTC Application"
+    # Using text contains because IDs are dynamic
+    $NewAppSpan = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//span[contains(text(), 'New WOTC Application')]"))
+    $NewAppSpan.Click()
+
+    # 2. Click "Submit a Bulk"
+    Write-Host "Selecting Bulk Option..." -ForegroundColor Cyan
+    $BulkLabel = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//label[contains(text(), 'Submit a Bulk')]"))
+    $BulkLabel.Click()
+
+# 3. File Upload
+    Write-Host "Uploading File: $UploadFilePath" -ForegroundColor Cyan
+
+    # A. Wait for the Visual Upload Box (The element you provided)
+    # We use this to confirm the page is ready for upload
+    $UploadWidget = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//div[@aria-label='Upload, Drop CSV File Here']"))
+    
+    # B. Find the Hidden Input
+    # NOTE: We cannot use 'Wait-Element' here because it fails on hidden/invisible elements.
+    # We use a custom loop to find the <input type='file'> which is hidden behind that div.
+    $InputEndTime = (Get-Date).AddSeconds(10)
+    $FileInput = $null
+    
+    while ((Get-Date) -lt $InputEndTime) {
+        try {
+            # Look for the file input anywhere on page (Standard Appian behavior)
+            $FileInput = $Driver.FindElement([OpenQA.Selenium.By]::XPath("//input[@type='file']"))
+            break
+        } catch {
+            Start-Sleep -Milliseconds 500
+        }
+    }
+
+    if (-not $FileInput) { 
+        throw "Found the Upload Box, but could not find the hidden input field to attach the file." 
+    }
+
+    # C. Send the file path
+    $FileInput.SendKeys($UploadFilePath)
+    Start-Sleep -Seconds 3 # Allow time for the file to attach and validation to run
+    # 4. Click Next (First Next)
+    Write-Host "Clicking Next..." -ForegroundColor Cyan
+    $NextBtnAppian = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//button[contains(., 'Next')]"))
+    $NextBtnAppian.Click()
+     Start-Sleep -Seconds 10
+# 5. Handle "Incomplete Applications" (Error File)
+    Write-Host "Checking for errors..." -ForegroundColor Cyan
+    
+    # Initialize JS Executor once for use in this section
+    $JsExecutor = $Driver -as [OpenQA.Selenium.IJavaScriptExecutor]
+
+    # FIX: Increased timeout to 20s
+    $GenerateBtn = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//span[contains(text(), 'Generate Excel File')]")) -TimeoutSeconds 20
+    Start-Sleep -Seconds 3
+
+    if ($GenerateBtn) {
+        Write-Host "Errors detected. Generating Excel File..." -ForegroundColor Yellow
+        
+        # FIX: Replaced standard .Click() with JS Click to avoid "Sticky Header" interception
+        $JsExecutor.ExecuteScript("arguments[0].click();", $GenerateBtn)
+        
+        # FIX: Wait longer for the specific download link (increased to 30s)
+        Write-Host "Waiting for download link to generate..." -ForegroundColor Yellow
+        $DownloadLink = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//a[contains(text(), 'Download Incomplete Applications')]")) -TimeoutSeconds 30
+        
+        if ($DownloadLink) {
+            # Use JS Click here too just to be safe
+            $JsExecutor.ExecuteScript("arguments[0].click();", $DownloadLink)
+            
+            Write-Host "Downloading Error File..." -ForegroundColor Green
+            
+            # FIX: Force a hard wait to ensure the file is saved to disk before Submitting
+            $Deadline = (Get-Date).AddSeconds(30)
+            while ((Get-Date) -lt $Deadline) {
+                if (Test-Path "$ErrorDir\*.xlsx") { 
+                    Write-Host "File detected on disk." -ForegroundColor Green
+                    break 
+                }
+                Start-Sleep -Seconds 1
+            }
+            Start-Sleep -Seconds 3 # Extra buffer just in case
+        } else {
+            Write-Warning "Clicked 'Generate', but download link never appeared."
+        }
+    } else {
+        Write-Host "No 'Generate Excel File' button found within 20s. Assuming clean upload." -ForegroundColor Green
+    }
+
+# 6. Final Decision: Submit or Cancel
+    Write-Host "Determining final action (Submit vs Cancel)..." -ForegroundColor Cyan
+    
+    # Try to find the 'Submit' button. 
+    # We use a short timeout (5s) because if it's not there, we want to Cancel immediately.
+    $SubmitBtn = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//button[contains(., 'Submit')]")) -TimeoutSeconds 5
+
+    if ($SubmitBtn) {
+        # --- SCENARIO A: VALID APPLICATIONS EXIST (SUBMIT) ---
+        Write-Host "Submit button found. Proceeding with submission..." -ForegroundColor Green
+
+        # 6a. Click Certification Checkboxes
+        Write-Host "Clicking Certification Checkboxes..." -ForegroundColor Cyan
+        
+        # Re-fetch checkboxes to ensure we have fresh elements
+        $Checkboxes = $Driver.FindElements([OpenQA.Selenium.By]::XPath("//div[contains(@class, 'FieldLayout')]//label"))
+        
+        foreach ($cb in $Checkboxes) {
+            # Ensure we are clicking visible checkbox labels
+            if ($cb.Displayed -and $cb.Enabled) {
+                 $cb.Click()
+                 Start-Sleep -Milliseconds 200
+            }
+        }
+
+        # 6b. Click Submit
+        $SubmitBtn.Click()
+        Write-Host "Successfully Submitted." -ForegroundColor Green
+
+    } else {
+        # --- SCENARIO B: ONLY ERRORS OCCURRED (CANCEL) ---
+        Write-Warning "Submit button NOT found. Assuming 100% errors in upload."
+        
+        Write-Host "Clicking Cancel to exit..." -ForegroundColor Yellow
+        # Using the specific span you identified
+        $CancelBtn = Wait-Element -Driver $Driver -By ([OpenQA.Selenium.By]::XPath("//span[contains(text(), 'Cancel')]"))
+        
+        if ($CancelBtn) {
+            $CancelBtn.Click()
+            Write-Host "Cancelled upload session." -ForegroundColor Yellow
+        } else {
+            throw "Critical Error: Neither 'Submit' nor 'Cancel' buttons were found. Script is stuck."
+        }
+    }
+    
+    Write-Host "Process Complete!" -ForegroundColor Green
+
+} catch {
+    Write-Error "Script Failed: $_"
+    # Take screenshot on failure
+    $Screenshot = $Driver.GetScreenshot()
+    $Screenshot.SaveAsFile("$ErrorDir\Error_Screenshot_$TimeStamp.png")
+} finally {
+    # Optional: Close driver
+    # $Driver.Quit()
+}
+
+
+Start-Sleep -Seconds 3
+
+& $RBCreate

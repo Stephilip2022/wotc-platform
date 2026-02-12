@@ -1,0 +1,261 @@
+# =============================================================================
+# TEXAS WOTC BULK UPLOAD GENERATOR (SAMPLE FILE MATCHED)
+# =============================================================================
+
+# --- 1. CONFIGURATION ---
+$LogDllPath = "C:\Users\bbyki\Desktop\microsoft.extensions.logging.abstractions.8.0.3\lib\net8.0\Microsoft.Extensions.Logging.Abstractions.dll"
+$NpDllPath  = "C:\Users\bbyki\Desktop\npgsql.8.0.8\lib\net8.0\Npgsql.dll"
+$CredPath   = "C:\Scripts\PostgresExport.cred"
+$OutputFile = "G:\My Drive\Bulk Uploads\NSI States\Texas\TX Automation Files\TX_WOTC_Upload_Final.csv"
+$TXUploader = "C:\Scripts\TXUploader.ps1"
+# OPTIONAL: Enter Consultant EIN here if you have one (Column A). Leave blank if none.
+$ConsultantEIN = "861505473" 
+
+# --- 2. DATABASE CREDENTIALS ---
+function Get-DbCredential {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { throw "Credential file not found at $Path." }
+    return Import-Clixml -Path $Path
+}
+
+$Server   = "127.0.0.1"
+$Port     = 5432
+$Database = "rb_prod"
+$cred     = Get-DbCredential -Path $CredPath
+$User     = $cred.UserName
+$Password = $cred.GetNetworkCredential().Password
+$ConnString = "Host=$Server;Port=$Port;Database=$Database;Username=$User;Password=$Password;SSL Mode=Require;Trust Server Certificate=true;"
+
+# --- 3. LOAD NPGSQL ---
+if (-not ("Npgsql.NpgsqlConnection" -as [type])) {
+    Add-Type -Path $LogDllPath
+    Add-Type -Path $NpDllPath
+}
+
+# --- 4. HELPER FUNCTIONS ---
+
+function Format-TxDate {
+    # TX requires YYYYMMDD (e.g., 20240105)
+    param($D)
+    if ($null -eq $D -or $D -eq [DBNull]::Value -or $D -eq "") { return "" }
+    return ([datetime]$D).ToString("yyyyMMdd")
+}
+
+function Format-CleanString {
+    # STRICT: Remove commas (separator) and quotes to avoid breaking the "no-quote CSV" format
+    param($S)
+    if ([string]::IsNullOrWhiteSpace($S)) { return "" }
+    # Replace comma with space, remove quotes entirely
+    return $S.ToString().Replace(",", " ").Replace('"', "").Replace("'", "").Trim()
+}
+
+function Invoke-PostgresQuery {
+    param([string]$ConnString, [string]$Query)
+    $conn = [Npgsql.NpgsqlConnection]::new($ConnString)
+    try {
+        $conn.Open()
+        $cmd = [Npgsql.NpgsqlCommand]::new($Query, $conn)
+        $reader = $cmd.ExecuteReader()
+        $dt = New-Object System.Data.DataTable
+        $dt.Load($reader)
+        return $dt
+    }
+    finally { $conn.Dispose() }
+}
+
+# --- 5. DATA QUERY ---
+# Filters for Texas Employees AND Texas Employers
+$Query = @"
+    SELECT
+        e.id,
+        e.first_name,
+        e.middle_name,
+        e.last_name,
+        e.plain_ssn,
+        e.address,
+        e.city,
+        e.state,
+        e.zip_code,
+        e.phone_number,
+        e.date_birth,
+        e.date_was_offered_job,
+        e.date_was_hired,
+        e.date_started_job,
+        e.hourly_start_wage,
+        e.occupation_code,
+        e.job_position,
+        s.qualifie,
+        c.name AS company_name,
+        c.fein AS company_fein
+    FROM employees e
+    JOIN v2.sessions s ON s.employee_id = e.id
+    JOIN companies c ON c.id = e.company_id
+    WHERE e.date_started_job::date BETWEEN CURRENT_DATE - INTERVAL '27 days' AND CURRENT_DATE
+      AND c.name <> 'Hirschbach Motor Lines, Inc'
+      AND e.state = 'Texas'
+      AND c.state = 'Texas'
+      AND s.dashboard_status = 'completed'
+      AND COALESCE(TRIM(e.state_certification), '') NOT IN ('Yes', 'No', 'Pending')
+    ORDER BY e.date_started_job::date;
+"@
+
+Write-Host "Querying Database for Texas Records..." -ForegroundColor Cyan
+$result = Invoke-PostgresQuery -ConnString $ConnString -Query $Query
+Write-Host "Rows returned: $(@($result).Count)" -ForegroundColor Green
+
+# =============================================================================
+# 6. BUILD OUTPUT CONTENT (MATCHING SAMPLE HEADERS EXACTLY)
+# =============================================================================
+
+# Define the exact header string from your uploaded sample
+$headerStr = "cein,fein,ssn,dob,hireDate,startDate,lastName,firstName,address,city,state,zip,startingWage,jobOnetCode,q1_condCert,q2_metConditions,q3_uVet6,q4_dVet,q5_dUVet6,q6_tanfPayments,q7_u27,qualifiedIva,qualifiedIvaState,qualifiedVet,qualifiedVetState,uVet4Weeks,uVet6Months,dVet,dUVet6Months,exFelon,exFelonTypeFederal,exFelonTypeState,dcr,dcrResidesInRRC,dcrResidesInEZ,vocRehab,summerYouth,snap,snapState,ssi,ltfar,ltfarState,ltu,lturState,sourceDocs"
+
+$outputLines = @($headerStr)
+
+foreach ($r in $result) {
+    # --- PRE-CALCULATIONS ---
+    
+    # 1. Qualifiers Logic
+    $q = if ($r["qualifie"]) { $r["qualifie"].ToString() } else { "" }
+    $isTANF  = $q -match '(?i)TANF'
+    $isSNAP  = $q -match '(?i)SNAP'
+    $isSSI   = $q -match '(?i)SSI'
+    $isVet   = $q -match '(?i)Vet'
+    $isFelon = $q -match '(?i)Felon'
+    $isLTANF = $q -match '(?i)LTANF'
+
+    # Set Q2 to Y if SNAP, SSI, or TANF are present
+    $q2_met = if ($isSNAP -or $isSSI -or $isTANF) { "Y" } else { "N" }
+
+
+    # 2. Dates (YYYYMMDD)
+    $dStart = Format-TxDate $r["date_started_job"]
+    $dHired = Format-TxDate $r["date_was_hired"]
+    # Fallback if hired date is missing
+    if ($dHired -eq "") { $dHired = $dStart }
+    
+    # 3. Wages (Format to 2 decimals, NO COMMAS)
+    $wage = 0.00
+    if ($r["hourly_start_wage"]) { $wage = $r["hourly_start_wage"] }
+    $wageStr = "{0:N2}" -f $wage
+    $wageStr = $wageStr.Replace(",","") 
+
+    # 4. Job Code (Extract 2 digits)
+    $occ = ""
+    $rawOcc = $r["occupation_code"]
+    if ($rawOcc -and $rawOcc.Length -ge 2) {
+        $digits = $rawOcc.Substring(0,2)
+        if ($digits -match '^\d{2}$') {
+            $occ = $digits 
+        }
+    }
+
+    # 5. Clean Data
+    $cein = $ConsultantEIN
+    $fein = if ($r["company_fein"]) { $r["company_fein"].ToString().Replace("-","") } else { "" }
+    $ssn  = if ($r["plain_ssn"]) { $r["plain_ssn"].ToString().Replace("-","") } else { "" }
+    $dob  = Format-TxDate $r["date_birth"]
+    $lName = Format-CleanString $r["last_name"]
+    $fName = Format-CleanString $r["first_name"]
+    $addr  = Format-CleanString $r["address"]
+    $city  = Format-CleanString $r["city"]
+    $state = "TX"
+    $zip   = if ($r["zip_code"]) { $r["zip_code"].ToString().Replace("-","").Trim() } else { "" }
+
+    # 6. Target Group Logic (Y/N)
+    $q4_dVet   = if ($isVet) { "Y" } else { "N" }
+    $q6_tanf   = if ($isTANF -or $isLTANF) { "Y" } else { "N" }
+    
+    $qIva      = if ($isTANF) { "Y" } else { "N" }
+    $qIvaState = if ($isTANF) { "TX" } else { "" }
+    
+    $qVet      = if ($isVet) { "Y" } else { "N" }
+    $qVetState = "" 
+    
+    $exFelon   = if ($isFelon) { "Y" } else { "N" }
+    $snap      = if ($isSNAP) { "Y" } else { "N" }
+    $snapState = if ($isSNAP) { "TX" } else { "" }
+
+    
+    $ssi       = if ($isSSI) { "Y" } else { "N" }
+    $ltfar     = if ($isLTANF) { "Y" } else { "N" }
+    $ltfarState= if ($isLTANF) { "TX" } else { "" }
+
+    # --- BUILD COMMA SEPARATED LINE (Order matches $headerStr EXACTLY) ---
+    $lineItems = @(
+        $cein,                      # cein
+        $fein,                      # fein
+        $ssn,                       # ssn
+        $dob,                       # dob
+        $dHired,                    # hireDate
+        $dStart,                    # startDate
+        $lName,                     # lastName
+        $fName,                     # firstName
+        $addr,                      # address
+        $city,                      # city
+        $state,                     # state
+        $zip,                       # zip
+        $wageStr,                   # startingWage
+        $occ,                       # jobOnetCode
+        "N",                        # q1_condCert
+        $q2_met,                    # q2_metConditions
+        "N",                        # q3_uVet6
+        $q4_dVet,                   # q4_dVet
+        "N",                        # q5_dUVet6
+        $q6_tanf,                   # q6_tanfPayments
+        "N",                        # q7_u27
+        $qIva,                      # qualifiedIva
+        $qIvaState,                 # qualifiedIvaState
+        $qVet,                      # qualifiedVet
+        $qVetState,                 # qualifiedVetState
+        "N",                        # uVet4Weeks
+        "N",                        # uVet6Months
+        "N",                        # dVet
+        "N",                        # dUVet6Months
+        $exFelon,                   # exFelon
+        "",                         # exFelonTypeFederal
+        "",                         # exFelonTypeState
+        "N",                        # dcr
+        "",                         # dcrResidesInRRC
+        "",                         # dcrResidesInEZ
+        "N",                        # vocRehab
+        "N",                        # summerYouth
+        $snap,                      # snap
+        $snapState,                 # snapState
+        $ssi,                       # ssi
+        $ltfar,                     # ltfar
+        $ltfarState,                # ltfarState
+        "N",                        # ltu
+        "",                         # lturState
+        "N"                         # sourceDocs
+    )
+
+    # Join with comma
+    $outputLines += $lineItems -join ","
+}
+
+# =============================================================================
+# 7. EXPORT TO FILE
+# =============================================================================
+
+if ($outputLines.Count -gt 1) {
+    # Ensure directory exists
+    $Dir = Split-Path $OutputFile
+    if (-not (Test-Path $Dir)) { New-Item -ItemType Directory -Path $Dir | Out-Null }
+
+    # Write strict UTF8 or ASCII file (No BOM usually preferred for systems like this)
+    [System.IO.File]::WriteAllLines($OutputFile, $outputLines, [System.Text.Encoding]::ASCII)
+
+    Write-Host "SUCCESS: Texas CSV (No Quotes) Generated at $OutputFile" -ForegroundColor Green
+    
+    # --- 8. VERIFICATION ---
+    Write-Host "Header Preview:" -ForegroundColor Yellow
+    Write-Host $outputLines[0]
+    Write-Host "Row 1 Preview:" -ForegroundColor Yellow
+    if ($outputLines.Count -gt 1) { Write-Host $outputLines[1] }
+} else {
+    Write-Host "No Texas records found to process." -ForegroundColor Yellow
+}
+
+
+& $TXUploader
