@@ -88,10 +88,10 @@ export default function AdminEmployersPage() {
       setDialogOpen(false);
       form.reset();
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Error",
-        description: "Failed to add employer. Please try again.",
+        description: error?.message || "Failed to add employer. Please try again.",
         variant: "destructive",
       });
     },

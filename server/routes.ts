@@ -1330,12 +1330,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
-      const employerData = req.body;
-      const [newEmployer] = await db.insert(employers).values(employerData).returning();
+      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode } = req.body;
+
+      if (!name || !ein || !contactEmail) {
+        return res.status(400).json({ error: "Company name, EIN, and contact email are required" });
+      }
+
+      const [newEmployer] = await db.insert(employers).values({
+        name,
+        ein,
+        contactEmail,
+        contactPhone: contactPhone || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zipCode: zipCode || null,
+        onboardingStatus: "pending",
+      }).returning();
       
-      res.json({ success: true, id: newEmployer.id });
-    } catch (error) {
+      res.json({ success: true, id: newEmployer.id, employer: newEmployer });
+    } catch (error: any) {
       console.error("Error adding employer:", error);
+      if (error?.code === "23505") {
+        return res.status(400).json({ error: "An employer with this EIN already exists" });
+      }
       res.status(500).json({ error: "Failed to add employer" });
     }
   });
