@@ -5223,6 +5223,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // CERTLINK AUTOMATION (AZ, IL, KS, ME)
+  // ============================================================================
+
+  app.get("/api/admin/certlink/supported-states", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { getCertLinkSupportedStates, getCertLinkPortalUrl, CERTLINK_STATES } = await import('./utils/certlinkCsvGenerator');
+      const states = getCertLinkSupportedStates();
+      const stateDetails = states.map(st => ({
+        stateCode: st,
+        portalUrl: getCertLinkPortalUrl(st),
+        signatorCandidates: CERTLINK_STATES[st]?.signatorCandidates || [],
+        defaultSignator: CERTLINK_STATES[st]?.defaultSignator || '',
+        provider: 'certlink',
+      }));
+
+      res.json({ states: stateDetails });
+    } catch (error: any) {
+      console.error("Error getting CertLink states:", error);
+      res.status(500).json({ error: "Failed to get CertLink states" });
+    }
+  });
+
+  app.post("/api/admin/certlink/generate-csv", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode, records } = req.body;
+      if (!stateCode || !records || !Array.isArray(records)) {
+        return res.status(400).json({ error: "stateCode and records array required" });
+      }
+
+      const { generateCertLinkCSV, isCertLinkState } = await import('./utils/certlinkCsvGenerator');
+
+      if (!isCertLinkState(stateCode)) {
+        return res.status(400).json({ error: `${stateCode} is not a CertLink state. Supported: AZ, IL, KS, ME` });
+      }
+
+      const csvContent = generateCertLinkCSV(records, stateCode);
+      const rowCount = csvContent.split('\n').length - 1;
+
+      res.json({
+        success: true,
+        stateCode,
+        rowCount,
+        preview: csvContent.split('\n').slice(0, 3).join('\n'),
+        csvContent,
+      });
+    } catch (error: any) {
+      console.error("Error generating CertLink CSV:", error);
+      res.status(500).json({ error: error.message || "Failed to generate CertLink CSV" });
+    }
+  });
+
+  app.post("/api/admin/certlink/submit", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode, csvContent, portalUrl, credentials } = req.body;
+      if (!stateCode || !csvContent) {
+        return res.status(400).json({ error: "stateCode and csvContent required" });
+      }
+
+      if (!credentials?.email || !credentials?.password) {
+        return res.status(400).json({ error: "Portal credentials (email, password) required" });
+      }
+
+      const { isCertLinkState, getCertLinkPortalUrl } = await import('./utils/certlinkCsvGenerator');
+      if (!isCertLinkState(stateCode)) {
+        return res.status(400).json({ error: `${stateCode} is not a CertLink state` });
+      }
+
+      const { CertLinkBot } = await import('./utils/certlinkBot');
+      const bot = new CertLinkBot();
+
+      try {
+        await bot.initialize();
+        const url = portalUrl || getCertLinkPortalUrl(stateCode);
+        const result = await bot.runState(url, credentials, csvContent, stateCode, stateCode);
+        res.json(result);
+      } finally {
+        await bot.close();
+      }
+    } catch (error: any) {
+      console.error("Error submitting to CertLink:", error);
+      res.status(500).json({ error: error.message || "CertLink submission failed" });
+    }
+  });
+
+  app.post("/api/admin/certlink/submit-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateJobs } = req.body;
+      if (!stateJobs || !Array.isArray(stateJobs) || stateJobs.length === 0) {
+        return res.status(400).json({ error: "stateJobs array required with entries: { stateCode, stateName, portalUrl, credentials, csvContent }" });
+      }
+
+      const { CertLinkBot } = await import('./utils/certlinkBot');
+      const bot = new CertLinkBot();
+
+      try {
+        await bot.initialize();
+        const results = await bot.runAllStates(stateJobs);
+        res.json({ results });
+      } finally {
+        await bot.close();
+      }
+    } catch (error: any) {
+      console.error("Error in CertLink batch submission:", error);
+      res.status(500).json({ error: error.message || "CertLink batch submission failed" });
+    }
+  });
+
+  // ============================================================================
   // PHASE 5: AI PREDICTION, QUESTIONNAIRE OPTIMIZATION & CREDIT FORECASTING
   // ============================================================================
 

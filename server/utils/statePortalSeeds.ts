@@ -153,30 +153,23 @@ export const statePortalSeeds = [
   {
     stateCode: "IL",
     stateName: "Illinois",
-    portalUrl: "https://www.illinoisworknet.com/wotc",
-    submissionUrl: "https://www.illinoisworknet.com/wotc/submit",
+    portalUrl: "https://illinoiswotc.com/",
+    submissionUrl: "https://illinoiswotc.com/Employer/Dashboard",
     authType: "credentials",
     loginFieldSelectors: {
-      username: "input#username",
-      password: "input#password",
-      submitButton: "button.submit-btn",
-      successIndicator: ".dashboard-header"
+      username: "#Email",
+      password: "#Password",
+      agreement: "#Agreement",
+      submitButton: "div:nth-of-type(4) > button",
+      successIndicator: "/Employer/Dashboard",
+      provider: "certlink",
+      batchUpload: "#empAppCollapse ul li:nth-of-type(4) > a",
+      fileInput: "#BatchData",
+      uploadButton: "#Upload",
+      confirmButton: "#btnProcess",
     },
-    requiredColumns: [
-      "Employee Last Name",
-      "Employee First Name",
-      "SSN",
-      "Date of Birth",
-      "Hire Date",
-      "Target Group Code"
-    ],
-    optionalColumns: [
-      "Address",
-      "Phone",
-      "Email",
-      "SNAP Status"
-    ],
-    dateFormat: "YYYY-MM-DD",
+    requiredColumns: ["General_FormVersionID", "Form8850_ApplicantSSN", "Form8850_ApplicantFirstName", "Form8850_ApplicantLastName", "Form8850_EmployerFEIN", "ICF_SignatorName"],
+    dateFormat: "MM/DD/YYYY",
     maxBatchSize: 250,
     submissionFrequency: "weekly",
     automationEnabled: false,
@@ -184,7 +177,7 @@ export const statePortalSeeds = [
     supportEmail: "IDES.WOTC@Illinois.gov",
     supportPhone: "(312) 793-5280",
     status: "active",
-    notes: "Illinois portal undergoes maintenance every Sunday 2-6 AM CST."
+    notes: "CertLink portal. FormVersion 9. Signator candidates: Garrett Rinehart, Philip Wentworth CEO. Maintenance every Sunday 2-6 AM CST."
   },
   {
     stateCode: "PA",
@@ -390,15 +383,29 @@ export const statePortalSeeds = [
   {
     stateCode: "AZ",
     stateName: "Arizona",
-    portalUrl: "https://des.az.gov/wotc",
+    portalUrl: "https://wotc.azdes.gov/Account/Login",
+    submissionUrl: "https://wotc.azdes.gov/Employer/Dashboard",
     authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
+    loginFieldSelectors: {
+      username: "#Email",
+      password: "#Password",
+      agreement: "#Agreement",
+      submitButton: "div:nth-of-type(4) > button",
+      successIndicator: "/Employer/Dashboard",
+      provider: "certlink",
+      batchUpload: "#empAppCollapse ul li:nth-of-type(4) > a",
+      fileInput: "#BatchData",
+      uploadButton: "#Upload",
+      confirmButton: "#btnProcess",
+    },
+    requiredColumns: ["General_FormVersionID", "Form8850_ApplicantSSN", "Form8850_ApplicantFirstName", "Form8850_ApplicantLastName", "Form8850_EmployerFEIN", "ICF_SignatorName"],
     dateFormat: "MM/DD/YYYY",
     maxBatchSize: 300,
     expectedProcessingDays: 28,
     supportEmail: "wotc@azdes.gov",
     supportPhone: "(602) 364-2700",
-    status: "active"
+    status: "active",
+    notes: "CertLink portal. FormVersion 9. Signator candidates: David Young, Philip Wentworth CEO. Batch upload with error retry (up to 3 attempts)."
   },
   {
     stateCode: "AR",
@@ -534,15 +541,29 @@ export const statePortalSeeds = [
   {
     stateCode: "KS",
     stateName: "Kansas",
-    portalUrl: "https://www.kansascommerce.gov/wotc",
+    portalUrl: "https://kansaswotc.com/",
+    submissionUrl: "https://kansaswotc.com/Employer/Dashboard",
     authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
+    loginFieldSelectors: {
+      username: "#Email",
+      password: "#Password",
+      agreement: "#Agreement",
+      submitButton: "div:nth-of-type(4) > button",
+      successIndicator: "/Employer/Dashboard",
+      provider: "certlink",
+      batchUpload: "#empAppCollapse ul li:nth-of-type(4) > a",
+      fileInput: "#BatchData",
+      uploadButton: "#Upload",
+      confirmButton: "#btnProcess",
+    },
+    requiredColumns: ["General_FormVersionID", "Form8850_ApplicantSSN", "Form8850_ApplicantFirstName", "Form8850_ApplicantLastName", "Form8850_EmployerFEIN", "ICF_SignatorName"],
     dateFormat: "MM/DD/YYYY",
     maxBatchSize: 200,
     expectedProcessingDays: 30,
     supportEmail: "wotc@kansascommerce.gov",
     supportPhone: "(785) 296-5000",
-    status: "active"
+    status: "active",
+    notes: "CertLink portal. FormVersion 9. Signator candidates: David Young, Philip Wentworth."
   },
   {
     stateCode: "KY",
@@ -573,15 +594,29 @@ export const statePortalSeeds = [
   {
     stateCode: "ME",
     stateName: "Maine",
-    portalUrl: "https://www.maine.gov/labor/wotc",
+    portalUrl: "https://wotc.maine.gov/Account/Login",
+    submissionUrl: "https://wotc.maine.gov/Employer/Dashboard",
     authType: "credentials",
-    requiredColumns: ["Employee Last Name", "Employee First Name", "SSN", "Hire Date", "Target Group Code"],
+    loginFieldSelectors: {
+      username: "#Email",
+      password: "#Password",
+      agreement: "#Agreement",
+      submitButton: "div:nth-of-type(4) > button",
+      successIndicator: "/Employer/Dashboard",
+      provider: "certlink",
+      batchUpload: "#empAppCollapse ul li:nth-of-type(4) > a",
+      fileInput: "#BatchData",
+      uploadButton: "#Upload",
+      confirmButton: "#btnProcess",
+    },
+    requiredColumns: ["General_FormVersionID", "Form8850_ApplicantSSN", "Form8850_ApplicantFirstName", "Form8850_ApplicantLastName", "Form8850_EmployerFEIN", "ICF_SignatorName"],
     dateFormat: "MM/DD/YYYY",
     maxBatchSize: 150,
     expectedProcessingDays: 32,
     supportEmail: "wotc@maine.gov",
     supportPhone: "(207) 623-7900",
-    status: "active"
+    status: "active",
+    notes: "CertLink portal. FormVersion 9. Signator candidates: Philip Wentworth, David Young."
   },
   {
     stateCode: "MD",

@@ -166,6 +166,7 @@ export function generateTexasCSV(records: EmployeeWithScreening[], consultantEin
  * Generate state-specific CSV based on state code
  */
 const CSDC_STATES = ['AL', 'AR', 'CO', 'GA', 'ID', 'OK', 'OR', 'SC', 'VT', 'WV'];
+const CERTLINK_STATES = ['AZ', 'IL', 'KS', 'ME'];
 
 export function generateStateCSV(
   stateCode: string,
@@ -173,11 +174,13 @@ export function generateStateCSV(
 ): string {
   const upper = stateCode.toUpperCase();
   switch (upper) {
-    case 'AZ':
-      return generateArizonaCSV(records);
     case 'TX':
       return generateTexasCSV(records);
     default:
+      if (CERTLINK_STATES.includes(upper)) {
+        const { generateCertLinkCSV } = require('./certlinkCsvGenerator');
+        return generateCertLinkCSV(records, upper);
+      }
       if (CSDC_STATES.includes(upper)) {
         const { generateCsdcFile } = require('./csdcFileGenerator');
         return generateCsdcFile(records, upper);
@@ -188,6 +191,10 @@ export function generateStateCSV(
 
 export function isCsdcState(stateCode: string): boolean {
   return CSDC_STATES.includes(stateCode.toUpperCase());
+}
+
+export function isCertLinkState(stateCode: string): boolean {
+  return CERTLINK_STATES.includes(stateCode.toUpperCase());
 }
 
 /**

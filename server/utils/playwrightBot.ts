@@ -104,7 +104,14 @@ export class StatePortalBot {
     }
 
     try {
-      switch (config.stateCode.toUpperCase()) {
+      const certlinkStates = ['AZ', 'IL', 'KS', 'ME'];
+      const upperCode = config.stateCode.toUpperCase();
+
+      if (certlinkStates.includes(upperCode)) {
+        return await this.submitCertLinkPortal(config, csvContent, employerCount);
+      }
+
+      switch (upperCode) {
         case 'TX':
           return await this.submitTexasPortal(config, csvContent, employerCount);
         default:
@@ -493,6 +500,56 @@ export class StatePortalBot {
           try { fs.unlinkSync(path.join(tmpDir, f)); } catch {}
         }
       } catch {}
+    }
+  }
+
+  /**
+   * CertLink Portal Automation (AZ, IL, KS, ME)
+   * 
+   * Delegates to the dedicated CertLinkBot for the full flow:
+   *   1. Login (Email/Password/Agreement → Dashboard)
+   *   2. Batch CSV upload with error parsing and retry (up to 3 attempts)
+   *   3. Signator fix logic for POA errors
+   */
+  private async submitCertLinkPortal(
+    config: StatePortalConfig,
+    csvContent: string,
+    employerCount: number
+  ): Promise<BotResult> {
+    const certlinkModule = await import('./certlinkBot');
+    const { getCertLinkPortalUrl } = await import('./certlinkCsvGenerator');
+
+    const stateCode = config.stateCode.toUpperCase();
+    const credentials = config.credentials as any;
+
+    if (!credentials?.email && !credentials?.username && !credentials?.userId) {
+      return { success: false, message: `No credentials configured for ${stateCode} CertLink portal` };
+    }
+
+    const certlinkCreds = {
+      email: credentials.email || credentials.username || credentials.userId,
+      password: credentials.password,
+    };
+
+    const portalUrl = config.portalUrl || getCertLinkPortalUrl(stateCode);
+    const stateName = config.stateName || stateCode;
+
+    const bot = new certlinkModule.CertLinkBot();
+    try {
+      await bot.initialize();
+      const result = await bot.runState(portalUrl, certlinkCreds, csvContent, stateCode, stateName);
+
+      return {
+        success: result.success,
+        message: result.message,
+        screenshotPaths: result.screenshotPaths,
+        submittedCount: result.recordsSubmitted,
+        errors: result.rejectedRows.length > 0
+          ? result.rejectedRows.map(r => `Row ${r.rowNumber}: ${r.errorMessage} (${r.fieldName})`)
+          : undefined,
+      };
+    } finally {
+      await bot.close();
     }
   }
 
