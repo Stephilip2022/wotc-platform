@@ -111,9 +111,9 @@ export default function SubmissionMonitoringPage() {
   };
 
   const hasAnomalies = anomalies && (
-    anomalies.highFailureRates.length > 0 ||
-    anomalies.stuckJobs.length > 0 ||
-    anomalies.repeatedFailures.length > 0
+    (Array.isArray(anomalies.highFailureRates) ? anomalies.highFailureRates : []).length > 0 ||
+    (Array.isArray(anomalies.stuckJobs) ? anomalies.stuckJobs : []).length > 0 ||
+    (Array.isArray(anomalies.repeatedFailures) ? anomalies.repeatedFailures : []).length > 0
   );
 
   return (
@@ -135,11 +135,11 @@ export default function SubmissionMonitoringPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {anomalies.highFailureRates.length > 0 && (
+            {Array.isArray(anomalies.highFailureRates) && anomalies.highFailureRates.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold mb-2">High Failure Rates</h4>
                 <div className="space-y-2">
-                  {anomalies.highFailureRates.map((state) => (
+                  {(Array.isArray(anomalies.highFailureRates) ? anomalies.highFailureRates : []).map((state) => (
                     <div
                       key={state.stateCode}
                       className="flex items-center justify-between p-3 bg-destructive/10 rounded-md"
@@ -155,11 +155,11 @@ export default function SubmissionMonitoringPage() {
               </div>
             )}
 
-            {anomalies.stuckJobs.length > 0 && (
+            {Array.isArray(anomalies.stuckJobs) && anomalies.stuckJobs.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold mb-2">Stuck Jobs</h4>
                 <div className="space-y-2">
-                  {anomalies.stuckJobs.map((job) => (
+                  {(Array.isArray(anomalies.stuckJobs) ? anomalies.stuckJobs : []).map((job) => (
                     <div
                       key={job.jobId}
                       className="flex items-center justify-between p-3 bg-yellow-500/10 rounded-md"
@@ -178,11 +178,11 @@ export default function SubmissionMonitoringPage() {
               </div>
             )}
 
-            {anomalies.repeatedFailures.length > 0 && (
+            {Array.isArray(anomalies.repeatedFailures) && anomalies.repeatedFailures.length > 0 && (
               <div>
                 <h4 className="text-sm font-semibold mb-2">Repeated Failures</h4>
                 <p className="text-sm text-muted-foreground mb-2">
-                  {anomalies.repeatedFailures.length} screenings with 3+ failed attempts
+                  {(Array.isArray(anomalies.repeatedFailures) ? anomalies.repeatedFailures : []).length} screenings with 3+ failed attempts
                 </p>
               </div>
             )}
@@ -267,9 +267,9 @@ export default function SubmissionMonitoringPage() {
         <CardContent>
           {metricsLoading ? (
             <Skeleton className="h-48 w-full" />
-          ) : metrics && metrics.byState.length > 0 ? (
+          ) : metrics && Array.isArray(metrics.byState) && metrics.byState.length > 0 ? (
             <div className="space-y-3">
-              {metrics.byState.slice(0, 10).map((state) => (
+              {(Array.isArray(metrics.byState) ? metrics.byState : []).slice(0, 10).map((state) => (
                 <div key={state.stateCode} className="flex items-center justify-between">
                   <div className="flex items-center gap-4 flex-1">
                     <span className="font-medium w-12">{state.stateCode}</span>
@@ -304,14 +304,14 @@ export default function SubmissionMonitoringPage() {
       </Card>
 
       {/* Recent Failures */}
-      {metrics && metrics.recentFailures.length > 0 && (
+      {metrics && Array.isArray(metrics.recentFailures) && metrics.recentFailures.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Recent Failures</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {metrics.recentFailures.slice(0, 5).map((failure) => (
+              {(Array.isArray(metrics.recentFailures) ? metrics.recentFailures : []).slice(0, 5).map((failure) => (
                 <div
                   key={failure.jobId}
                   className="flex items-start gap-3 p-3 bg-muted rounded-md"

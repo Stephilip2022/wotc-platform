@@ -122,8 +122,8 @@ export default function AdminDashboard() {
   );
 
   // Calculate totals from employer data
-  const totalCertified = employersLoading ? 0 : (employers?.reduce((sum, e) => sum + e.certifiedCount, 0) || 0);
-  const totalProjectedCredits = employersLoading ? 0 : (employers?.reduce((sum, e) => {
+  const totalCertified = employersLoading ? 0 : ((Array.isArray(employers) ? employers : []).reduce((sum, e) => sum + e.certifiedCount, 0) || 0);
+  const totalProjectedCredits = employersLoading ? 0 : ((Array.isArray(employers) ? employers : []).reduce((sum, e) => {
     const amount = Number(e.projectedCredits.replace(/[$,]/g, ""));
     return sum + amount;
   }, 0) || 0);
@@ -192,7 +192,7 @@ export default function AdminDashboard() {
                   <p>Error loading trend data</p>
                 </div>
               </div>
-            ) : !certificationTrends || certificationTrends.length === 0 ? (
+            ) : !Array.isArray(certificationTrends) || certificationTrends.length === 0 ? (
               <div className="flex items-center justify-center h-80 text-muted-foreground">
                 <div className="text-center">
                   <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -250,7 +250,7 @@ export default function AdminDashboard() {
                   <p>Error loading state data</p>
                 </div>
               </div>
-            ) : !stateBreakdown || stateBreakdown.length === 0 ? (
+            ) : !Array.isArray(stateBreakdown) || stateBreakdown.length === 0 ? (
               <div className="flex items-center justify-center h-80 text-muted-foreground">
                 <div className="text-center">
                   <MapPin className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -259,7 +259,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={320}>
-                <BarChart data={stateBreakdown.slice(0, 10)}>
+                <BarChart data={(Array.isArray(stateBreakdown) ? stateBreakdown : []).slice(0, 10)}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="state" />
                   <YAxis />
@@ -275,7 +275,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* State Details Table */}
-      {stateBreakdown && stateBreakdown.length > 0 && (
+      {Array.isArray(stateBreakdown) && stateBreakdown.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>State Breakdown</CardTitle>
@@ -295,7 +295,7 @@ export default function AdminDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {stateBreakdown.slice(0, 15).map((state) => (
+                {(Array.isArray(stateBreakdown) ? stateBreakdown : []).slice(0, 15).map((state) => (
                   <TableRow key={state.state} data-testid={`row-state-${state.state}`}>
                     <TableCell className="font-medium">{state.state}</TableCell>
                     <TableCell>{state.totalScreenings}</TableCell>
@@ -342,8 +342,8 @@ export default function AdminDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {employers && employers.length > 0 ? (
-                  employers.map((employer) => (
+                {Array.isArray(employers) && employers.length > 0 ? (
+                  (Array.isArray(employers) ? employers : []).map((employer) => (
                     <TableRow key={employer.id} data-testid={`row-employer-${employer.id}`}>
                       <TableCell className="font-medium">
                         {employer.name}

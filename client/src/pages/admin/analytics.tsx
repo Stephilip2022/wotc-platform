@@ -173,8 +173,8 @@ export default function AnalyticsPage() {
 
   // Generate employer comparison metrics
   const comparisonData: EmployerComparisonData[] = (() => {
-    if (!leaderboard?.length) return [];
-    return (leaderboard || []).slice(0, 10).map((emp, idx) => ({
+    if (!Array.isArray(leaderboard) || !leaderboard.length) return [];
+    return leaderboard.slice(0, 10).map((emp, idx) => ({
       employerId: emp.employerId,
       employerName: emp.employerName,
       screeningRate: Math.round((emp.totalScreenings / Math.max(1, idx + 1)) * 10) / 10,
@@ -359,7 +359,7 @@ export default function AnalyticsPage() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={screeningTrends || []}>
+                    <BarChart data={Array.isArray(screeningTrends) ? screeningTrends : []}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis dataKey="period" tick={{ fontSize: 12 }} className="text-muted-foreground" />
                       <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
@@ -399,7 +399,7 @@ export default function AnalyticsPage() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={creditTrends || []}>
+                    <LineChart data={Array.isArray(creditTrends) ? creditTrends : []}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                       <XAxis dataKey="period" tick={{ fontSize: 12 }} className="text-muted-foreground" />
                       <YAxis tick={{ fontSize: 12 }} className="text-muted-foreground" />
@@ -544,7 +544,7 @@ export default function AnalyticsPage() {
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie
-                        data={targetGroups || []}
+                        data={Array.isArray(targetGroups) ? targetGroups : []}
                         cx="50%"
                         cy="50%"
                         labelLine={false}
@@ -556,7 +556,7 @@ export default function AnalyticsPage() {
                           `${(targetGroup as string)?.substring(0, 10) || "Unknown"}... ${(percent * 100).toFixed(0)}%`
                         }
                       >
-                        {(targetGroups || []).map((_, index) => (
+                        {(Array.isArray(targetGroups) ? targetGroups : []).map((_, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -574,7 +574,7 @@ export default function AnalyticsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {(targetGroups || []).map((group, index) => (
+                  {(Array.isArray(targetGroups) ? targetGroups : []).map((group, index) => (
                     <div 
                       key={group.targetGroup} 
                       className="flex items-center justify-between"
@@ -740,9 +740,9 @@ export default function AnalyticsPage() {
                 <div className="flex items-center justify-center h-64">
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
-              ) : (statePerformance || []).length > 0 ? (
+              ) : (Array.isArray(statePerformance) ? statePerformance : []).length > 0 ? (
                 <div className="space-y-3">
-                  {(statePerformance || []).map((state) => (
+                  {(Array.isArray(statePerformance) ? statePerformance : []).map((state) => (
                     <div 
                       key={state.stateCode} 
                       className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
@@ -797,9 +797,9 @@ export default function AnalyticsPage() {
                 <div className="flex items-center justify-center h-64">
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
-              ) : (leaderboard || []).length > 0 ? (
+              ) : (Array.isArray(leaderboard) ? leaderboard : []).length > 0 ? (
                 <div className="space-y-3">
-                  {(leaderboard || []).map((employer, index) => (
+                  {(Array.isArray(leaderboard) ? leaderboard : []).map((employer, index) => (
                     <div 
                       key={employer.employerId} 
                       className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"

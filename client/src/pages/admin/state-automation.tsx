@@ -127,12 +127,13 @@ export default function StateAutomationPage() {
   };
 
   // Calculate statistics
-  const totalJobs = submissionJobs?.length || 0;
-  const completedJobs = submissionJobs?.filter(j => j.status === 'completed').length || 0;
-  const failedJobs = submissionJobs?.filter(j => j.status === 'failed').length || 0;
+  const safeSubmissionJobs = Array.isArray(submissionJobs) ? submissionJobs : [];
+  const totalJobs = safeSubmissionJobs.length;
+  const completedJobs = safeSubmissionJobs.filter(j => j.status === 'completed').length;
+  const failedJobs = safeSubmissionJobs.filter(j => j.status === 'failed').length;
   const successRate = totalJobs > 0 ? ((completedJobs / totalJobs) * 100).toFixed(1) : '0.0';
   
-  const needsReviewCount = determinationLetters?.filter(l => l.status === 'needs_review').length || 0;
+  const needsReviewCount = (Array.isArray(determinationLetters) ? determinationLetters : []).filter(l => l.status === 'needs_review').length;
 
   if (isLoading) {
     return (
@@ -142,7 +143,7 @@ export default function StateAutomationPage() {
     );
   }
 
-  const hasPortals = statePortals && statePortals.length > 0;
+  const hasPortals = Array.isArray(statePortals) && statePortals.length > 0;
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -180,7 +181,7 @@ export default function StateAutomationPage() {
             <Settings className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-states">{statePortals?.length || 0}</div>
+            <div className="text-2xl font-bold" data-testid="text-total-states">{Array.isArray(statePortals) ? statePortals.length : 0}</div>
             <p className="text-xs text-muted-foreground mt-1">Configured portals</p>
           </CardContent>
         </Card>
@@ -203,7 +204,7 @@ export default function StateAutomationPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-active-jobs">
-              {submissionJobs?.filter((j) => j.status === 'processing').length || 0}
+              {safeSubmissionJobs.filter((j) => j.status === 'processing').length}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Currently processing</p>
           </CardContent>
@@ -283,7 +284,7 @@ export default function StateAutomationPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {statePortals.map((portal) => (
+                      {(Array.isArray(statePortals) ? statePortals : []).map((portal) => (
                         <TableRow key={portal.id} data-testid={`row-state-${portal.stateCode}`}>
                           <TableCell className="font-medium" data-testid={`cell-state-${portal.stateCode}`}>
                             {portal.stateCode} - {portal.stateName}
@@ -351,7 +352,7 @@ export default function StateAutomationPage() {
                 <div className="flex items-center justify-center py-12">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-              ) : !submissionJobs || submissionJobs.length === 0 ? (
+              ) : !Array.isArray(submissionJobs) || submissionJobs.length === 0 ? (
                 <div className="text-center py-12">
                   <Bot className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No Submission Jobs</h3>
@@ -374,7 +375,7 @@ export default function StateAutomationPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {submissionJobs.slice(0, 50).map((job) => (
+                      {(Array.isArray(submissionJobs) ? submissionJobs : []).slice(0, 50).map((job) => (
                         <TableRow key={job.id} data-testid={`row-job-${job.id}`}>
                           <TableCell className="font-medium">{job.stateCode}</TableCell>
                           <TableCell>{job.employerId}</TableCell>
@@ -425,7 +426,7 @@ export default function StateAutomationPage() {
                 <div className="flex items-center justify-center py-12">
                   <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-              ) : !determinationLetters || determinationLetters.length === 0 ? (
+              ) : !Array.isArray(determinationLetters) || determinationLetters.length === 0 ? (
                 <div className="text-center py-12">
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No Determination Letters</h3>
@@ -449,7 +450,7 @@ export default function StateAutomationPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {determinationLetters
+                      {(Array.isArray(determinationLetters) ? determinationLetters : [])
                         .sort((a, b) => {
                           // Prioritize needs_review
                           if (a.status === 'needs_review' && b.status !== 'needs_review') return -1;

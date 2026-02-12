@@ -246,7 +246,7 @@ export default function StateCredentialsPage() {
       )}
 
       <div className="grid gap-4">
-        {statePortals?.map((state) => (
+        {(Array.isArray(statePortals) ? statePortals : []).map((state) => (
           <Card key={state.id} data-testid={`card-state-${state.stateCode}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -797,8 +797,8 @@ export default function StateCredentialsPage() {
               <div className="text-center text-muted-foreground py-8">
                 Loading rotation history...
               </div>
-            ) : rotationHistory && rotationHistory.length > 0 ? (
-              rotationHistory.map((entry: any) => (
+            ) : Array.isArray(rotationHistory) && rotationHistory.length > 0 ? (
+              (Array.isArray(rotationHistory) ? rotationHistory : []).map((entry: any) => (
                 <Card key={entry.id}>
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
@@ -1027,7 +1027,7 @@ function FollowUpsSection({ form }: { form: any }) {
 
   const updateFollowUp = (index: number, field: 'date' | 'description' | 'completed', value: any) => {
     const newFollowUps = [...followUps];
-    newFollowUps[index][field] = value;
+    (newFollowUps[index] as any)[field] = value;
     setFollowUps(newFollowUps);
     form.setValue('followUps', newFollowUps);
   };

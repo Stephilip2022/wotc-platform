@@ -128,16 +128,19 @@ export default function AdminEmployersPage() {
     },
   });
 
-  const filteredEmployers = employers?.filter((emp) => {
+  const safeEmployers = Array.isArray(employers) ? employers : [];
+  const safeEtaForms = Array.isArray(etaForms) ? etaForms : [];
+
+  const filteredEmployers = safeEmployers.filter((emp) => {
     const search = searchTerm.toLowerCase();
     return (
-      emp.name.toLowerCase().includes(search) ||
-      emp.ein.toLowerCase().includes(search) ||
-      emp.contactEmail.toLowerCase().includes(search)
+      emp.name?.toLowerCase().includes(search) ||
+      emp.ein?.toLowerCase().includes(search) ||
+      emp.contactEmail?.toLowerCase().includes(search)
     );
-  }) || [];
+  });
 
-  const pendingForms = etaForms?.filter((form) => form.status === "sent") || [];
+  const pendingForms = safeEtaForms.filter((form) => form.status === "sent");
 
   return (
     <div className="space-y-6">

@@ -139,7 +139,7 @@ export default function RevenuemanagementPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={revenueData.revenueTrend}>
+              <LineChart data={Array.isArray(revenueData.revenueTrend) ? revenueData.revenueTrend : []}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis 
                   dataKey="month" 
@@ -180,7 +180,7 @@ export default function RevenuemanagementPage() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={revenueData.planDistribution}
+                  data={Array.isArray(revenueData.planDistribution) ? revenueData.planDistribution : []}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -189,7 +189,7 @@ export default function RevenuemanagementPage() {
                   fill="#8884d8"
                   dataKey="count"
                 >
-                  {revenueData.planDistribution.map((entry, index) => (
+                  {(Array.isArray(revenueData.planDistribution) ? revenueData.planDistribution : []).map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -214,7 +214,7 @@ export default function RevenuemanagementPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {revenueData.subscriptionsByStatus.map((item) => (
+              {(Array.isArray(revenueData.subscriptionsByStatus) ? revenueData.subscriptionsByStatus : []).map((item) => (
                 <div key={item.status} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Users className="h-4 w-4 text-muted-foreground" />
@@ -269,7 +269,7 @@ export default function RevenuemanagementPage() {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={revenueData.planDistribution}>
+            <BarChart data={Array.isArray(revenueData.planDistribution) ? revenueData.planDistribution : []}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis 
                 dataKey="planName" 
@@ -297,7 +297,7 @@ export default function RevenuemanagementPage() {
             </BarChart>
           </ResponsiveContainer>
           <div className="mt-4 grid grid-cols-3 gap-4">
-            {revenueData.planDistribution.map((plan, index) => (
+            {(Array.isArray(revenueData.planDistribution) ? revenueData.planDistribution : []).map((plan, index) => (
               <div key={plan.planId} className="text-center">
                 <div className="text-sm font-medium">{plan.planName}</div>
                 <div className="text-xs text-muted-foreground">

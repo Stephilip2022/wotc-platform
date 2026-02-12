@@ -228,7 +228,7 @@ export default function AuditLogsPage() {
   ];
 
   const handleRunScan = (scanId: string) => {
-    setRunningScans(prev => new Set([...prev, scanId]));
+    setRunningScans(prev => new Set(Array.from(prev).concat(scanId)));
     setTimeout(() => {
       setRunningScans(prev => {
         const next = new Set(prev);
@@ -312,7 +312,7 @@ export default function AuditLogsPage() {
     generateReportMutation.mutate({ reportType, periodStart, periodEnd });
   };
 
-  const logs = logsData?.logs || [];
+  const logs = Array.isArray(logsData?.logs) ? logsData.logs : [];
   const pagination = logsData?.pagination || { page: 1, pages: 1, total: 0 };
 
   return (
@@ -833,9 +833,9 @@ export default function AuditLogsPage() {
                 <div className="flex items-center justify-center h-32" data-testid="loading-reports">
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
-              ) : (reports || []).length > 0 ? (
+              ) : (Array.isArray(reports) ? reports : []).length > 0 ? (
                 <div className="space-y-2">
-                  {(reports || []).map((report) => (
+                  {(Array.isArray(reports) ? reports : []).map((report) => (
                     <div 
                       key={report.id}
                       className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"

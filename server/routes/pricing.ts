@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { isAuthenticated } from "../clerkAuth";
+import { isAuthenticated, getUserByClerkId } from "../clerkAuth";
 import { db } from "../db";
 import { users, employers } from "@shared/schema";
 import { eq, or, and } from "drizzle-orm";
@@ -20,13 +20,13 @@ import {
 
 const router = Router();
 
-async function isAdmin(userId: string): Promise<boolean> {
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
+async function isAdmin(clerkUserId: string): Promise<boolean> {
+  const user = await getUserByClerkId(clerkUserId);
   return user?.role === "admin";
 }
 
-async function canAccessEmployerBilling(userId: string, employerId: string): Promise<boolean> {
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
+async function canAccessEmployerBilling(clerkUserId: string, employerId: string): Promise<boolean> {
+  const user = await getUserByClerkId(clerkUserId);
   if (!user) return false;
   if (user.role === "admin") return true;
   if (user.role === "employer" && user.employerId === employerId) return true;
