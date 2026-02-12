@@ -2255,6 +2255,70 @@ export type InsertOtherTaxCredit = z.infer<typeof insertOtherTaxCreditSchema>;
 export type OtherTaxCredit = typeof otherTaxCredits.$inferSelect;
 
 // ============================================================================
+// TAX CREDIT PROGRAM CATALOG - C2ER State Incentives Database
+// ============================================================================
+
+export const taxCreditPrograms = pgTable("tax_credit_programs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  c2erReferenceNumber: integer("c2er_reference_number"),
+  state: text("state").notNull(),
+  programName: text("program_name").notNull(),
+  programDescription: text("program_description"),
+  
+  programCategory: text("program_category").notNull().default("general_screening"),
+  leverageType: text("leverage_type"),
+  informationNeededToCertify: text("information_needed_to_certify"),
+  agencyToWorkWith: text("agency_to_work_with"),
+  
+  screeningQuestions: jsonb("screening_questions"),
+  eligibilityRules: jsonb("eligibility_rules"),
+  
+  creditFormula: text("credit_formula"),
+  maxCreditAmount: decimal("max_credit_amount", { precision: 12, scale: 2 }),
+  
+  applicableIndustries: text("applicable_industries").array(),
+  minCompanySize: integer("min_company_size"),
+  maxCompanySize: integer("max_company_size"),
+  
+  isActive: boolean("is_active").notNull().default(true),
+  tier: text("tier").notNull().default("1"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertTaxCreditProgramSchema = createInsertSchema(taxCreditPrograms).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTaxCreditProgram = z.infer<typeof insertTaxCreditProgramSchema>;
+export type TaxCreditProgram = typeof taxCreditPrograms.$inferSelect;
+
+// ============================================================================
+// EMPLOYER PROGRAM ASSIGNMENTS - Admin-controlled per-employer program toggles
+// ============================================================================
+
+export const employerProgramAssignments = pgTable("employer_program_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  programId: varchar("program_id").notNull().references(() => taxCreditPrograms.id, { onDelete: "cascade" }),
+  
+  isEnabled: boolean("is_enabled").notNull().default(true),
+  isRecommended: boolean("is_recommended").notNull().default(false),
+  
+  enabledBy: varchar("enabled_by").references(() => users.id),
+  enabledAt: timestamp("enabled_at").defaultNow(),
+  disabledAt: timestamp("disabled_at"),
+  
+  notes: text("notes"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertEmployerProgramAssignmentSchema = createInsertSchema(employerProgramAssignments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEmployerProgramAssignment = z.infer<typeof insertEmployerProgramAssignmentSchema>;
+export type EmployerProgramAssignment = typeof employerProgramAssignments.$inferSelect;
+
+// ============================================================================
 // AUDIT LOGS - Complete compliance and audit trail
 // ============================================================================
 

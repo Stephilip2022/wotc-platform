@@ -58,6 +58,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Audit Logs", url: "/admin/audit", icon: Shield },
     { title: "Document OCR", url: "/admin/document-ocr", icon: ScanLine },
     { title: "Pricing", url: "/admin/pricing", icon: Calculator },
+    { title: "Tax Programs", url: "/admin/tax-programs", icon: Layers },
     { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "State Automation", url: "/admin/automation", icon: Settings },
     { title: "State Credentials", url: "/admin/state-credentials", icon: KeyRound },

@@ -49,6 +49,7 @@ import auditRouter, { logAuditEvent } from "./routes/audit";
 import certificationRouter from "./routes/certification";
 import clientAgreementsRouter from "./routes/clientAgreements";
 import pricingRouter from "./routes/pricing";
+import taxProgramsRouter from "./routes/taxPrograms";
 import { 
   translateText, 
   translateToSpanish, 
@@ -163,6 +164,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Pricing configuration and billing
   app.use("/api/pricing", pricingRouter);
+
+  // Tax Credit Programs catalog and employer assignments
+  app.use("/api/tax-programs", isAuthenticated, taxProgramsRouter);
 
   // ============================================================================
   // TRANSLATION ROUTES

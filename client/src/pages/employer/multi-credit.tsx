@@ -18,7 +18,9 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  FileText
+  FileText,
+  Layers,
+  MapPin
 } from "lucide-react";
 
 interface OtherTaxCredit {
@@ -76,6 +78,125 @@ const CREDIT_TYPES: Record<string, { label: string; description: string; icon: a
     icon: Building2
   }
 };
+
+const CATEGORY_LABELS: Record<string, string> = {
+  veteran_credit: "Veteran",
+  disability_credit: "Disability",
+  reentry_credit: "Re-entry",
+  youth_training_credit: "Youth/Training",
+  enterprise_zone_credit: "Enterprise Zone",
+  historic_rehabilitation: "Historic Rehab",
+  general_screening: "General",
+  state_tax_credit: "State Tax Credit",
+};
+
+const TIER_LABELS: Record<string, string> = {
+  "1": "Tier 1 (Auto-screen)",
+  "2": "Tier 2 (Extra Questions)",
+  "3": "Tier 3 (Specialized)",
+};
+
+function ActiveProgramsSection() {
+  const { data: assignedPrograms = [], isLoading } = useQuery<any[]>({
+    queryKey: ["/api/tax-programs/my-programs"],
+  });
+
+  if (isLoading) {
+    return (
+      <Card data-testid="card-active-programs-loading">
+        <CardContent className="p-8 text-center text-muted-foreground">
+          Loading active programs...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (assignedPrograms.length === 0) {
+    return (
+      <Card data-testid="card-no-active-programs">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5" />
+            Active State Tax Credit Programs
+          </CardTitle>
+          <CardDescription>
+            State-specific tax credit programs enabled for your company
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center py-6">
+          <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+          <p className="text-muted-foreground">No state programs activated yet.</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Contact your administrator to enable state-specific tax credit programs.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const groupedByState = assignedPrograms.reduce((acc: Record<string, any[]>, item: any) => {
+    const state = item.program?.state || "Unknown";
+    if (!acc[state]) acc[state] = [];
+    acc[state].push(item);
+    return acc;
+  }, {});
+
+  return (
+    <Card data-testid="card-active-programs">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Layers className="h-5 w-5" />
+          Active State Tax Credit Programs
+        </CardTitle>
+        <CardDescription>
+          {assignedPrograms.length} program{assignedPrograms.length !== 1 ? "s" : ""} enabled for your company across {Object.keys(groupedByState).length} state{Object.keys(groupedByState).length !== 1 ? "s" : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {Object.entries(groupedByState).sort(([a], [b]) => a.localeCompare(b)).map(([state, programs]) => (
+            <div key={state}>
+              <div className="flex items-center gap-2 mb-2">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold text-sm" data-testid={`text-state-${state}`}>{state}</h3>
+                <Badge variant="secondary">{programs.length}</Badge>
+              </div>
+              <div className="grid gap-2 ml-6">
+                {programs.map((item: any) => (
+                  <div
+                    key={item.assignment?.id || item.program?.id}
+                    className="flex items-center justify-between p-3 rounded-md border"
+                    data-testid={`row-program-${item.program?.id}`}
+                  >
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{item.program?.programName}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge variant="outline">
+                          {CATEGORY_LABELS[item.program?.programCategory] || item.program?.programCategory}
+                        </Badge>
+                        <Badge variant="secondary">
+                          {TIER_LABELS[item.program?.tier] || `Tier ${item.program?.tier}`}
+                        </Badge>
+                        {item.assignment?.isRecommended && (
+                          <Badge variant="default">Recommended</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right ml-4">
+                      {item.program?.agencyToWorkWith && (
+                        <p className="text-xs text-muted-foreground">{item.program.agencyToWorkWith}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function MultiCreditPage() {
   const { toast } = useToast();
@@ -252,6 +373,8 @@ export default function MultiCreditPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ActiveProgramsSection />
 
       <Tabs defaultValue="all" className="space-y-4">
         <TabsList data-testid="tabs-credits">
