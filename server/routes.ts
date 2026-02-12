@@ -28,6 +28,7 @@ import {
   csvImportSessions,
   csvImportRows,
   csvImportTemplates,
+  employerWorksites,
 } from "@shared/schema";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId } from "./clerkAuth";
@@ -4923,6 +4924,243 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error getting orchestrator status:", error);
       res.status(500).json({ error: "Failed to get orchestrator status" });
+    }
+  });
+
+  // ============================================================================
+  // ============================================================================
+  // MULTI-CREDIT SCREENING ENGINE
+  // ============================================================================
+
+  app.post("/api/multi-credit/screen-employee", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employeeId, employerId } = req.body;
+      if (!employeeId || !employerId) {
+        return res.status(400).json({ error: "employeeId and employerId required" });
+      }
+
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { screenEmployeeForPrograms } = await import('./services/multiCreditEngine');
+      const results = await screenEmployeeForPrograms(employeeId, employerId);
+      res.json({ results, eligible: results.filter(r => r.eligible).length, total: results.length });
+    } catch (error: any) {
+      console.error("Error screening employee:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/multi-credit/batch-screen", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const employerId = req.body.employerId || user.employerId;
+      if (!employerId) return res.status(400).json({ error: "employerId required" });
+
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { batchScreenEmployer } = await import('./services/multiCreditEngine');
+      const results = await batchScreenEmployer(employerId);
+      res.json(results);
+    } catch (error: any) {
+      console.error("Error batch screening:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/multi-credit/summary/:employerId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employerId } = req.params;
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { getScreeningSummary } = await import('./services/multiCreditEngine');
+      const summary = await getScreeningSummary(employerId);
+      res.json(summary);
+    } catch (error: any) {
+      console.error("Error getting summary:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/multi-credit/calculate", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { screeningResultId } = req.body;
+      if (!screeningResultId) return res.status(400).json({ error: "screeningResultId required" });
+
+      const { calculateProgramCredits } = await import('./services/multiCreditEngine');
+      const calculation = await calculateProgramCredits(screeningResultId);
+      res.json(calculation);
+    } catch (error: any) {
+      console.error("Error calculating credits:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PROGRAM SUBMISSIONS
+  // ============================================================================
+
+  app.post("/api/multi-credit/submissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employerId, programId, employeeIds } = req.body;
+      if (!employerId || !programId || !employeeIds?.length) {
+        return res.status(400).json({ error: "employerId, programId, and employeeIds required" });
+      }
+
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { createProgramSubmission } = await import('./services/programSubmissionService');
+      const result = await createProgramSubmission(employerId, programId, employeeIds);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error creating submission:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/multi-credit/submissions/:employerId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employerId } = req.params;
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { getSubmissionQueue } = await import('./services/programSubmissionService');
+      const queue = await getSubmissionQueue(employerId);
+      res.json(queue);
+    } catch (error: any) {
+      console.error("Error getting submissions:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/multi-credit/submissions/:id/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { status, stateReferenceNumber, rejectionReason, approvedAmount } = req.body;
+      if (!status) return res.status(400).json({ error: "status required" });
+
+      const { updateSubmissionStatus } = await import('./services/programSubmissionService');
+      const updated = await updateSubmissionStatus(req.params.id, status, {
+        stateReferenceNumber, rejectionReason, approvedAmount,
+      });
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating submission:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/multi-credit/submission-stats/:employerId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employerId } = req.params;
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { getSubmissionStats } = await import('./services/programSubmissionService');
+      const stats = await getSubmissionStats(employerId);
+      res.json(stats);
+    } catch (error: any) {
+      console.error("Error getting submission stats:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // ============================================================================
+  // EMPLOYER WORKSITES
+  // ============================================================================
+
+  app.get("/api/worksites/:employerId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employerId } = req.params;
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const worksites = await db.select().from(employerWorksites).where(eq(employerWorksites.employerId, employerId));
+      res.json(worksites);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.post("/api/worksites", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const { employerId, ...worksiteData } = req.body;
+      if (!employerId) return res.status(400).json({ error: "employerId required" });
+
+      if (user.role !== 'admin' && user.employerId !== employerId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const [worksite] = await db.insert(employerWorksites).values({ employerId, ...worksiteData }).returning();
+      res.json(worksite);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.patch("/api/worksites/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user) return res.status(401).json({ error: "User not found" });
+
+      const [updated] = await db.update(employerWorksites).set({ ...req.body, updatedAt: new Date() }).where(eq(employerWorksites.id, req.params.id)).returning();
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.delete("/api/worksites/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      await db.delete(employerWorksites).where(eq(employerWorksites.id, req.params.id));
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 

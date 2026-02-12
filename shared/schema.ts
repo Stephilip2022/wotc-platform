@@ -2319,6 +2319,153 @@ export type InsertEmployerProgramAssignment = z.infer<typeof insertEmployerProgr
 export type EmployerProgramAssignment = typeof employerProgramAssignments.$inferSelect;
 
 // ============================================================================
+// EMPLOYER WORKSITES - Multi-location tracking with zone data
+// ============================================================================
+
+export const employerWorksites = pgTable("employer_worksites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+
+  siteName: text("site_name").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  zipCode: text("zip_code").notNull(),
+  county: text("county"),
+
+  naicsCode: text("naics_code"),
+  sicCode: text("sic_code"),
+  employeeCount: integer("employee_count"),
+
+  isEnterpriseZone: boolean("is_enterprise_zone").default(false),
+  enterpriseZoneName: text("enterprise_zone_name"),
+  enterpriseZoneId: text("enterprise_zone_id"),
+  isEmpowermentZone: boolean("is_empowerment_zone").default(false),
+  isRuralRenewalArea: boolean("is_rural_renewal_area").default(false),
+  isHistoricDistrict: boolean("is_historic_district").default(false),
+  isOpportunityZone: boolean("is_opportunity_zone").default(false),
+
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+
+  isPrimary: boolean("is_primary").default(false),
+  isActive: boolean("is_active").default(true),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertEmployerWorksiteSchema = createInsertSchema(employerWorksites).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertEmployerWorksite = z.infer<typeof insertEmployerWorksiteSchema>;
+export type EmployerWorksite = typeof employerWorksites.$inferSelect;
+
+// ============================================================================
+// PROGRAM SCREENING RESULTS - Tracks screening outcomes per employee per program
+// ============================================================================
+
+export const programScreeningResults = pgTable("program_screening_results", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull(),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  programId: varchar("program_id").notNull().references(() => taxCreditPrograms.id, { onDelete: "cascade" }),
+
+  screeningStatus: text("screening_status").notNull().default("pending"),
+  eligibilityResult: text("eligibility_result"),
+  eligibilityScore: integer("eligibility_score"),
+  qualifyingFactors: jsonb("qualifying_factors"),
+  disqualifyingFactors: jsonb("disqualifying_factors"),
+
+  screeningAnswers: jsonb("screening_answers"),
+  autoScreened: boolean("auto_screened").default(false),
+  autoScreenSource: text("auto_screen_source"),
+
+  reviewedBy: varchar("reviewed_by"),
+  reviewedAt: timestamp("reviewed_at"),
+  notes: text("notes"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertProgramScreeningResultSchema = createInsertSchema(programScreeningResults).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProgramScreeningResult = z.infer<typeof insertProgramScreeningResultSchema>;
+export type ProgramScreeningResult = typeof programScreeningResults.$inferSelect;
+
+// ============================================================================
+// PROGRAM CREDIT CALCULATIONS - Tracks calculated credits per employee per program
+// ============================================================================
+
+export const programCreditCalculations = pgTable("program_credit_calculations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  screeningResultId: varchar("screening_result_id").notNull().references(() => programScreeningResults.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").notNull(),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  programId: varchar("program_id").notNull().references(() => taxCreditPrograms.id, { onDelete: "cascade" }),
+
+  calculationMethod: text("calculation_method").notNull(),
+  wagesUsed: decimal("wages_used", { precision: 12, scale: 2 }),
+  hoursUsed: integer("hours_used"),
+  rateApplied: decimal("rate_applied", { precision: 5, scale: 4 }),
+  calculatedAmount: decimal("calculated_amount", { precision: 12, scale: 2 }).notNull(),
+  cappedAmount: decimal("capped_amount", { precision: 12, scale: 2 }),
+  finalCreditAmount: decimal("final_credit_amount", { precision: 12, scale: 2 }).notNull(),
+
+  calculationDetails: jsonb("calculation_details"),
+  taxYear: integer("tax_year"),
+
+  status: text("status").notNull().default("calculated"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertProgramCreditCalculationSchema = createInsertSchema(programCreditCalculations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProgramCreditCalculation = z.infer<typeof insertProgramCreditCalculationSchema>;
+export type ProgramCreditCalculation = typeof programCreditCalculations.$inferSelect;
+
+// ============================================================================
+// PROGRAM SUBMISSIONS - Tracks submissions to state agencies per program
+// ============================================================================
+
+export const programSubmissions = pgTable("program_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  programId: varchar("program_id").notNull().references(() => taxCreditPrograms.id, { onDelete: "cascade" }),
+
+  submissionType: text("submission_type").notNull(),
+  submissionChannel: text("submission_channel").notNull(),
+
+  employeeIds: text("employee_ids").array(),
+  recordCount: integer("record_count").notNull().default(0),
+  totalCreditAmount: decimal("total_credit_amount", { precision: 12, scale: 2 }),
+
+  fileGenerated: text("file_generated"),
+  fileFormat: text("file_format"),
+  remotePathUploaded: text("remote_path_uploaded"),
+
+  submissionStatus: text("submission_status").notNull().default("pending"),
+  submittedAt: timestamp("submitted_at"),
+  confirmedAt: timestamp("confirmed_at"),
+  rejectedAt: timestamp("rejected_at"),
+  rejectionReason: text("rejection_reason"),
+
+  stateReferenceNumber: text("state_reference_number"),
+  determinationStatus: text("determination_status"),
+  determinationDate: timestamp("determination_date"),
+  approvedAmount: decimal("approved_amount", { precision: 12, scale: 2 }),
+
+  submittedBy: varchar("submitted_by"),
+  metadata: jsonb("metadata"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertProgramSubmissionSchema = createInsertSchema(programSubmissions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertProgramSubmission = z.infer<typeof insertProgramSubmissionSchema>;
+export type ProgramSubmission = typeof programSubmissions.$inferSelect;
+
+// ============================================================================
 // AUDIT LOGS - Complete compliance and audit trail
 // ============================================================================
 
