@@ -157,10 +157,9 @@ export function generateArizonaCSV(records: EmployeeWithScreening[]): string {
  * Generate Texas format CSV
  * Uses comprehensive Texas CSV generator with all columns A-AS
  */
-export function generateTexasCSV(records: EmployeeWithScreening[]): string {
-  // Import and use the dedicated Texas generator
+export function generateTexasCSV(records: EmployeeWithScreening[], consultantEin?: string): string {
   const { generateTexasCSV: texasGenerator } = require('./texasCsvGenerator');
-  return texasGenerator(records);
+  return texasGenerator(records, consultantEin || '861505473');
 }
 
 /**

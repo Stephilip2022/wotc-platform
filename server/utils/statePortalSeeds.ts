@@ -81,36 +81,38 @@ export const statePortalSeeds = [
   {
     stateCode: "TX",
     stateName: "Texas",
-    portalUrl: "https://www.twc.texas.gov/wotc",
-    submissionUrl: "https://www.twc.texas.gov/wotc/submit",
+    portalUrl: "https://twcgov.appiancloud.us/suite/sites/work-opportunity-tax-credit",
+    submissionUrl: "https://twcgov.appiancloud.us/suite/sites/work-opportunity-tax-credit",
     authType: "credentials",
     loginFieldSelectors: {
-      username: "#UserName",
-      password: "#Password",
-      submitButton: "#LoginBtn",
-      successIndicator: ".welcome-message"
+      username: "input[name='identifier'], input[name='username'], input[type='text']",
+      password: "input[name='credentials.passcode'], input[type='password']",
+      nextButton: "input[value='Next']",
+      verifyButton: "input[value='Verify']",
+      successIndicator: "span:has-text('New WOTC Application')",
+      loginProvider: "okta"
     },
     requiredColumns: [
-      "Employee Last Name",
-      "Employee First Name",
-      "SSN",
-      "Hire Date",
-      "Target Group Code"
+      "cein", "fein", "ssn", "dob", "hireDate", "startDate",
+      "lastName", "firstName", "address", "city", "state", "zip",
+      "startingWage", "jobOnetCode"
     ],
     optionalColumns: [
-      "Date of Birth",
-      "Address",
-      "Phone"
+      "q1_condCert", "q2_metConditions", "q3_uVet6", "q4_dVet",
+      "q5_dUVet6", "q6_tanfPayments", "q7_u27",
+      "qualifiedIva", "qualifiedIvaState", "qualifiedVet", "qualifiedVetState",
+      "exFelon", "snap", "snapState", "ssi", "ltfar", "ltfarState",
+      "ltu", "lturState", "sourceDocs"
     ],
-    dateFormat: "MM-DD-YYYY",
-    maxBatchSize: 500,
+    dateFormat: "YYYYMMDD",
+    maxBatchSize: 998,
     submissionFrequency: "daily",
     automationEnabled: true,
     expectedProcessingDays: 21,
     supportEmail: "wotc@twc.texas.gov",
     supportPhone: "(512) 463-2222",
     status: "active",
-    notes: "Texas has simplified requirements. Fastest processing time in the country."
+    notes: "Texas uses Appian Cloud portal with Okta SSO. CSV format: no quotes, no UTF-8 BOM, ASCII encoding. Files process in batches of 200. Max 998 data rows per file. Bot detection active - requires human-like pacing. Consultant EIN: 861505473."
   },
   {
     stateCode: "FL",

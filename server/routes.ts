@@ -29,7 +29,7 @@ import {
   csvImportRows,
   csvImportTemplates,
 } from "@shared/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql } from "drizzle-orm";
 import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId } from "./clerkAuth";
 import { getAuth } from "@clerk/express";
 import OpenAI from "openai";
@@ -4693,6 +4693,210 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching determination letters:", error);
       res.status(500).json({ error: "Failed to fetch determination letters" });
+    }
+  });
+
+  // ============================================================================
+  // STATE PORTAL RPA - CREDENTIAL TESTING & DETERMINATION CAPTURE
+  // ============================================================================
+
+  app.post("/api/admin/state-portal/test-credentials", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode } = req.body;
+      if (!stateCode) {
+        return res.status(400).json({ error: "stateCode required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const [portalConfig] = await db
+        .select()
+        .from(statePortalConfigs)
+        .where(eq(statePortalConfigs.stateCode, stateCode.toUpperCase()));
+
+      if (!portalConfig) {
+        return res.status(404).json({ error: `No portal config found for ${stateCode}` });
+      }
+
+      const { createBot } = await import('./utils/playwrightBot');
+      const bot = await createBot();
+      try {
+        const result = await bot.testCredentials(portalConfig);
+        res.json(result);
+      } finally {
+        await bot.close();
+      }
+    } catch (error: any) {
+      console.error("Error testing credentials:", error);
+      res.status(500).json({ error: "Failed to test credentials", details: error?.message });
+    }
+  });
+
+  app.post("/api/admin/state-portal/capture-determinations", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode } = req.body;
+      if (!stateCode) {
+        return res.status(400).json({ error: "stateCode required" });
+      }
+
+      const { statePortalConfigs } = await import("@shared/schema");
+      const [portalConfig] = await db
+        .select()
+        .from(statePortalConfigs)
+        .where(eq(statePortalConfigs.stateCode, stateCode.toUpperCase()));
+
+      if (!portalConfig) {
+        return res.status(404).json({ error: `No portal config found for ${stateCode}` });
+      }
+
+      const { createBot } = await import('./utils/playwrightBot');
+      const bot = await createBot();
+      try {
+        const result = await bot.captureDeterminations(portalConfig);
+
+        if (result.success && result.determinations && result.determinations.length > 0) {
+          const { screenings, employees } = await import("@shared/schema");
+
+          let updated = 0;
+          for (const det of result.determinations) {
+            try {
+              const [emp] = await db
+                .select()
+                .from(employees)
+                .where(eq(employees.ssn, det.ssn))
+                .limit(1);
+
+              if (emp) {
+                const detStatus = det.status.toLowerCase().includes('certif') ? 'certified'
+                  : det.status.toLowerCase().includes('denied') ? 'denied'
+                  : 'pending';
+
+                await db
+                  .update(screenings)
+                  .set({
+                    status: detStatus,
+                    updatedAt: new Date(),
+                  })
+                  .where(eq(screenings.employeeId, emp.id));
+                updated++;
+              }
+            } catch (detErr) {
+              console.error(`Failed to update determination for SSN ${det.ssn}:`, detErr);
+            }
+          }
+
+          res.json({
+            ...result,
+            updatedRecords: updated,
+          });
+        } else {
+          res.json(result);
+        }
+      } finally {
+        await bot.close();
+      }
+    } catch (error: any) {
+      console.error("Error capturing determinations:", error);
+      res.status(500).json({ error: "Failed to capture determinations", details: error?.message });
+    }
+  });
+
+  app.post("/api/admin/state-portal/generate-csv-preview", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { stateCode, employerId, limit: maxRecords } = req.body;
+      if (!stateCode || !employerId) {
+        return res.status(400).json({ error: "stateCode and employerId required" });
+      }
+
+      const recordLimit = Math.min(maxRecords || 998, 998);
+      const { employees: employeesTable, screenings: screeningsTable, employers: employersTable } = await import("@shared/schema");
+
+      const empRows = await db
+        .select()
+        .from(employeesTable)
+        .where(eq(employeesTable.employerId, employerId))
+        .limit(recordLimit);
+
+      const screeningRows = await db
+        .select()
+        .from(screeningsTable)
+        .where(
+          and(
+            eq(screeningsTable.employerId, employerId),
+            or(
+              eq(screeningsTable.status, 'eligible'),
+              eq(screeningsTable.status, 'completed'),
+              eq(screeningsTable.status, 'certified')
+            )
+          )
+        );
+
+      const empById = new Map(empRows.map((e: any) => [e.id, e]));
+
+      const [employer] = await db
+        .select()
+        .from(employersTable)
+        .where(eq(employersTable.id, employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      const records = screeningRows
+        .filter(s => empById.has(s.employeeId))
+        .map(s => ({
+          employee: empById.get(s.employeeId)!,
+          screening: s,
+          employerEin: employer.ein || '',
+          employerName: employer.name,
+          consultantEin: '861505473',
+        }));
+
+      if (records.length === 0) {
+        return res.json({ csvPreview: '', recordCount: 0, message: 'No eligible records found' });
+      }
+
+      const { generateTexasCSV } = await import('./utils/texasCsvGenerator');
+      const csv = generateTexasCSV(records, '861505473');
+      const lines = csv.split('\n');
+
+      res.json({
+        csvPreview: lines.slice(0, 6).join('\n'),
+        recordCount: lines.length - 1,
+        fullCsv: csv,
+      });
+    } catch (error: any) {
+      console.error("Error generating CSV preview:", error);
+      res.status(500).json({ error: "Failed to generate CSV preview", details: error?.message });
+    }
+  });
+
+  app.get("/api/admin/state-portal/orchestrator-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { getOrchestratorStatus } = await import('./utils/submissionOrchestrator');
+      res.json(getOrchestratorStatus());
+    } catch (error: any) {
+      console.error("Error getting orchestrator status:", error);
+      res.status(500).json({ error: "Failed to get orchestrator status" });
     }
   });
 

@@ -2,18 +2,52 @@
  * Playwright State Portal Automation Bot
  * 
  * Handles automated login and CSV bulk upload to state WOTC portals
- * using Playwright browser automation.
+ * using Playwright browser automation with human-like pacing.
+ * 
+ * Texas portal: Appian Cloud (twcgov.appiancloud.us) with Okta SSO
  */
 
-import { chromium, type Browser, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page, type Download } from 'playwright';
 import type { StatePortalConfig } from '@shared/schema';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 interface BotResult {
   success: boolean;
   message: string;
   confirmationNumbers?: string[];
   errors?: string[];
-  screenshots?: string[];
+  screenshotPaths?: string[];
+  errorFileData?: Buffer;
+  incompleteSSNs?: string[];
+  submittedCount?: number;
+}
+
+function randomDelay(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+async function humanDelay(page: Page, minMs = 800, maxMs = 2500): Promise<void> {
+  await page.waitForTimeout(randomDelay(minMs, maxMs));
+}
+
+async function humanType(page: Page, selector: string, text: string): Promise<void> {
+  const el = await page.waitForSelector(selector, { timeout: 15000 });
+  if (!el) throw new Error(`Element not found: ${selector}`);
+  await el.click();
+  await humanDelay(page, 200, 500);
+  for (const char of text) {
+    await page.keyboard.type(char, { delay: randomDelay(50, 150) });
+  }
+}
+
+async function takeScreenshot(page: Page, label: string): Promise<string> {
+  const dir = path.join(os.tmpdir(), 'wotc-screenshots');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, `${label}_${Date.now()}.png`);
+  await page.screenshot({ path: filePath, fullPage: false });
+  return filePath;
 }
 
 /**
@@ -21,33 +55,45 @@ interface BotResult {
  */
 export class StatePortalBot {
   private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
   private page: Page | null = null;
 
-  /**
-   * Initialize browser instance
-   */
   async initialize(): Promise<void> {
+    const chromiumPath = process.env.CHROMIUM_PATH || '/nix/store/zi4f80l169xlmivz8vja8wlphq74qqk0-chromium-125.0.6422.141/bin/chromium';
+
     this.browser = await chromium.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      executablePath: fs.existsSync(chromiumPath) ? chromiumPath : undefined,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-infobars',
+      ],
     });
-    this.page = await this.browser.newPage();
-    
-    // Set viewport
-    await this.page.setViewportSize({ width: 1280, height: 720 });
+
+    this.context = await this.browser.newContext({
+      viewport: { width: 1366, height: 768 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+      locale: 'en-US',
+      timezoneId: 'America/Chicago',
+    });
+
+    await this.context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    });
+
+    this.page = await this.context.newPage();
   }
 
-  /**
-   * Close browser instance
-   */
   async close(): Promise<void> {
-    if (this.page) await this.page.close();
+    if (this.context) await this.context.close();
     if (this.browser) await this.browser.close();
+    this.page = null;
+    this.context = null;
+    this.browser = null;
   }
 
-  /**
-   * Submit bulk CSV to state portal
-   */
   async submitBulkCSV(
     config: StatePortalConfig,
     csvContent: string,
@@ -61,8 +107,6 @@ export class StatePortalBot {
       switch (config.stateCode.toUpperCase()) {
         case 'TX':
           return await this.submitTexasPortal(config, csvContent, employerCount);
-        case 'AZ':
-          return await this.submitArizonaPortal(config, csvContent, employerCount);
         default:
           return {
             success: false,
@@ -80,74 +124,65 @@ export class StatePortalBot {
   }
 
   /**
-   * Handle Multi-Factor Authentication (MFA)
-   * Supports TOTP, SMS, and Email-based MFA
+   * Handle Okta Multi-Factor Authentication
    */
-  private async handleMFA(config: StatePortalConfig): Promise<void> {
+  private async handleOktaMFA(config: StatePortalConfig): Promise<void> {
     if (!this.page) throw new Error('Page not initialized');
-    
+
     try {
-      // Wait for MFA prompt (various selectors for different portal types)
       const mfaPrompt = await this.page.waitForSelector(
-        'input[name="mfaCode"], input[name="verificationCode"], input[name="otpCode"], input[id="mfa"], input[placeholder*="code" i], input[placeholder*="verification" i]',
-        { timeout: 5000 }
+        'input[name="credentials.passcode"], input[name="verificationCode"], input[name="answer"], input[data-se="input-credentials.passcode"]',
+        { timeout: 8000 }
       ).catch(() => null);
-      
-      if (!mfaPrompt) {
-        // No MFA prompt found - either not required or already bypassed
-        return;
-      }
-      
-      // Generate MFA token based on type
+
+      if (!mfaPrompt) return;
+
       let mfaToken: string | null = null;
-      
-      switch (config.mfaType) {
-        case 'totp':
-        case 'authenticator_app':
-          if (config.mfaSecret) {
-            const { generateTOTPToken } = await import('./mfaHandler');
-            mfaToken = generateTOTPToken(config.mfaSecret);
-          }
-          break;
-          
-        case 'sms':
-        case 'email':
-          // For SMS/Email, we would need to wait for manual entry or integrate with provider
-          // For now, try to use backup codes if available
-          if (config.mfaBackupCodes && Array.isArray(config.mfaBackupCodes) && config.mfaBackupCodes.length > 0) {
-            mfaToken = config.mfaBackupCodes[0]; // Use first backup code
-          } else {
-            throw new Error(`${config.mfaType} MFA requires manual token entry or backup codes`);
-          }
-          break;
-          
-        default:
-          console.warn(`Unknown MFA type: ${config.mfaType}`);
-          return;
+
+      const mfaType = config.mfaType || 'totp';
+      if (mfaType === 'totp' || mfaType === 'authenticator_app') {
+        if (config.mfaSecret) {
+          const { generateTOTPToken } = await import('./mfaHandler');
+          mfaToken = generateTOTPToken(config.mfaSecret);
+        }
       }
-      
+
+      if (!mfaToken) {
+        const backupCodes = config.mfaBackupCodes as string[] | null;
+        if (backupCodes && Array.isArray(backupCodes) && backupCodes.length > 0) {
+          mfaToken = backupCodes[0];
+        }
+      }
+
       if (mfaToken) {
-        await mfaPrompt.fill(mfaToken);
-        
-        // Submit MFA token
-        const mfaSubmit = await this.page.waitForSelector(
-          'button[type="submit"], button:has-text("Verify"), button:has-text("Submit"), button:has-text("Continue")',
+        await humanType(this.page, 'input[name="credentials.passcode"], input[name="verificationCode"], input[name="answer"]', mfaToken);
+        await humanDelay(this.page, 500, 1000);
+
+        const verifyBtn = await this.page.waitForSelector(
+          'input[value="Verify"], button:has-text("Verify"), input[type="submit"]',
           { timeout: 5000 }
         );
-        await mfaSubmit?.click();
-        
-        // Wait for MFA verification to complete
-        await this.page.waitForLoadState('networkidle', { timeout: 15000 });
+        await verifyBtn?.click();
+        await this.page.waitForLoadState('networkidle', { timeout: 20000 });
       }
     } catch (error) {
       console.error('MFA handling failed:', error);
-      // Don't throw - let the main flow handle login errors
     }
   }
 
   /**
-   * Texas WOTC OLS Portal automation
-   * Updated with resilient selectors and explicit waits
+   * Texas WOTC Portal Automation (Appian Cloud + Okta SSO)
+   * 
+   * Flow:
+   * 1. Navigate to Appian portal → redirects to Okta login
+   * 2. Okta SSO: Username → Next → Password → Verify
+   * 3. Handle MFA if required
+   * 4. Navigate: "New WOTC Application" → "Submit a Bulk"
+   * 5. Upload CSV file
+   * 6. Click Next → Wait for processing
+   * 7. Handle error file download if incomplete applications exist
+   * 8. Check certification checkboxes → Submit
+   * 9. Capture confirmation
    */
   private async submitTexasPortal(
     config: StatePortalConfig,
@@ -159,236 +194,470 @@ export class StatePortalBot {
     const screenshots: string[] = [];
     const credentials = config.credentials as any;
 
+    if (!credentials?.userId && !credentials?.username) {
+      return { success: false, message: 'No credentials configured for Texas portal' };
+    }
+
+    const username = credentials.userId || credentials.username;
+    const password = credentials.password;
+
     try {
-      // Navigate to portal with wait for network idle
-      await this.page.goto(config.portalUrl, { waitUntil: 'networkidle' });
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+      // ─── STEP 1: Navigate to Texas Appian portal ───
+      console.log('[TX Bot] Navigating to Texas portal...');
+      const portalUrl = config.portalUrl || 'https://twcgov.appiancloud.us/suite/sites/work-opportunity-tax-credit';
+      await this.page.goto(portalUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await humanDelay(this.page, 2000, 4000);
+      screenshots.push(await takeScreenshot(this.page, 'tx_01_landing'));
 
-      // Login with explicit waits
-      const usernameInput = await this.page.waitForSelector('input[name="username"], input[id="username"], #loginUsername', { timeout: 10000 });
-      const passwordInput = await this.page.waitForSelector('input[name="password"], input[id="password"], #loginPassword', { timeout: 10000 });
-      
-      if (!usernameInput || !passwordInput) {
-        throw new Error('Login form not found - portal structure may have changed');
+      // ─── STEP 2: Okta SSO Login ───
+      console.log('[TX Bot] Performing Okta SSO login...');
+
+      // 2a. Enter username (Okta uses various input selectors)
+      const usernameSelector = "input[name='identifier'], input[name='username'], input[id*='input'][type='text'], input[type='email']";
+      await this.page.waitForSelector(usernameSelector, { timeout: 30000 });
+      await humanDelay(this.page, 1000, 2000);
+      await humanType(this.page, usernameSelector, username);
+      await humanDelay(this.page, 500, 1500);
+
+      // 2b. Click "Next" button
+      const nextBtnSelector = "input[value='Next'], button:has-text('Next'), input[type='submit'][value='Next']";
+      const nextBtn = await this.page.waitForSelector(nextBtnSelector, { timeout: 10000 });
+      await nextBtn?.click();
+      await humanDelay(this.page, 2000, 4000);
+      screenshots.push(await takeScreenshot(this.page, 'tx_02_after_next'));
+
+      // 2c. Enter password
+      const passwordSelector = "input[name='credentials.passcode'], input[name='password'], input[id*='input'][type='password'], input[type='password']";
+      await this.page.waitForSelector(passwordSelector, { timeout: 15000 });
+      await humanDelay(this.page, 500, 1500);
+      await humanType(this.page, passwordSelector, password);
+      await humanDelay(this.page, 500, 1500);
+
+      // 2d. Click "Verify" button
+      const verifyBtnSelector = "input[value='Verify'], button:has-text('Verify'), input[value='Sign in'], input[type='submit']";
+      const verifyBtn = await this.page.waitForSelector(verifyBtnSelector, { timeout: 10000 });
+      await verifyBtn?.click();
+
+      // Wait for login to complete
+      await this.page.waitForLoadState('networkidle', { timeout: 45000 });
+      await humanDelay(this.page, 3000, 5000);
+
+      // ─── STEP 3: Handle MFA if needed ───
+      if (config.mfaEnabled) {
+        console.log('[TX Bot] Checking for MFA prompt...');
+        await this.handleOktaMFA(config);
       }
 
-      await usernameInput.fill(credentials.userId || credentials.username || '');
-      await passwordInput.fill(credentials.password || '');
-      
-      const submitButton = await this.page.waitForSelector('button[type="submit"], input[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
-      await submitButton?.click();
-      
-      // Wait for navigation and check for login errors
-      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
-      
-      // Handle MFA if enabled
-      if (config.mfaEnabled && config.mfaSecret) {
-        await this.handleMFA(config);
-      }
-      
-      const loginError = await this.page.locator('text=/invalid.*credentials|incorrect.*password|login.*failed/i').count();
+      // Check for login errors
+      const loginError = await this.page.locator("text=/invalid|incorrect|error|denied/i").count();
       if (loginError > 0) {
-        throw new Error('Invalid credentials - login failed');
-      }
-      
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
-
-      // Navigate to bulk upload with resilient selector
-      const bulkUploadLink = await this.page.waitForSelector('a:has-text("Submit a Bulk File"), button:has-text("Bulk Upload"), [data-testid="bulk-upload"]', { timeout: 15000 });
-      await bulkUploadLink?.click();
-      await this.page.waitForLoadState('networkidle');
-
-      // Upload CSV file with explicit wait for file input
-      const fileInput = await this.page.waitForSelector('input[type="file"]', { timeout: 10000 });
-      
-      if (!fileInput) {
-        throw new Error('File upload input not found');
-      }
-      
-      const buffer = Buffer.from(csvContent, 'utf-8');
-      await fileInput.setInputFiles({
-        name: `wotc_bulk_${Date.now()}.csv`,
-        mimeType: 'text/csv',
-        buffer,
-      });
-
-      // Wait for file to be processed (look for next button to become enabled)
-      await this.page.waitForSelector('button:has-text("NEXT"):not([disabled])', { timeout: 15000 });
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
-
-      // Click Next button
-      const nextButton = await this.page.waitForSelector('button:has-text("NEXT"), button:has-text("Next")');
-      await nextButton?.click();
-      
-      // Wait for processing page to load (Texas processes in batches of 200)
-      await this.page.waitForLoadState('networkidle');
-      
-      // Wait for processing indicator to disappear or results to appear
-      try {
-        await this.page.waitForSelector('.processing, [data-loading="true"]', { state: 'hidden', timeout: Math.ceil(employerCount / 200) * 10000 });
-      } catch {
-        // Processing indicator may not exist, continue
-      }
-
-      // Check for incomplete applications section
-      const incompleteSection = await this.page.locator('.incomplete-applications, [data-section="incomplete"], text=/incomplete.*applications/i').count();
-      if (incompleteSection > 0) {
-        screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
-        
-        // Try to download incomplete applications report
-        try {
-          const downloadPromise = this.page.waitForEvent('download', { timeout: 5000 });
-          const generateButton = await this.page.waitForSelector('button:has-text("GENERATE EXCEL FILE"), button:has-text("Download")');
-          await generateButton?.click();
-          await downloadPromise;
-        } catch {
-          // Download may not be available
-        }
-        
+        screenshots.push(await takeScreenshot(this.page, 'tx_03_login_error'));
         return {
           success: false,
-          message: 'Some applications were incomplete - review incomplete applications section',
-          errors: ['Incomplete applications detected'],
-          screenshots,
+          message: 'Login failed - invalid credentials or account locked',
+          screenshotPaths: screenshots,
         };
       }
 
-      // Accept electronic agreement checkboxes
-      const checkboxes = await this.page.locator('input[type="checkbox"]').all();
-      if (checkboxes.length >= 2) {
-        await checkboxes[0].check();
-        await checkboxes[1].check();
+      screenshots.push(await takeScreenshot(this.page, 'tx_03_logged_in'));
+      console.log('[TX Bot] Login successful');
+
+      // ─── STEP 4: Navigate to "New WOTC Application" ───
+      console.log('[TX Bot] Navigating to New WOTC Application...');
+      await humanDelay(this.page, 2000, 4000);
+
+      const newAppSelector = "span:has-text('New WOTC Application'), a:has-text('New WOTC Application'), [aria-label*='New WOTC']";
+      const newAppBtn = await this.page.waitForSelector(newAppSelector, { timeout: 30000 });
+      if (!newAppBtn) throw new Error('Could not find "New WOTC Application" button');
+      await humanDelay(this.page, 500, 1500);
+      await newAppBtn.click();
+      await humanDelay(this.page, 2000, 4000);
+      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
+
+      // ─── STEP 5: Select "Submit a Bulk" option ───
+      console.log('[TX Bot] Selecting Bulk submission option...');
+      const bulkSelector = "label:has-text('Submit a Bulk'), span:has-text('Submit a Bulk'), input[value*='Bulk'], [aria-label*='Bulk']";
+      const bulkOption = await this.page.waitForSelector(bulkSelector, { timeout: 20000 });
+      if (!bulkOption) throw new Error('Could not find "Submit a Bulk" option');
+      await humanDelay(this.page, 500, 1200);
+      await bulkOption.click();
+      await humanDelay(this.page, 2000, 4000);
+      screenshots.push(await takeScreenshot(this.page, 'tx_04_bulk_selected'));
+
+      // ─── STEP 6: Upload CSV file ───
+      console.log('[TX Bot] Uploading CSV file...');
+
+      // Write CSV to temp file
+      const tmpDir = path.join(os.tmpdir(), 'wotc-uploads');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      const csvFilePath = path.join(tmpDir, `TX_WOTC_Upload_${Date.now()}.csv`);
+      fs.writeFileSync(csvFilePath, csvContent, { encoding: 'ascii' });
+
+      // Find the hidden file input (Appian hides it behind a drag-drop zone)
+      const fileInput = await this.page.waitForSelector("input[type='file']", { timeout: 15000 });
+      if (!fileInput) throw new Error('Could not find file upload input');
+      await fileInput.setInputFiles(csvFilePath);
+      await humanDelay(this.page, 3000, 5000);
+      screenshots.push(await takeScreenshot(this.page, 'tx_05_file_uploaded'));
+
+      // ─── STEP 7: Click Next ───
+      console.log('[TX Bot] Clicking Next...');
+      const nextAppianBtn = await this.page.waitForSelector(
+        "button:has-text('Next'), input[value='Next']",
+        { timeout: 15000 }
+      );
+      await humanDelay(this.page, 500, 1500);
+      await nextAppianBtn?.click();
+      await humanDelay(this.page, 8000, 12000);
+
+      // Wait for processing (TX processes in batches of 200)
+      const processingWait = Math.max(10000, Math.ceil(employerCount / 200) * 8000);
+      await this.page.waitForLoadState('networkidle', { timeout: processingWait });
+      screenshots.push(await takeScreenshot(this.page, 'tx_06_after_next'));
+
+      // ─── STEP 8: Handle Incomplete Applications (Error File) ───
+      console.log('[TX Bot] Checking for incomplete applications...');
+      let errorFileData: Buffer | undefined;
+      let incompleteSSNs: string[] = [];
+
+      const generateBtn = await this.page.waitForSelector(
+        "span:has-text('Generate Excel File'), button:has-text('Generate Excel'), a:has-text('Generate')",
+        { timeout: 20000 }
+      ).catch(() => null);
+
+      if (generateBtn) {
+        console.log('[TX Bot] Errors detected - downloading error file...');
+        screenshots.push(await takeScreenshot(this.page, 'tx_07_errors_detected'));
+
+        // Click Generate Excel using JavaScript (Appian sticky headers can intercept)
+        await this.page.evaluate((el: any) => el.click(), generateBtn);
+        await humanDelay(this.page, 3000, 6000);
+
+        // Wait for download link and click it
+        const downloadLink = await this.page.waitForSelector(
+          "a:has-text('Download Incomplete Applications'), a[href*='download']",
+          { timeout: 30000 }
+        ).catch(() => null);
+
+        if (downloadLink) {
+          const [download] = await Promise.all([
+            this.page.waitForEvent('download', { timeout: 30000 }).catch(() => null),
+            this.page.evaluate((el: any) => el.click(), downloadLink),
+          ]);
+
+          if (download) {
+            const downloadPath = path.join(tmpDir, `TX_Errors_${Date.now()}.xlsx`);
+            await download.saveAs(downloadPath);
+            errorFileData = fs.readFileSync(downloadPath);
+            console.log('[TX Bot] Error file downloaded');
+
+            // Parse error file to get incomplete SSNs
+            try {
+              const XLSX = await import('xlsx');
+              const workbook = XLSX.read(errorFileData, { type: 'buffer' });
+              const sheet = workbook.Sheets[workbook.SheetNames[0]];
+              const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
+              incompleteSSNs = data
+                .map((row: Record<string, any>) => String(row['SSN'] || row['ssn'] || '').trim())
+                .filter((ssn: string) => ssn.length > 0);
+              console.log(`[TX Bot] Found ${incompleteSSNs.length} incomplete SSNs`);
+            } catch (parseError) {
+              console.error('[TX Bot] Failed to parse error file:', parseError);
+            }
+          }
+        }
+        await humanDelay(this.page, 2000, 4000);
       } else {
-        throw new Error('Electronic agreement checkboxes not found');
+        console.log('[TX Bot] No errors detected - clean upload');
       }
 
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+      // ─── STEP 9: Submit or Cancel ───
+      const submitBtn = await this.page.waitForSelector(
+        "button:has-text('Submit'), input[value='Submit']",
+        { timeout: 10000 }
+      ).catch(() => null);
 
-      // Submit with explicit wait
-      const finalSubmitButton = await this.page.waitForSelector('button:has-text("SUBMIT"), button:has-text("Submit")');
-      await finalSubmitButton?.click();
-      
-      // Wait for confirmation page
-      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+      if (submitBtn) {
+        // Valid applications exist - check certification boxes first
+        console.log('[TX Bot] Checking certification checkboxes...');
+        const checkboxLabels = await this.page.$$("div[class*='FieldLayout'] label, input[type='checkbox']");
 
-      // Look for confirmation with multiple patterns
-      const confirmationText = await this.page.textContent('body');
-      const confirmationPatterns = [
-        /claim number range:\s*([\d-]+\s*to\s*[\d-]+)/i,
-        /confirmation.*number[s]?:\s*([\d-]+(?:\s*to\s*[\d-]+)?)/i,
-        /successfully.*submitted.*(\d+)\s*applications?/i,
-      ];
-      
-      for (const pattern of confirmationPatterns) {
-        const match = confirmationText?.match(pattern);
-        if (match) {
+        for (const cb of checkboxLabels) {
+          const isVisible = await cb.isVisible();
+          const isEnabled = await cb.isEnabled();
+          if (isVisible && isEnabled) {
+            await cb.click();
+            await humanDelay(this.page, 200, 500);
+          }
+        }
+        await humanDelay(this.page, 1000, 2000);
+        screenshots.push(await takeScreenshot(this.page, 'tx_08_checkboxes_checked'));
+
+        // Click Submit
+        console.log('[TX Bot] Submitting...');
+        await submitBtn.click();
+        await this.page.waitForLoadState('networkidle', { timeout: 45000 });
+        await humanDelay(this.page, 3000, 5000);
+        screenshots.push(await takeScreenshot(this.page, 'tx_09_submitted'));
+
+        // Look for confirmation
+        const bodyText = await this.page.textContent('body') || '';
+        const confirmPatterns = [
+          /claim number range:\s*([\d-]+\s*(?:to|through)\s*[\d-]+)/i,
+          /confirmation.*?number[s]?:?\s*([\d-]+(?:\s*(?:to|through)\s*[\d-]+)?)/i,
+          /successfully.*?submitted.*?(\d+)\s*applications?/i,
+          /batch.*?number[s]?:?\s*([\w-]+)/i,
+        ];
+
+        for (const pattern of confirmPatterns) {
+          const match = bodyText.match(pattern);
+          if (match) {
+            console.log(`[TX Bot] Confirmation found: ${match[1]}`);
+            return {
+              success: true,
+              message: `Texas bulk upload successful. ${match[0]}`,
+              confirmationNumbers: [match[1]],
+              screenshotPaths: screenshots,
+              errorFileData,
+              incompleteSSNs: incompleteSSNs.length > 0 ? incompleteSSNs : undefined,
+              submittedCount: employerCount - incompleteSSNs.length,
+            };
+          }
+        }
+
+        // Success without specific confirmation number
+        const successIndicators = await this.page.locator("text=/success|submitted|complete|received/i").count();
+        if (successIndicators > 0) {
           return {
             success: true,
-            message: 'Texas bulk upload successful',
-            confirmationNumbers: [match[1]],
-            screenshots,
+            message: 'Texas bulk upload completed successfully',
+            screenshotPaths: screenshots,
+            errorFileData,
+            incompleteSSNs: incompleteSSNs.length > 0 ? incompleteSSNs : undefined,
+            submittedCount: employerCount - incompleteSSNs.length,
           };
         }
-      }
 
-      // Check for success indicators even without specific confirmation number
-      const successIndicator = await this.page.locator('text=/success|submitted|complete/i, .success, [data-status="success"]').count();
-      if (successIndicator > 0) {
         return {
           success: true,
-          message: 'Upload completed successfully',
-          screenshots,
+          message: 'Upload submitted but explicit confirmation not detected - verify in portal',
+          screenshotPaths: screenshots,
+          errorFileData,
+          incompleteSSNs: incompleteSSNs.length > 0 ? incompleteSSNs : undefined,
+          submittedCount: employerCount - incompleteSSNs.length,
+        };
+
+      } else {
+        // No submit button = 100% errors
+        console.log('[TX Bot] No Submit button found - all applications had errors');
+        const cancelBtn = await this.page.waitForSelector(
+          "span:has-text('Cancel'), button:has-text('Cancel')",
+          { timeout: 10000 }
+        ).catch(() => null);
+
+        if (cancelBtn) {
+          await cancelBtn.click();
+          await humanDelay(this.page, 2000, 4000);
+        }
+
+        return {
+          success: false,
+          message: 'All applications had errors - submission cancelled',
+          errors: ['100% of applications were incomplete or had errors'],
+          screenshotPaths: screenshots,
+          errorFileData,
+          incompleteSSNs: incompleteSSNs.length > 0 ? incompleteSSNs : undefined,
+          submittedCount: 0,
         };
       }
 
-      return {
-        success: false,
-        message: 'Upload completed but success confirmation not found',
-        screenshots,
-      };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
-      
+      console.error('[TX Bot] Error:', errorMessage);
+      try {
+        screenshots.push(await takeScreenshot(this.page!, 'tx_error'));
+      } catch {}
+
       return {
         success: false,
         message: `Texas portal automation failed: ${errorMessage}`,
         errors: [errorMessage],
-        screenshots,
+        screenshotPaths: screenshots,
       };
+    } finally {
+      // Cleanup temp files (screenshots stay for audit)
+      const tmpDir = path.join(os.tmpdir(), 'wotc-uploads');
+      try {
+        const files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.csv'));
+        for (const f of files) {
+          try { fs.unlinkSync(path.join(tmpDir, f)); } catch {}
+        }
+      } catch {}
     }
   }
 
   /**
-   * Arizona WOTC Portal automation
+   * Capture determinations from Texas portal
+   * Scrapes determination results and returns them for database update
    */
-  private async submitArizonaPortal(
-    config: StatePortalConfig,
-    csvContent: string,
-    employerCount: number
-  ): Promise<BotResult> {
+  async captureDeterminations(config: StatePortalConfig): Promise<BotResult & { determinations?: Array<{ ssn: string; status: string; claimNumber?: string; determinationDate?: string }> }> {
     if (!this.page) throw new Error('Page not initialized');
 
     const screenshots: string[] = [];
     const credentials = config.credentials as any;
+    const username = credentials?.userId || credentials?.username;
+    const password = credentials?.password;
+
+    if (!username || !password) {
+      return { success: false, message: 'No credentials configured for Texas portal' };
+    }
 
     try {
-      // Navigate to portal
-      await this.page.goto(config.portalUrl);
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+      // Login using Okta flow
+      const portalUrl = config.portalUrl || 'https://twcgov.appiancloud.us/suite/sites/work-opportunity-tax-credit';
+      await this.page.goto(portalUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      await humanDelay(this.page, 2000, 4000);
 
-      // Login (Arizona-specific selectors would go here)
-      await this.page.fill('#username', credentials.userId || credentials.username || '');
-      await this.page.fill('#password', credentials.password || '');
-      await this.page.click('button[type="submit"]');
-      await this.page.waitForNavigation({ timeout: 30000 });
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+      // Okta login
+      const usernameSelector = "input[name='identifier'], input[name='username'], input[id*='input'][type='text'], input[type='email']";
+      await this.page.waitForSelector(usernameSelector, { timeout: 30000 });
+      await humanType(this.page, usernameSelector, username);
+      await humanDelay(this.page, 500, 1500);
 
-      // Navigate to bulk upload section
-      await this.page.click('text=Bulk Upload');
-      await this.page.waitForTimeout(2000);
+      const nextBtn = await this.page.waitForSelector("input[value='Next'], button:has-text('Next')", { timeout: 10000 });
+      await nextBtn?.click();
+      await humanDelay(this.page, 2000, 4000);
 
-      // Upload CSV
-      const fileInput = await this.page.locator('input[type="file"]');
-      const buffer = Buffer.from(csvContent, 'utf-8');
-      await fileInput.setInputFiles({
-        name: `arizona_wotc_${Date.now()}.csv`,
-        mimeType: 'text/csv',
-        buffer,
-      });
+      const passwordSelector = "input[name='credentials.passcode'], input[type='password']";
+      await this.page.waitForSelector(passwordSelector, { timeout: 15000 });
+      await humanType(this.page, passwordSelector, password);
+      await humanDelay(this.page, 500, 1500);
 
-      // Wait and submit
-      await this.page.waitForTimeout(3000);
-      await this.page.click('button:has-text("Submit")');
-      await this.page.waitForTimeout(5000);
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
+      const verifyBtn = await this.page.waitForSelector("input[value='Verify'], button:has-text('Verify'), input[type='submit']", { timeout: 10000 });
+      await verifyBtn?.click();
+      await this.page.waitForLoadState('networkidle', { timeout: 45000 });
+      await humanDelay(this.page, 3000, 5000);
 
-      // Check for success message
-      const successMessage = await this.page.locator('text=/successfully|submitted|complete/i').count();
-      
-      if (successMessage > 0) {
+      if (config.mfaEnabled) await this.handleOktaMFA(config);
+
+      screenshots.push(await takeScreenshot(this.page, 'tx_det_01_logged_in'));
+      console.log('[TX Bot] Logged in for determination capture');
+
+      // Navigate to determinations/status page
+      const statusSelectors = [
+        "span:has-text('Application Status')",
+        "a:has-text('View Status')",
+        "span:has-text('Determinations')",
+        "a:has-text('Determination')",
+        "span:has-text('Status')",
+      ];
+
+      let statusNav = null;
+      for (const sel of statusSelectors) {
+        statusNav = await this.page.$(sel);
+        if (statusNav) break;
+      }
+
+      if (!statusNav) {
+        screenshots.push(await takeScreenshot(this.page, 'tx_det_02_no_status_nav'));
         return {
-          success: true,
-          message: 'Arizona bulk upload successful',
-          screenshots,
+          success: false,
+          message: 'Could not find determination/status section in Texas portal',
+          screenshotPaths: screenshots,
         };
       }
 
+      await humanDelay(this.page, 500, 1500);
+      await statusNav.click();
+      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
+      await humanDelay(this.page, 2000, 4000);
+      screenshots.push(await takeScreenshot(this.page, 'tx_det_02_status_page'));
+
+      // Try to download determination report if available
+      const downloadReportBtn = await this.page.$(
+        "a:has-text('Download'), button:has-text('Export'), span:has-text('Generate Report'), a:has-text('Report')"
+      );
+
+      const determinations: Array<{ ssn: string; status: string; claimNumber?: string; determinationDate?: string }> = [];
+
+      if (downloadReportBtn) {
+        const [download] = await Promise.all([
+          this.page.waitForEvent('download', { timeout: 30000 }).catch(() => null),
+          downloadReportBtn.click(),
+        ]);
+
+        if (download) {
+          const downloadPath = path.join(os.tmpdir(), 'wotc-uploads', `TX_Determinations_${Date.now()}.xlsx`);
+          await download.saveAs(downloadPath);
+          const fileData = fs.readFileSync(downloadPath);
+
+          try {
+            const XLSX = await import('xlsx');
+            const workbook = XLSX.read(fileData, { type: 'buffer' });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const data = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
+
+            for (const row of data) {
+              const ssn = String(row['SSN'] || row['ssn'] || row['Employee SSN'] || '').trim();
+              const status = String(row['Status'] || row['Determination'] || row['Result'] || '').trim();
+              const claimNumber = String(row['Claim Number'] || row['Claim #'] || row['ClaimNumber'] || '').trim();
+              const determinationDate = String(row['Date'] || row['Determination Date'] || '').trim();
+
+              if (ssn) {
+                determinations.push({
+                  ssn,
+                  status: status || 'Unknown',
+                  claimNumber: claimNumber || undefined,
+                  determinationDate: determinationDate || undefined,
+                });
+              }
+            }
+          } catch (parseErr) {
+            console.error('[TX Bot] Failed to parse determination file:', parseErr);
+          }
+        }
+      } else {
+        // Scrape determinations from the page table
+        console.log('[TX Bot] Attempting to scrape determinations from page...');
+        const rows = await this.page.$$('table tbody tr, [role="row"]');
+
+        for (const row of rows) {
+          const cells = await row.$$('td, [role="cell"]');
+          if (cells.length >= 3) {
+            const cellTexts = await Promise.all(cells.map(c => c.textContent()));
+            const ssn = cellTexts.find(t => t && /\d{3}-?\d{2}-?\d{4}/.test(t))?.trim() || '';
+            const status = cellTexts.find(t => t && /certified|denied|pending|approved/i.test(t))?.trim() || '';
+
+            if (ssn) {
+              determinations.push({
+                ssn: ssn.replace(/[^0-9]/g, ''),
+                status: status || 'Unknown',
+              });
+            }
+          }
+        }
+      }
+
+      screenshots.push(await takeScreenshot(this.page, 'tx_det_03_results'));
+      console.log(`[TX Bot] Captured ${determinations.length} determinations`);
+
       return {
-        success: false,
-        message: 'Upload completed but success confirmation not found',
-        screenshots,
+        success: determinations.length > 0,
+        message: determinations.length > 0
+          ? `Captured ${determinations.length} determinations from Texas portal`
+          : 'No determinations found in Texas portal',
+        screenshotPaths: screenshots,
+        determinations,
       };
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      screenshots.push(await this.page.screenshot({ encoding: 'base64' }));
-      
+      try { screenshots.push(await takeScreenshot(this.page!, 'tx_det_error')); } catch {}
       return {
         success: false,
-        message: `Arizona portal automation failed: ${errorMessage}`,
+        message: `Determination capture failed: ${errorMessage}`,
         errors: [errorMessage],
-        screenshots,
+        screenshotPaths: screenshots,
       };
     }
   }
@@ -399,34 +668,54 @@ export class StatePortalBot {
   async testCredentials(config: StatePortalConfig): Promise<BotResult> {
     if (!this.page) throw new Error('Page not initialized');
 
+    const credentials = config.credentials as any;
+    const username = credentials?.userId || credentials?.username;
+    const password = credentials?.password;
+
+    if (!username || !password) {
+      return { success: false, message: 'No credentials configured' };
+    }
+
     try {
-      const credentials = config.credentials as any;
-      
-      await this.page.goto(config.portalUrl);
-      await this.page.fill('input[name="username"]', credentials.userId || credentials.username || '');
-      await this.page.fill('input[name="password"]', credentials.password || '');
-      await this.page.click('button[type="submit"]');
-      
-      await this.page.waitForNavigation({ timeout: 15000 });
-      
-      // Check if login successful
-      const hasError = await this.page.locator('text=/invalid|error|incorrect/i').count();
-      
-      if (hasError > 0) {
-        return {
-          success: false,
-          message: 'Invalid credentials',
-        };
+      const portalUrl = config.portalUrl || '';
+      await this.page.goto(portalUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      await humanDelay(this.page, 1000, 3000);
+
+      // Okta flow for Texas
+      if (config.stateCode === 'TX') {
+        const usernameSelector = "input[name='identifier'], input[name='username'], input[type='text'], input[type='email']";
+        await this.page.waitForSelector(usernameSelector, { timeout: 20000 });
+        await humanType(this.page, usernameSelector, username);
+
+        const nextBtn = await this.page.waitForSelector("input[value='Next'], button:has-text('Next')", { timeout: 10000 });
+        await nextBtn?.click();
+        await humanDelay(this.page, 2000, 4000);
+
+        await this.page.waitForSelector("input[type='password']", { timeout: 15000 });
+        await humanType(this.page, "input[type='password']", password);
+
+        const verifyBtn = await this.page.waitForSelector("input[value='Verify'], button:has-text('Verify'), input[type='submit']", { timeout: 10000 });
+        await verifyBtn?.click();
+      } else {
+        // Generic login flow
+        await this.page.fill("input[name='username'], #username", username);
+        await this.page.fill("input[name='password'], #password", password);
+        await this.page.click("button[type='submit'], input[type='submit']");
       }
 
-      return {
-        success: true,
-        message: 'Credentials valid',
-      };
+      await this.page.waitForLoadState('networkidle', { timeout: 30000 });
+      await humanDelay(this.page, 2000, 4000);
+
+      const hasError = await this.page.locator("text=/invalid|incorrect|error|denied|failed/i").count();
+      if (hasError > 0) {
+        return { success: false, message: 'Invalid credentials' };
+      }
+
+      return { success: true, message: 'Credentials validated successfully' };
     } catch (error) {
       return {
         success: false,
-        message: `Credential test failed: ${error}`,
+        message: `Credential test failed: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }
