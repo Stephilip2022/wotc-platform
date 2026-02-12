@@ -290,6 +290,12 @@ export const screenings = pgTable("screenings", {
   certifiedAt: timestamp("certified_at"),
   certificationExpiresAt: timestamp("certification_expires_at"),
   
+  // Questionnaire lifecycle tracking
+  questionnaireAccessedAt: timestamp("questionnaire_accessed_at"),
+  questionnaireStartedAt: timestamp("questionnaire_started_at"),
+  questionnaireCompletedAt: timestamp("questionnaire_completed_at"),
+  questionnaireResponseId: varchar("questionnaire_response_id"),
+
   // Form generation
   form8850Generated: boolean("form_8850_generated").default(false),
   form9061Generated: boolean("form_9061_generated").default(false),
@@ -410,7 +416,7 @@ export const hoursWorked = pgTable("hours_worked", {
   batchId: varchar("batch_id"), // For grouping bulk imports
   
   // Audit
-  enteredBy: varchar("entered_by").notNull().references(() => users.id),
+  enteredBy: varchar("entered_by").references(() => users.id),
   enteredAt: timestamp("entered_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

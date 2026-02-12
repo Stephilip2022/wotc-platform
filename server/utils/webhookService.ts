@@ -12,6 +12,11 @@ export const WEBHOOK_EVENTS = {
   EMPLOYEE_HIRED: "employee.hired",
   EMPLOYEE_STATUS_CHANGED: "employee.status_changed",
   
+  // Questionnaire lifecycle events
+  QUESTIONNAIRE_ACCESSED: "questionnaire.accessed",
+  QUESTIONNAIRE_STARTED: "questionnaire.started",
+  QUESTIONNAIRE_COMPLETED: "questionnaire.completed",
+
   // Screening events
   SCREENING_STARTED: "screening.started",
   SCREENING_COMPLETED: "screening.completed",
@@ -27,6 +32,10 @@ export const WEBHOOK_EVENTS = {
   // Credit events
   CREDIT_CALCULATED: "credit.calculated",
   CREDIT_UPDATED: "credit.updated",
+  
+  // Payroll events
+  PAYROLL_IMPORTED: "payroll.imported",
+  CREDITS_RECALCULATED: "credits.recalculated",
   
   // Billing events (for employers)
   INVOICE_GENERATED: "invoice.generated",

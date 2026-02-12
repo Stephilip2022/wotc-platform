@@ -20,63 +20,112 @@ export interface TargetGroup {
   name: string;
   maxCredit: number;
   hoursRequired: number;
+  qualifiedWageCap: number;
+  secondYearWageCap?: number;
+  secondYearRate?: number;
 }
 
-// WOTC Target Groups (2024)
+// WOTC Target Groups (2024) with IRS-defined wage caps
 export const TARGET_GROUPS: Record<string, TargetGroup> = {
   "IV-A": {
     code: "IV-A",
-    name: "TANF Recipient (Long-term)",
+    name: "TANF Recipient (Long-term, 18+ months)",
     maxCredit: 9000,
     hoursRequired: 400,
+    qualifiedWageCap: 10000,
+    secondYearWageCap: 10000,
+    secondYearRate: 0.50,
   },
   "IV-B": {
     code: "IV-B",
     name: "TANF Recipient (Short-term)",
     maxCredit: 2400,
     hoursRequired: 120,
+    qualifiedWageCap: 6000,
   },
   "V": {
     code: "V",
     name: "Qualified Veteran",
+    maxCredit: 2400,
+    hoursRequired: 400,
+    qualifiedWageCap: 6000,
+  },
+  "V-SNAP": {
+    code: "V-SNAP",
+    name: "Veteran (SNAP Recipient)",
+    maxCredit: 2400,
+    hoursRequired: 400,
+    qualifiedWageCap: 6000,
+  },
+  "V-DISABLED": {
+    code: "V-DISABLED",
+    name: "Disabled Veteran (discharged past year)",
+    maxCredit: 4800,
+    hoursRequired: 400,
+    qualifiedWageCap: 12000,
+  },
+  "V-UNEMPLOYED": {
+    code: "V-UNEMPLOYED",
+    name: "Veteran (unemployed 4 weeks to 6 months)",
+    maxCredit: 2400,
+    hoursRequired: 400,
+    qualifiedWageCap: 6000,
+  },
+  "V-UNEMPLOYED-6MO": {
+    code: "V-UNEMPLOYED-6MO",
+    name: "Veteran (unemployed 6+ months)",
+    maxCredit: 5600,
+    hoursRequired: 400,
+    qualifiedWageCap: 14000,
+  },
+  "V-DISABLED-UNEMPLOYED": {
+    code: "V-DISABLED-UNEMPLOYED",
+    name: "Disabled Veteran (unemployed 6+ months)",
     maxCredit: 9600,
     hoursRequired: 400,
+    qualifiedWageCap: 24000,
   },
   "VI": {
     code: "VI",
     name: "Ex-Felon",
     maxCredit: 2400,
     hoursRequired: 400,
+    qualifiedWageCap: 6000,
   },
   "VII": {
     code: "VII",
     name: "Designated Community Resident",
     maxCredit: 2400,
     hoursRequired: 400,
+    qualifiedWageCap: 6000,
   },
   "VIII": {
     code: "VIII",
     name: "Vocational Rehabilitation Referral",
     maxCredit: 2400,
     hoursRequired: 400,
+    qualifiedWageCap: 6000,
   },
   "IX": {
     code: "IX",
-    name: "SNAP Recipient",
+    name: "SNAP Recipient (age 18-39)",
     maxCredit: 2400,
     hoursRequired: 400,
+    qualifiedWageCap: 6000,
   },
   "X": {
     code: "X",
     name: "SSI Recipient",
     maxCredit: 2400,
     hoursRequired: 400,
+    qualifiedWageCap: 6000,
   },
   "XI": {
     code: "XI",
     name: "Summer Youth Employee",
     maxCredit: 1200,
     hoursRequired: 120,
+    qualifiedWageCap: 3000,
   },
 };
 
@@ -255,34 +304,97 @@ function calculateAge(dob: string): number {
   return age;
 }
 
+export interface CreditBreakdown {
+  totalCredit: number;
+  firstYearCredit: number;
+  secondYearCredit: number;
+  creditPercentage: number;
+  qualifiedFirstYearWages: number;
+  qualifiedSecondYearWages: number;
+  wageCap: number;
+  hoursWorked: number;
+  hoursTier: '0-119' | '120-399' | '400+';
+  targetGroupCode: string;
+  targetGroupName: string;
+}
+
 /**
  * Calculate actual WOTC credit based on hours worked and wages
- * WOTC has two tier thresholds:
- * - 120-399 hours: 25% of qualified wages
- * - 400+ hours: 40% of qualified wages
+ * 
+ * IRS WOTC Credit Calculation Rules:
  * - < 120 hours: No credit
+ * - 120-399 hours: 25% of qualified first-year wages (up to wage cap)
+ * - 400+ hours: 40% of qualified first-year wages (up to wage cap)
+ * 
+ * Wage caps vary by target group:
+ * - Standard (most groups): $6,000 first-year wages → max $2,400 credit
+ * - Long-term TANF (IV-A): $10,000 first-year + $10,000 second-year (at 50%) → max $9,000
+ * - Disabled Veteran (V-DISABLED): $12,000 → max $4,800
+ * - Disabled Veteran unemployed 6+ months (V-DISABLED-UNEMPLOYED): $24,000 → max $9,600
+ * - Veteran unemployed 6+ months (V-UNEMPLOYED-6MO): $14,000 → max $5,600
+ * - Summer Youth (XI): $3,000 → max $1,200
  */
 export function calculateCredit(
   targetGroupCode: string,
   hoursWorked: number,
-  wagesEarned: number
+  wagesEarned: number,
+  secondYearWages?: number
 ): number {
+  return calculateCreditDetailed(targetGroupCode, hoursWorked, wagesEarned, secondYearWages).totalCredit;
+}
+
+export function calculateCreditDetailed(
+  targetGroupCode: string,
+  hoursWorked: number,
+  wagesEarned: number,
+  secondYearWages?: number
+): CreditBreakdown {
   const targetGroup = TARGET_GROUPS[targetGroupCode];
-  if (!targetGroup) {
-    return 0;
+  const empty: CreditBreakdown = {
+    totalCredit: 0,
+    firstYearCredit: 0,
+    secondYearCredit: 0,
+    creditPercentage: 0,
+    qualifiedFirstYearWages: 0,
+    qualifiedSecondYearWages: 0,
+    wageCap: 0,
+    hoursWorked,
+    hoursTier: '0-119',
+    targetGroupCode,
+    targetGroupName: targetGroup?.name || 'Unknown',
+  };
+
+  if (!targetGroup) return empty;
+
+  if (hoursWorked < 120) return { ...empty, wageCap: targetGroup.qualifiedWageCap };
+
+  const creditPercentage = hoursWorked >= 400 ? 0.40 : 0.25;
+  const hoursTier = hoursWorked >= 400 ? '400+' : '120-399';
+
+  const qualifiedFirstYearWages = Math.min(wagesEarned, targetGroup.qualifiedWageCap);
+  const firstYearCredit = qualifiedFirstYearWages * creditPercentage;
+
+  let secondYearCredit = 0;
+  let qualifiedSecondYearWages = 0;
+
+  if (targetGroup.secondYearWageCap && targetGroup.secondYearRate && secondYearWages && secondYearWages > 0) {
+    qualifiedSecondYearWages = Math.min(secondYearWages, targetGroup.secondYearWageCap);
+    secondYearCredit = qualifiedSecondYearWages * targetGroup.secondYearRate;
   }
 
-  // Must meet minimum 120-hour threshold for any credit
-  if (hoursWorked < 120) {
-    return 0;
-  }
+  const totalCredit = Math.min(firstYearCredit + secondYearCredit, targetGroup.maxCredit);
 
-  // Credit calculation rules based on tier
-  let creditPercentage = 0.25; // Default 25% for 120-399 hours
-  if (hoursWorked >= 400) {
-    creditPercentage = 0.40; // 40% for 400+ hours
-  }
-
-  const calculatedCredit = wagesEarned * creditPercentage;
-  return Math.min(calculatedCredit, targetGroup.maxCredit);
+  return {
+    totalCredit: Math.round(totalCredit * 100) / 100,
+    firstYearCredit: Math.round(firstYearCredit * 100) / 100,
+    secondYearCredit: Math.round(secondYearCredit * 100) / 100,
+    creditPercentage,
+    qualifiedFirstYearWages,
+    qualifiedSecondYearWages,
+    wageCap: targetGroup.qualifiedWageCap,
+    hoursWorked,
+    hoursTier,
+    targetGroupCode,
+    targetGroupName: targetGroup.name,
+  };
 }
