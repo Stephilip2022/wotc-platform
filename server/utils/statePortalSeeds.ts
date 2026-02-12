@@ -8,38 +8,26 @@ export const statePortalSeeds = [
     stateCode: "CA",
     stateName: "California",
     portalUrl: "https://eddservices.edd.ca.gov/wotc/",
-    submissionUrl: "https://eddservices.edd.ca.gov/wotc/upload",
+    submissionUrl: "https://eddservices.edd.ca.gov/wotc/",
     authType: "credentials",
+    automationProvider: "california_edd",
     loginFieldSelectors: {
-      username: "#username",
-      password: "#password",
-      submitButton: "#loginButton",
-      successIndicator: ".dashboard-container"
+      username: "input[id*='username'], input[id*='user']",
+      password: "input[type='password']",
+      submitButton: "button:has-text('Log In'), input[value='Log In']",
+      successIndicator: "a:has-text('Submit Multiple Applications')"
     },
-    requiredColumns: [
-      "Employee Last Name",
-      "Employee First Name",
-      "SSN",
-      "Date of Birth",
-      "Hire Date",
-      "Target Group Code",
-      "Disability Status"
-    ],
-    optionalColumns: [
-      "Phone",
-      "Email",
-      "Veteran Status",
-      "SNAP Benefits"
-    ],
-    dateFormat: "MM/DD/YYYY",
-    maxBatchSize: 250,
+    requiredColumns: [],
+    optionalColumns: [],
+    dateFormat: "YYYY-MM-DD",
+    maxBatchSize: 200,
     submissionFrequency: "weekly",
     automationEnabled: true,
     expectedProcessingDays: 45,
     supportEmail: "wotc@edd.ca.gov",
     supportPhone: "(916) 464-3300",
     status: "active",
-    notes: "California requires additional disability documentation. Use Form EDD 9198."
+    notes: "California uses XML batch upload format (wotcBatch). Up to 200 records per batch. Portal: EDD Services. Agent: SCREEN TECHNOLOGIES LLC DBA ROCKERBOX. Contact: Wayne Goodwin (employer), GARRETT R (agent)."
   },
   {
     stateCode: "NY",

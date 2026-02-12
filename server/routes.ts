@@ -5355,6 +5355,120 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // CALIFORNIA EDD WOTC AUTOMATION
+  // ============================================================================
+
+  app.post("/api/admin/california/generate-xml", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { records } = req.body;
+      if (!records || !Array.isArray(records) || records.length === 0) {
+        return res.status(400).json({ error: "records array required" });
+      }
+
+      const requiredFields = ['firstName', 'lastName', 'ssn', 'dateOfBirth', 'startDate', 'qualifie', 'companyName', 'fein', 'address', 'city', 'zipCode'];
+      for (let i = 0; i < records.length; i++) {
+        const missing = requiredFields.filter(f => !records[i][f]);
+        if (missing.length > 0) {
+          return res.status(400).json({
+            error: `Record ${i + 1} missing required fields: ${missing.join(', ')}`,
+          });
+        }
+      }
+
+      const { generateCaliforniaXML, generateSingleCaliforniaXML } = await import('./utils/californiaXmlGenerator');
+      const batches = generateCaliforniaXML(records);
+
+      res.json({
+        success: true,
+        totalRecords: records.length,
+        batchCount: batches.length,
+        batches: batches.map(b => ({
+          batchNumber: b.batchNumber,
+          recordCount: b.recordCount,
+          fileName: b.fileName,
+          preview: b.xmlContent.substring(0, 500),
+          xmlContent: b.xmlContent,
+        })),
+      });
+    } catch (error: any) {
+      console.error("Error generating CA XML:", error);
+      res.status(500).json({ error: error.message || "Failed to generate California XML" });
+    }
+  });
+
+  app.post("/api/admin/california/submit", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { xmlContent, portalUrl, credentials } = req.body;
+      if (!xmlContent) {
+        return res.status(400).json({ error: "xmlContent required" });
+      }
+      if (!credentials?.username || !credentials?.password) {
+        return res.status(400).json({ error: "Portal credentials (username, password) required" });
+      }
+
+      const { CaliforniaBot } = await import('./utils/californiaBot');
+      const bot = new CaliforniaBot();
+
+      try {
+        await bot.initialize();
+        const url = portalUrl || 'https://eddservices.edd.ca.gov/wotc/';
+        const result = await bot.submit(url, credentials, xmlContent);
+        res.json(result);
+      } finally {
+        await bot.close();
+      }
+    } catch (error: any) {
+      console.error("Error submitting to CA EDD:", error);
+      res.status(500).json({ error: error.message || "California submission failed" });
+    }
+  });
+
+  app.post("/api/admin/california/submit-batches", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = getAuth(req).userId!;
+      const user = await getUserByClerkId(userId);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { batches, portalUrl, credentials } = req.body;
+      if (!batches || !Array.isArray(batches) || batches.length === 0) {
+        return res.status(400).json({ error: "batches array required with entries: { xmlContent, fileName }" });
+      }
+      if (!credentials?.username || !credentials?.password) {
+        return res.status(400).json({ error: "Portal credentials (username, password) required" });
+      }
+
+      const { CaliforniaBot } = await import('./utils/californiaBot');
+      const bot = new CaliforniaBot();
+
+      try {
+        await bot.initialize();
+        const url = portalUrl || 'https://eddservices.edd.ca.gov/wotc/';
+        const results = await bot.submitMultipleBatches(url, credentials, batches);
+        res.json({ results });
+      } finally {
+        await bot.close();
+      }
+    } catch (error: any) {
+      console.error("Error in CA batch submission:", error);
+      res.status(500).json({ error: error.message || "California batch submission failed" });
+    }
+  });
+
+  // ============================================================================
   // PHASE 5: AI PREDICTION, QUESTIONNAIRE OPTIMIZATION & CREDIT FORECASTING
   // ============================================================================
 

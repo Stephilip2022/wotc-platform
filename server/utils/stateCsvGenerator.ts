@@ -213,8 +213,28 @@ export function validateEmployeeForSubmission(
       const { validateTexasSubmission } = require('./texasCsvGenerator');
       return validateTexasSubmission(employee, screening);
     }
+    case 'CA': {
+      const caErrors: string[] = [];
+      if (!employee.firstName) caErrors.push('First name required');
+      if (!employee.lastName) caErrors.push('Last name required');
+      if (!employee.ssn) caErrors.push('SSN required');
+      if (!employee.dateOfBirth) caErrors.push('Date of birth required');
+      if (!employee.hireDate && !employee.startDate) caErrors.push('Hire date or start date required');
+      if (!employee.address) caErrors.push('Address required');
+      if (!employee.city) caErrors.push('City required');
+      if (!employee.zipCode) caErrors.push('ZIP code required');
+
+      const caGroups = Array.isArray(screening.targetGroups) ? screening.targetGroups : [];
+      const hasQualifying = caGroups.some((g: string) =>
+        ['SNAP', 'SSI', 'TANF', 'LTANF'].some(q => g.toUpperCase().includes(q))
+      );
+      if (!hasQualifying) {
+        caErrors.push('Must qualify for SNAP, SSI, TANF, or LTANF for California XML submission');
+      }
+
+      return { valid: caErrors.length === 0, errors: caErrors };
+    }
     case 'AZ': {
-      // Basic validation for Arizona
       const errors: string[] = [];
       if (!employee.firstName) errors.push('First name required');
       if (!employee.lastName) errors.push('Last name required');

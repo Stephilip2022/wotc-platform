@@ -114,6 +114,8 @@ export class StatePortalBot {
       switch (upperCode) {
         case 'TX':
           return await this.submitTexasPortal(config, csvContent, employerCount);
+        case 'CA':
+          return await this.submitCaliforniaPortal(config, csvContent, employerCount);
         default:
           return {
             success: false,
@@ -500,6 +502,51 @@ export class StatePortalBot {
           try { fs.unlinkSync(path.join(tmpDir, f)); } catch {}
         }
       } catch {}
+    }
+  }
+
+  /**
+   * California EDD WOTC Portal Automation
+   * 
+   * Delegates to the dedicated CaliforniaBot for the full flow:
+   *   1. Login (username/password via EDD portal)
+   *   2. Navigate to "Submit Multiple Applications"
+   *   3. Upload XML file
+   *   4. Parse validation results (errors, receipt, accepted/rejected counts)
+   */
+  private async submitCaliforniaPortal(
+    config: StatePortalConfig,
+    xmlContent: string,
+    employerCount: number
+  ): Promise<BotResult> {
+    const californiaModule = await import('./californiaBot');
+
+    const credentials = config.credentials as any;
+    if (!credentials?.username && !credentials?.email && !credentials?.userId) {
+      return { success: false, message: 'No credentials configured for California EDD portal' };
+    }
+
+    const caCreds: californiaModule.CaliforniaCredentials = {
+      username: credentials.username || credentials.email || credentials.userId,
+      password: credentials.password,
+    };
+
+    const portalUrl = config.portalUrl || 'https://eddservices.edd.ca.gov/wotc/';
+
+    const bot = new californiaModule.CaliforniaBot();
+    try {
+      await bot.initialize();
+      const result = await bot.submit(portalUrl, caCreds, xmlContent);
+
+      return {
+        success: result.success,
+        message: result.message,
+        screenshotPaths: result.screenshotPaths,
+        submittedCount: result.accepted,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+      };
+    } finally {
+      await bot.close();
     }
   }
 
