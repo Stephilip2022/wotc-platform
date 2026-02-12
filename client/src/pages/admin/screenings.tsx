@@ -25,30 +25,34 @@ export default function AdminScreeningsPage() {
   const [historyDialog, setHistoryDialog] = useState(false);
 
   // Fetch screenings
-  const { data: screeningsData, isLoading } = useQuery({
+  const { data: screeningsData, isLoading } = useQuery<any[]>({
     queryKey: ["/api/admin/screenings", filters],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (filters.employerId && filters.employerId !== "all") params.append("employerId", filters.employerId);
       if (filters.status && filters.status !== "all") params.append("status", filters.status);
       
-      const response = await fetch(`/api/admin/screenings?${params}`);
-      return response.json();
+      const response = await fetch(`/api/admin/screenings?${params}`, { credentials: "include" });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
   // Fetch employers for filter
-  const { data: employers } = useQuery({
+  const { data: employers } = useQuery<any[]>({
     queryKey: ["/api/admin/employers"],
   });
 
   // Fetch screening history
-  const { data: history } = useQuery({
+  const { data: history } = useQuery<any[]>({
     queryKey: ["/api/admin/screenings", selectedScreening?.screening?.id, "history"],
     enabled: !!selectedScreening && historyDialog,
     queryFn: async () => {
-      const response = await fetch(`/api/admin/screenings/${selectedScreening.screening.id}/history`);
-      return response.json();
+      const response = await fetch(`/api/admin/screenings/${selectedScreening.screening.id}/history`, { credentials: "include" });
+      if (!response.ok) return [];
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -171,8 +175,8 @@ export default function AdminScreeningsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employers</SelectItem>
-                {employers?.map((emp: any) => (
-                  <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                {(Array.isArray(employers) ? employers : []).map((emp: any) => (
+                  <SelectItem key={emp.id} value={String(emp.id)}>{emp.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
