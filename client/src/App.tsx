@@ -47,7 +47,6 @@ import PricingConfigPage from "@/pages/admin/pricing-config";
 import MultiCreditPage from "@/pages/employer/multi-credit";
 import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
 import BulkImportPage from "@/pages/employer/bulk-import";
-import RegisterEmployerPage from "@/pages/register-employer";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -155,10 +154,6 @@ function Router() {
 
   if (!isAuthenticated) {
     return <LandingPage />;
-  }
-
-  if (location === "/register/employer" && user?.role === "employee") {
-    return <RegisterEmployerPage />;
   }
 
   if (user?.role === "employee") {

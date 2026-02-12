@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SignInButton, SignUpButton } from "@clerk/clerk-react";
+import { SignInButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -223,7 +223,7 @@ export default function LandingPage() {
     },
     {
       icon: Sparkles,
-      title: "Self-Service Onboarding",
+      title: "Guided Onboarding",
       description: "6-step employer setup wizard with branding, payroll integration, and team management.",
     },
     {
@@ -323,16 +323,11 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-3">
               <SignInButton mode="modal">
-                <Button variant="ghost" size="sm" data-testid="button-login-nav">
+                <Button size="sm" data-testid="button-login-nav">
                   Log In
-                </Button>
-              </SignInButton>
-              <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
-                <Button size="sm" data-testid="button-employer-signup-nav">
-                  Employer Sign Up
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
-              </SignUpButton>
+              </SignInButton>
             </div>
           </div>
         </div>
@@ -365,34 +360,23 @@ export default function LandingPage() {
             Available in <span className="text-primary font-semibold">9 languages</span>.
           </p>
 
-          {/* CTA Buttons */}
+          {/* CTA Button */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
-              <Button 
-                size="lg" 
-                data-testid="button-employer-signup"
-                className="h-14 px-8 text-lg font-semibold animate-pulse-glow"
-              >
-                <Building2 className="mr-2 h-5 w-5" />
-                Employer Sign Up
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </SignUpButton>
             <SignInButton mode="modal">
               <Button 
                 size="lg" 
-                variant="outline"
-                data-testid="button-employee-login"
-                className="h-14 px-8 text-lg"
+                data-testid="button-login-hero"
+                className="h-14 px-8 text-lg font-semibold animate-pulse-glow"
               >
-                <Users className="mr-2 h-5 w-5" />
-                Employee Login
+                <Lock className="mr-2 h-5 w-5" />
+                Log In to Your Account
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </SignInButton>
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Employers: No credit card required. Setup in under 10 minutes. Employees: Log in to complete your WOTC screening.
+            Employers and employees: Log in to access your WOTC portal. Contact your administrator for account setup.
           </p>
         </div>
       </section>
@@ -554,17 +538,17 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
+                <SignInButton mode="modal">
                   <Button 
                     variant="secondary" 
                     size="lg" 
-                    className="w-full h-14 text-lg font-semibold bg-white text-amber-700 hover:bg-white/90"
+                    className="w-full h-14 text-lg font-semibold bg-white text-amber-700"
                     data-testid="button-get-started-calculator"
                   >
-                    Start Capturing Credits
+                    Log In to Get Started
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </Button>
-                </SignUpButton>
+                </SignInButton>
 
                 <p className="text-xs opacity-60 text-center">
                   Based on industry averages. Actual results may vary.
@@ -743,7 +727,7 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto text-center space-y-8">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20">
             <GoldNugget className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Start Your Free Trial Today</span>
+            <span className="text-sm font-medium">Maximize Your Tax Credits</span>
           </div>
           
           <h2 className="text-4xl md:text-6xl font-black">
@@ -753,29 +737,19 @@ export default function LandingPage() {
           
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Join thousands of employers who are maximizing their WOTC credits with Rockerbox. 
-            Setup takes less than 10 minutes.
+            Contact us to get your account set up today.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <SignUpButton mode="modal" forceRedirectUrl="/register/employer">
+            <SignInButton mode="modal">
               <Button 
                 size="lg" 
                 className="h-14 px-10 text-lg font-semibold"
                 data-testid="button-final-cta"
               >
-                Employer Sign Up
+                <Lock className="mr-2 h-5 w-5" />
+                Log In to Your Account
                 <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </SignUpButton>
-            <SignInButton mode="modal">
-              <Button 
-                size="lg" 
-                variant="outline"
-                className="h-14 px-10 text-lg"
-                data-testid="button-employee-login-bottom"
-              >
-                <Users className="mr-2 h-5 w-5" />
-                Employee Login
               </Button>
             </SignInButton>
           </div>
@@ -783,7 +757,7 @@ export default function LandingPage() {
           <div className="flex flex-wrap justify-center gap-6 pt-8 text-sm text-muted-foreground">
             <span className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-primary" />
-              No credit card required
+              Dedicated onboarding support
             </span>
             <span className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-primary" />
