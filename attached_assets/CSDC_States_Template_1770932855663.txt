@@ -1,0 +1,789 @@
+# ================================
+# CONFIGURATION
+# ================================
+
+# DLL paths for Npgsql + logging (update if yours differ)
+$LogDllPath = "C:\Users\bbyki\Desktop\microsoft.extensions.logging.abstractions.8.0.3\lib\net8.0\Microsoft.Extensions.Logging.Abstractions.dll"
+$NpDllPath  = "C:\Users\bbyki\Desktop\npgsql.8.0.8\lib\net8.0\Npgsql.dll"
+$UploadCSDC = "C:\Scripts\CSDCUploadCall.ps1"
+
+
+
+# Path to encrypted DB credential (created via Export-Clixml)
+$CredPath = "C:\Scripts\PostgresExport.cred"
+
+# ================================
+# CSV OUTPUT CONFIG
+# ================================
+$CsvOutDir = "G:\My Drive\Bulk Uploads\CSDC States\CSDC Automations CSV"
+
+function Ensure-Dir {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType Directory -Path $Path | Out-Null
+    }
+}
+
+
+function Get-DbCredential {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path $Path)) {
+        throw "Credential file not found at $Path. Run the one-time Get-Credential + Export-Clixml step first."
+    }
+
+    # Import-Clixml returns a PSCredential object, decrypted for the current user
+    return Import-Clixml -Path $Path
+}
+
+# Database connection settings (no passwords here)
+$Server   = "127.0.0.1"
+$Port     = 5432
+$Database = "rb_prod"
+
+# Retrieve credential from encrypted file
+$cred = Get-DbCredential -Path $CredPath
+
+$User     = $cred.UserName
+$Password = $cred.GetNetworkCredential().Password
+
+# State abbreviation to use in file name
+$StateAbbr = "AL"   # change this if you’re exporting for a different state
+
+# ================================
+# LOAD NPGSQL & LOGGING ASSEMBLIES - Why we need this:
+#PowerShell can’t use [Npgsql.NpgsqlConnection] until the Npgsql DLL is loaded. This block loads the assemblies once per session.
+# ================================
+
+# Only load if not already loaded in this session
+if (-not ("Npgsql.NpgsqlConnection" -as [type])) {
+
+    if (-not (Test-Path $LogDllPath)) {
+        throw "Logging DLL not found at $LogDllPath"
+    }
+
+    if (-not (Test-Path $NpDllPath)) {
+        throw "Npgsql DLL not found at $NpDllPath"
+    }
+
+    Add-Type -Path $LogDllPath
+    Add-Type -Path $NpDllPath
+}
+
+#====================
+# State Run Mapping
+#====================
+
+
+# States you want to generate files for (full state name => abbr)
+$StatesToRun = @(
+    @{ Name = "Alabama";        Abbr = "AL" }
+    @{ Name = "Arkansas";       Abbr = "AR" }
+    @{ Name = "Colorado";       Abbr = "CO" }
+    @{ Name = "Georgia";        Abbr = "GA" }
+    @{ Name = "Idaho";          Abbr = "ID" }
+    @{ Name = "Oklahoma";       Abbr = "OK" }
+    @{ Name = "Oregon";         Abbr = "OR" }
+    @{ Name = "South Carolina"; Abbr = "SC" }
+    @{ Name = "Vermont";        Abbr = "VT" }
+    @{ Name = "West Virginia";  Abbr = "WV" }
+)
+
+
+#====================
+# ConsultID Mapping
+#====================
+$ConsultantIdByState = @{
+  "AL"="ROCKERBOX"; "AR"="ROCKERBOX"; "CO"="ROCKERBOX"; "GA"="SCREEN"; "ID"="ROCKERBOX"
+  "OK"="ROCKERBOX"; "OR"="ROCKERBOX"; "SC"="ROCKERBOX"; "VT"="ROCKERBOX"; "WV"="SCREENTECH"
+}
+
+$pin_or_password = @{
+  "AL"="R0ck3rb0x21!"; "AR"="Pektaaa123!"; "CO"="WOTC2023!"; "GA"="R0ck3rb0x21"; "ID"="Pektaka1"
+  "OK"="okWOTC24!"; "OR"="Verzabekz1!"; "SC"="Fektah1234"; "VT"="Pekta1234#"; "WV"="Pektitaaa123!"
+}
+
+$Representative = @{
+  "AL"="Young"; "AR"="DYOUNG"; "CO"="GRinehart"; "GA"="PHILIPW"; "ID"="PCALHOUN"
+  "OK"="DYOUNG"; "OR"="DYOUNG"; "SC"="DAVIDYOUNG"; "VT"="DAVIDY"; "WV"="DYOUNG"
+}
+
+
+
+$ConsultantIdByState_map = $ConsultantIdByState
+$pin_or_password_map = $pin_or_password
+$Representative_map  = $Representative
+
+
+#====================
+# Default Hourly Wage (used only when e.hourly_start_wage is null/blank)
+#====================
+$DefaultHourlyWageByState = @{
+  "AL" = 7.25
+  "AR" = 11.00
+  "CO" = 15.50
+  "GA" = 11.50
+  "ID" = 11.50
+  "OK" = 11.50
+  "OR" = 16.00
+  "SC" = 11.50
+  "VT" = 14.50
+  "WV" = 11.50
+}
+
+
+
+
+# ================================
+# CONNECTION STRING - Why we need this:
+#Every query needs a connection string. This is the “address + credentials” bundle Npgsql uses to connect.
+# ================================
+$ConnString = "Host=$Server;Port=$Port;Database=$Database;Username=$User;Password=$Password;SSL Mode=Require;Trust Server Certificate=true;"
+"Npgsql loaded: $([bool]('Npgsql.NpgsqlConnection' -as [type]))"
+
+
+# ================================
+# QUERY FUNCTION
+# ================================
+function Invoke-PostgresQuery {
+    param(
+        [Parameter(Mandatory)][string]$ConnString,
+        [Parameter(Mandatory)][string]$Query
+    )
+
+    $conn = [Npgsql.NpgsqlConnection]::new($ConnString)
+    try {
+        $conn.Open()
+
+        $cmd = [Npgsql.NpgsqlCommand]::new($Query, $conn)
+        $reader = $cmd.ExecuteReader()
+
+        $table = New-Object System.Data.DataTable
+        $table.Load($reader)
+
+        # ALWAYS return a DataTable object (never $null)
+        return $table
+    }
+    catch {
+        # If something goes wrong, return an empty DataTable so downstream doesn't blow up
+        $empty = New-Object System.Data.DataTable
+        return $empty
+    }
+    finally {
+        if ($conn.State -ne 'Closed') { $conn.Close() }
+        $conn.Dispose()
+    }
+}
+ 
+foreach ($st in $StatesToRun) {
+    $QueryStateName = $st.Name
+    $StateAbbr      = $st.Abbr
+
+    # ConsultantID lookup (per state)
+    $ConsultantID    = $ConsultantIdByState_map[$StateAbbr]
+    if (-not $ConsultantID) { throw "No ConsultantID configured for state [$StateAbbr]" }
+
+    # pin_or_password lookup (per state)
+    $pin_or_password = $pin_or_password_map[$StateAbbr]
+    if (-not $pin_or_password) { throw "No pin_or_password configured for state [$StateAbbr]" }
+
+    # Representative lookup (per state)
+    $Representative = $Representative_map[$StateAbbr]
+    if (-not $Representative) { throw "No Representative configured for state [$StateAbbr]" }
+    # Default wage lookup (per state)
+    $DefaultHourlyWage = $DefaultHourlyWageByState[$StateAbbr]
+    if ($null -eq $DefaultHourlyWage) { $DefaultHourlyWage = 0 }
+
+
+# ================================
+# TEST QUERY
+# ================================
+$test = Invoke-PostgresQuery -ConnString $ConnString -Query "SELECT now() as server_time;"
+$test | Format-Table -AutoSize
+
+#=================================
+#State Conversion Codes
+#=================================
+$StateMap = @{
+    'Alabama' = 'AL'
+    'Arkansas' = 'AR'
+    'Colorado' = 'CO'
+    'Georgia' = 'GA'
+    'Idaho' = 'ID'
+    'Oklahoma' = 'OK'
+    'Oregon' = 'OR'			
+    'South Carolina' = 'SC'			
+    'Vermont' = 'VT'			
+    'West Virginia' = 'WV'			
+
+}
+
+
+
+
+
+
+
+# ================================
+# BASE DATASET QUERY (employees + companies + v2.sessions)
+# ================================
+$Query = @"
+SELECT
+    e.id          AS employee_id,
+    s.id          AS session_id,
+    c.id          AS company_id,
+
+    e.first_name,
+    e.last_name,
+    e.date_started_job::date AS start_date,
+    e.plain_ssn,
+    e.address,
+    e.city,
+    e.state,
+    e.zip_code,
+    e.county,
+    e.phone_number,
+    e.date_birth,
+    e.date_gave_info,
+e.date_was_offered_job,
+e.date_was_hired,
+e.date_started_job,
+e.hourly_start_wage,
+e.occupation_code,
+e.full_name,
+s.qualifie, 
+    c.name,
+    c.fein,
+    c.address AS employer_address,
+    c.state AS employer_state,
+    c.city AS employer_city,
+    c.county AS employer_county,
+    c.phone_number AS employer_phone_number,
+    c.zip_code AS employer_zipcode,
+
+
+	
+    c.name        AS company_name,
+    c.fein        AS company_fein
+
+FROM employees e
+JOIN v2.sessions s
+    ON s.employee_id = e.id
+JOIN companies c
+    ON c.id = e.company_id
+WHERE e.date_started_job::date BETWEEN CURRENT_DATE - INTERVAL '27 days'
+                                   AND CURRENT_DATE
+AND (
+        s.qualifie ILIKE '%SNAP%'
+     OR s.qualifie ILIKE '%SSI%'
+     OR s.qualifie ILIKE '%TANF%'
+     OR s.qualifie ILIKE '%LTANF%'
+  )
+AND c.name <> 'Hirschbach Motor Lines, Inc'
+  AND e.state = '$QueryStateName'
+
+  AND s.dashboard_status = 'completed'
+  AND COALESCE(TRIM(e.state_certification), '') NOT IN ('Yes', 'No', 'Pending')
+ORDER BY e.date_started_job::date;
+"@
+
+$result = Invoke-PostgresQuery -ConnString $ConnString -Query $Query
+if ($null -eq $result) {
+    "Rows returned: 0"
+    "Result is NULL for state [$StateAbbr]. Skipping."
+    continue
+}
+
+"Rows returned: $($result.Rows.Count)"
+$result.GetType().FullName
+
+if ($result.Rows.Count -eq 0) {
+    "No rows to export for state [$StateAbbr]. Skipping file creation."
+    continue
+}
+
+# ================================
+# BUILD OUTPUT ROWS (column-by-column) - This is the section where I tell the code how to format the final file for upload
+# ================================
+$export = foreach ($r in $result) {
+    $out = [ordered]@{}
+
+   
+
+
+    # Column 1 goes here
+	$out["ConsultantID"] = $ConsultantID
+    # Column 2 goes here
+	$out["fein"] = (
+    $r["fein"].ToString().Trim() -replace '[^0-9]', ''
+)
+
+    # Column 3 goes here	
+		$out["plain_ssn"] = (
+    $r["plain_ssn"].ToString().Trim() -replace '[^0-9]', ''
+)
+    # Column 4 goes here	
+	$out["MiddleInitial"] = ""
+    # Column 5 goes here
+	$out["last_name"] = $r["last_name"]	
+    # Column 6 goes here
+	$out["address"] = $r["address"]
+    # Column 7 goes here
+	$out["city"] = $r["city"]
+    # Column 8 goes here
+	$out["state"] = if ($r["state"] -and $StateMap.ContainsKey($r["state"])) {
+    $StateMap[$r["state"]]
+} else {
+    ""
+}
+    # Column 9 goes here
+	$out["zip_code"] = ($r["zip_code"].ToString().Trim() -replace '[^0-9]', '')
+
+    # Column 10 goes here	
+	$out["phone"] = ""
+    # Column 11 goes here	
+	$out["date_birth"] = if ($r["date_birth"]) {
+    ([datetime]$r["date_birth"]).ToString("MMddyyyy")
+} else {
+    ""
+}    
+    # Column 12 goes here
+	$out["pin_or_password"] = $pin_or_password
+    # Column 13 goes here
+	$out["SignatureOnFile_YN"] = "N"
+    # Column 14 goes here
+	$out["DateOfSignature_mmddccyy"] = if ($r["date_gave_info"]) {
+    ([datetime]$r["date_gave_info"]).ToString("MMddyyyy")
+} else {
+    ""
+}    
+    # Column 15 goes here
+	$out["TargetedGroup_4_or_6_or_blank"] = ""
+
+    # Column 16 goes here
+	$out["date_gave_info"] = if ($r["date_gave_info"]) {
+    ([datetime]$r["date_gave_info"]).ToString("MMddyyyy")
+} else {
+    ""
+}    
+    # Column 17 goes here
+$out["date_was_offered_job"] = if ($r["date_was_offered_job"] -ne $null -and $r["date_was_offered_job"] -ne [DBNull]::Value) {
+    ([datetime]$r["date_was_offered_job"]).ToString("MMddyyyy")
+}
+elseif ($r["date_started_job"] -ne $null -and $r["date_started_job"] -ne [DBNull]::Value) {
+    ([datetime]$r["date_started_job"]).ToString("MMddyyyy")
+}
+else {
+    ""
+}
+    # Column 18 goes here
+$out["date_was_hired"] = if ($r["date_was_hired"] -ne $null -and $r["date_was_hired"] -ne [DBNull]::Value) {
+    ([datetime]$r["date_was_hired"]).ToString("MMddyyyy")
+}
+elseif ($r["date_started_job"] -ne $null -and $r["date_started_job"] -ne [DBNull]::Value) {
+    ([datetime]$r["date_started_job"]).ToString("MMddyyyy")
+}
+else {
+    ""
+}
+    # Column 19 goes here
+	$out["date_started_job"] = if ($r["date_started_job"]) {
+    ([datetime]$r["date_started_job"]).ToString("MMddyyyy")
+} else {
+    ""
+}    
+    # Column 20 goes here
+	$out["DatePart2Signature_mmddccyy"] = if ($r["date_gave_info"]) {
+    ([datetime]$r["date_gave_info"]).ToString("MMddyyyy")
+} else {
+    ""
+}    
+
+# Column 21 + 22: Use DB wage when valid; else per-state default
+$w = $r["hourly_start_wage"]
+
+# Try to parse the DB wage into a decimal reliably
+[decimal]$dbWage = 0
+$hasValidDbWage = $false
+
+if ($w -ne $null -and $w -ne [DBNull]::Value) {
+    $ws = $w.ToString().Trim()
+
+    # strip common junk like $ and commas
+    $ws = $ws -replace '[$,]', ''
+
+    if ($ws -ne "") {
+        # TryParse avoids throwing and works for numeric strings
+        $hasValidDbWage = [decimal]::TryParse(
+            $ws,
+            [System.Globalization.NumberStyles]::Any,
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [ref]$dbWage
+        )
+    }
+}
+
+# Decide which wage to use
+[decimal]$effectiveWage = 0
+if ($hasValidDbWage -and $dbWage -gt 0) {
+    $effectiveWage = $dbWage
+} elseif ($DefaultHourlyWage -ne $null -and [decimal]$DefaultHourlyWage -gt 0) {
+    $effectiveWage = [decimal]$DefaultHourlyWage
+} else {
+    $effectiveWage = 0
+}
+
+# Output formatting (2 digits dollars field, 2 digits cents field)
+if ($effectiveWage -gt 0) {
+    $dollars = [math]::Truncate($effectiveWage)
+    $cents   = [int][math]::Round(($effectiveWage - $dollars) * 100, 0)
+
+    # Handle rounding edge case: 10.999 -> cents 100
+    if ($cents -ge 100) { $dollars += 1; $cents = 0 }
+
+    $out["StartingWage_Dollars_2"] = $dollars.ToString()
+    $out["HourlyWage_Cents"]       = $cents.ToString("00")
+} else {
+    $out["StartingWage_Dollars_2"] = ""
+    $out["HourlyWage_Cents"]       = ""
+}
+	$out["occupation_code"] = $r["occupation_code"]
+    # Column 24 goes here
+	$out["is_rehire"] = "N"
+
+    # Column 25 goes here
+$out["SNAP1_YN_322"] = "N"
+
+$qual = $r["qualifie"]
+
+if ($qual -ne $null -and $qual -ne [DBNull]::Value) {
+    if ($qual.ToString() -match '(?i)\bSNAP\b') {
+        $out["SNAP1_YN_322"] = "Y"
+    }
+}
+
+    # Column 26 goes here
+$out["TANF_9_18_YN_327"] = "N"
+
+$qual = $r["qualifie"]
+
+if ($qual -ne $null -and $qual -ne [DBNull]::Value) {
+    if ($qual.ToString() -match '(?i)\bTANF\b') {
+        $out["TANF_9_18_YN_327"] = "Y"
+    }
+}
+    # Column 27 goes here
+$out["TANF_last18_YN_328"] = "N"
+
+$qual = $r["qualifie"]
+
+if ($qual -ne $null -and $qual -ne [DBNull]::Value) {
+    if ($qual.ToString() -match '(?i)\bTANF\b') {
+        $out["TANF_last18_YN_328"] = "Y"
+    }
+}
+    # Column 28 goes here
+
+$out["PrimaryRecipientName_30"] = if (
+    $out["TANF_9_18_YN_327"] -eq "Y" -or
+    $out["SNAP1_YN_322"]    -eq "Y"
+) {
+    $r["full_name"]
+} else {
+    ""
+}
+
+    # Column 29 goes here
+
+$out["PrimaryRecipientState_2"] = if (
+    $out["TANF_9_18_YN_327"] -eq "Y" -or
+    $out["SNAP1_YN_322"]    -eq "Y"
+) {
+    if ($r["state"] -and $StateMap.ContainsKey($r["state"])) {
+    $StateMap[$r["state"]]
+} else {
+    ""
+}
+
+} else {
+    ""
+}
+
+    # Column 30 goes here
+
+	$out["Felony_YN_383"] = "N"
+
+    # Column 31 goes here
+
+	$out["ConvictionDate_mmddccyy_384_391"] = ""
+    # Column 32 goes here
+
+	$out["ReleaseDate_mmddccyy_392_399"] = ""
+    # Column 33 goes here
+
+	$out["EmpowermentZone_YN_400"] = "N"
+    # Column 34 goes here
+
+	$out["RuralRenewal_YN_401"] = "N"
+
+    # Column 35 goes here
+$out["SSI_YN_422"] = "N"
+
+$qual = $r["qualifie"]
+
+if ($qual -ne $null -and $qual -ne [DBNull]::Value) {
+    if ($qual.ToString() -match '(?i)\bSSI\b') {
+        $out["SSI_YN_422"] = "Y"
+    }
+}
+
+    # Column 36 goes here
+
+	$out["Eligibility_Line1_80"] = ""
+
+    # Column 37 goes here
+
+	$out["Eligibility_Line2_80"] = ""
+
+    # Column 38 goes here
+
+	$out["Eligibility_Line3_80"] = ""
+
+    # Column 39 goes here
+
+	$out["Eligibility_Line4_80"] = ""
+
+    # Column 40 goes here
+
+	$out["CompletedBy_743_E_A_C_S_G"] = "C"
+
+    # Column 41 goes here
+	$out["Dateof9061"] = if ($r["date_gave_info"]) {
+    ([datetime]$r["date_gave_info"]).ToString("MMddyyyy")
+} else {
+    ""
+}    
+
+    # Column 42 goes here
+
+	$out["OutOfStateBenefits_State_2_772_773"] = ""
+
+
+
+    # Column 43 goes here
+	$out["Representative_774_785_12chars"] = $Representative
+
+    # Column 44 goes here
+
+	$out["Version_8850_Pos_789_790_SET_23"] = "23"
+
+    # Column 45 goes here
+
+	$out["Version_ICF_Pos_791_792_SET_23"] = "23"
+    # Column 46 goes here
+
+	$out["Is9062_YN_793"] = "N"
+    # Column 47 goes here
+
+	$out["Q2_YN_794"] = "Y"
+
+    # Column 48 goes here
+
+	$out["Q3_YN_795"] = "N"
+
+    # Column 49 goes here
+
+	$out["Q4_YN_796"] = "N"
+
+    # Column 50 goes here
+
+	$out["Q5_YN_797"] = "N"
+
+
+    # Column 51 goes here
+$out["Q6_YN_798"] = "N"
+
+$qual = $r["qualifie"]
+
+if ($qual -ne $null -and $qual -ne [DBNull]::Value) {
+    $q = $qual.ToString()
+
+    # Match LTANF specifically (not plain TANF)
+    if ($q -match '(?i)\bLTANF\b') {
+        $out["Q6_YN_798"] = "Y"
+    }
+}
+
+
+    # Column 52 goes here
+
+	$out["ConvictionType_F_or_S_799"] = ""
+
+    # Column 53 goes here
+
+	$out["ConvictionState_2_800_801"] = ""
+    # Column 54 goes here
+
+	$out["CategoryF_YN_804"] = "N"
+    # Column 55 goes here
+
+	$out["MailDate_mmddccyy_805_812_optional"] = ""
+    # Column 56 goes here
+
+	$out["LTUR_YN_813"] = "N"
+    # Column 57 goes here
+
+	$out["Q7_YN_815"] = "N"
+    # Column 58 goes here
+
+	$out["LTUR_State_2_843_844"] = ""
+    # Column 59 goes here
+
+	$out["first_name"] = $r["first_name"]	
+
+    # Column 60 goes here
+
+	$out["Vet_YN_865"] = "N"
+    # Column 61 goes here
+
+	$out["WorkRelease_YN_866"] = "N"
+    # Column 62 goes here
+
+	$out["VocRehab_YN_867"] = "N"
+
+
+    [pscustomobject]$out
+}
+
+$Layout = @(
+@{ Name = "ConsultantID"; Width = 12;  Pad = "Right"; Char = " " }
+@{ Name = "fein"; Width = 9;  Pad = "Right"; Char = " " }
+@{ Name = "plain_ssn"; Width = 19;  Pad = "Right"; Char = " " }
+@{ Name = "MiddleInitial"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "last_name"; Width = 19;  Pad = "Right"; Char = " " }
+@{ Name = "address"; Width = 30;  Pad = "Right"; Char = " " }
+@{ Name = "city"; Width = 20;  Pad = "Right"; Char = " " }
+@{ Name = "state"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "zip_code"; Width = 5;  Pad = "Right"; Char = " " }
+@{ Name = "phone"; Width = 10;  Pad = "Right"; Char = " " }
+@{ Name = "date_birth"; Width = 90;  Pad = "Right"; Char = " " }
+@{ Name = "pin_or_password"; Width = 20;  Pad = "Right"; Char = " " }
+@{ Name = "SignatureOnFile_YN"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "DateOfSignature_mmddccyy"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "TargetedGroup_4_or_6_or_blank"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "date_gave_info"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "date_was_offered_job"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "date_was_hired"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "date_started_job"; Width = 31;  Pad = "Right"; Char = " " }
+@{ Name = "DatePart2Signature_mmddccyy"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "StartingWage_Dollars_2"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "HourlyWage_Cents"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "occupation_code"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "is_rehire"; Width = 5;  Pad = "Right"; Char = " " }
+@{ Name = "SNAP1_YN_322"; Width = 5;  Pad = "Right"; Char = " " }
+@{ Name = "TANF_9_18_YN_327"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "TANF_last18_YN_328"; Width = 3;  Pad = "Right"; Char = " " }
+@{ Name = "PrimaryRecipientName_30"; Width = 50;  Pad = "Right"; Char = " " }
+@{ Name = "PrimaryRecipientState_2"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "Felony_YN_383"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "ConvictionDate_mmddccyy_384_391"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "ReleaseDate_mmddccyy_392_399"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "EmpowermentZone_YN_400"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "RuralRenewal_YN_401"; Width = 21;  Pad = "Right"; Char = " " }
+@{ Name = "SSI_YN_422"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Eligibility_Line1_80"; Width = 80;  Pad = "Right"; Char = " " }
+@{ Name = "Eligibility_Line2_80"; Width = 80;  Pad = "Right"; Char = " " }
+@{ Name = "Eligibility_Line3_80"; Width = 80;  Pad = "Right"; Char = " " }
+@{ Name = "Eligibility_Line4_80"; Width = 80;  Pad = "Right"; Char = " " }
+@{ Name = "CompletedBy_743_E_A_C_S_G"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Dateof9061"; Width = 28;  Pad = "Right"; Char = " " }
+@{ Name = "OutOfStateBenefits_State_2_772_773"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "Representative_774_785_12chars"; Width = 15;  Pad = "Right"; Char = " " }
+@{ Name = "Version_8850_Pos_789_790_SET_23"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "Version_ICF_Pos_791_792_SET_23"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "Is9062_YN_793"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Q2_YN_794"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Q3_YN_795"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Q4_YN_796"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Q5_YN_797"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "Q6_YN_798"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "ConvictionType_F_or_S_799"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "ConvictionState_2_800_801"; Width = 4;  Pad = "Right"; Char = " " }
+@{ Name = "CategoryF_YN_804"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "MailDate_mmddccyy_805_812_optional"; Width = 8;  Pad = "Right"; Char = " " }
+@{ Name = "LTUR_YN_813"; Width = 2;  Pad = "Right"; Char = " " }
+@{ Name = "Q7_YN_815"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "LTUR_State_2_843_844"; Width = 29;  Pad = "Right"; Char = " " }
+@{ Name = "first_name"; Width = 20;  Pad = "Right"; Char = " " }
+@{ Name = "Vet_YN_865"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "WorkRelease_YN_866"; Width = 1;  Pad = "Right"; Char = " " }
+@{ Name = "VocRehab_YN_867"; Width = 185;  Pad = "Right"; Char = " " }
+)
+
+$lines = foreach ($row in $export) {
+    ($Layout | ForEach-Object {
+        $name  = $_.Name
+        $width = $_.Width
+        $pad   = $_.Char
+
+        $val = if ($row.PSObject.Properties.Match($name)) {
+            ($row.$name ?? "").ToString()
+        } else {
+            ""
+        }
+
+        $val = if ($val.Length -gt $width) { $val.Substring(0, $width) } else { $val }
+        $val.PadRight($width, $pad)
+    }) -join ""
+}
+
+# Ensure CSV output folder exists (and TXT folder too, just in case)
+Ensure-Dir "G:\My Drive\Bulk Uploads\CSDC States"
+Ensure-Dir $CsvOutDir
+
+# TXT output path (keep your GA exception)
+if ($StateAbbr -eq "GA") {
+    $OutFile = "G:\My Drive\Bulk Uploads\CSDC States\GANOELEVENTXT.txt"
+} else {
+    $OutFile = "G:\My Drive\Bulk Uploads\CSDC States\$StateAbbr" + "NOVELEVENTXT.txt"
+}
+
+# Write TXT exactly as before
+$lines | Set-Content -Path $OutFile -Encoding ASCII
+
+# ================================
+# CSV MIRROR OUTPUT (same columns, same naming as TXT)
+# ================================
+$csvName = ([IO.Path]::GetFileNameWithoutExtension($OutFile) + ".csv")
+$CsvPath = Join-Path $CsvOutDir $csvName
+
+# Use the same column order as your fixed-width layout
+$csvColumns = $Layout.Name
+
+# Force the CSV to contain exactly those columns in that exact order
+$csvExport = foreach ($row in $export) {
+    $o = [ordered]@{}
+    foreach ($c in $csvColumns) { $o[$c] = $row.$c }
+    [pscustomobject]$o
+}
+
+$csvExport | Export-Csv -LiteralPath $CsvPath -NoTypeInformation -Encoding UTF8
+
+
+# quick sanity check: how many rows we built
+"Export rows: $(@($export).Count)"
+$export[0] | Format-List *
+
+
+
+}
+
+# Wait 90 seconds before upload
+Start-Sleep -Seconds 30
+
+# Call upload script
+& $UploadCSDC
+
