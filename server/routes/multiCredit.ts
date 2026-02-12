@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import {
   scanEmployeeForCredits,
   getEmployeeOtherCredits,
@@ -6,7 +7,7 @@ import {
   batchScanEmployer
 } from "../services/multiCreditBundling";
 import { db } from "../db";
-import { employees, otherTaxCredits } from "../../shared/schema";
+import { employees, otherTaxCredits, users } from "../../shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 const router = Router();
@@ -18,7 +19,9 @@ const router = Router();
 router.post("/scan", async (req, res) => {
   try {
     const { employeeId } = req.body;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employeeId) {
       return res.status(400).json({ error: "employeeId is required" });
@@ -64,7 +67,9 @@ router.post("/scan", async (req, res) => {
  */
 router.post("/batch-scan", async (req, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -90,7 +95,9 @@ router.post("/batch-scan", async (req, res) => {
 router.get("/other/:employeeId", async (req, res) => {
   try {
     const { employeeId } = req.params;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -127,7 +134,9 @@ router.get("/other/:employeeId", async (req, res) => {
  */
 router.get("/other", async (req, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -148,7 +157,9 @@ router.get("/other", async (req, res) => {
  */
 router.get("/summary", async (req, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -193,7 +204,9 @@ router.patch("/other/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });

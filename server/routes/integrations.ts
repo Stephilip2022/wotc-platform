@@ -1,10 +1,12 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import { db } from "../db";
 import {
   integrationConnections,
   integrationProviders,
   integrationSyncLogs,
   integrationSyncedRecords,
+  users,
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import {
@@ -55,7 +57,9 @@ router.get("/providers", async (req: any, res) => {
 // Get employer's connected integrations
 router.get("/connections", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -86,7 +90,9 @@ router.get("/connections", async (req: any, res) => {
 // Create new integration connection
 router.post("/connections", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -151,7 +157,9 @@ router.post("/connections", async (req: any, res) => {
 // Update integration connection
 router.patch("/connections/:id", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -216,7 +224,9 @@ router.patch("/connections/:id", async (req: any, res) => {
 // Delete integration connection
 router.delete("/connections/:id", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -242,7 +252,9 @@ router.delete("/connections/:id", async (req: any, res) => {
 // Trigger manual sync for an integration
 router.post("/connections/:id/sync", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -295,7 +307,9 @@ router.post("/connections/:id/sync", async (req: any, res) => {
 // Get sync history for an integration
 router.get("/connections/:id/logs", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -319,7 +333,9 @@ router.get("/connections/:id/logs", async (req: any, res) => {
 // Get synced records for an integration
 router.get("/connections/:id/records", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }
@@ -343,7 +359,9 @@ router.get("/connections/:id/records", async (req: any, res) => {
 // Push WOTC results back to integration
 router.post("/connections/:id/push-results", async (req: any, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
     }

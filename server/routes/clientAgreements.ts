@@ -8,7 +8,8 @@ import {
   sendAgreementForSignature,
   checkOnboardingDocumentsStatus
 } from "../services/clientAgreements";
-import { isAuthenticated } from "../replitAuth";
+import { getAuth } from "@clerk/express";
+import { isAuthenticated } from "../clerkAuth";
 import { db } from "../db";
 import { employers } from "@shared/schema";
 import { eq } from "drizzle-orm";
@@ -29,7 +30,7 @@ router.post("/engagement-letter", isAuthenticated, async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await verifyEmployerAccess(userId, employerId)) {
       return res.status(403).json({ error: "Access denied to this employer" });
     }
@@ -62,7 +63,7 @@ router.post("/form-9198", isAuthenticated, async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await verifyEmployerAccess(userId, employerId)) {
       return res.status(403).json({ error: "Access denied to this employer" });
     }
@@ -97,7 +98,7 @@ router.post("/:id/sign", isAuthenticated, async (req, res) => {
       return res.status(404).json({ error: "Agreement not found" });
     }
 
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await verifyEmployerAccess(userId, existingAgreement.employerId)) {
       return res.status(403).json({ error: "Access denied to this agreement" });
     }
@@ -137,7 +138,7 @@ router.post("/:id/send", isAuthenticated, async (req, res) => {
 router.get("/employer/:employerId", isAuthenticated, async (req, res) => {
   try {
     const { employerId } = req.params;
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await verifyEmployerAccess(userId, employerId)) {
       return res.status(403).json({ error: "Access denied to this employer" });
     }
@@ -152,7 +153,7 @@ router.get("/employer/:employerId", isAuthenticated, async (req, res) => {
 router.get("/employer/:employerId/status", isAuthenticated, async (req, res) => {
   try {
     const { employerId } = req.params;
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await verifyEmployerAccess(userId, employerId)) {
       return res.status(403).json({ error: "Access denied to this employer" });
     }
@@ -173,7 +174,7 @@ router.get("/:id", isAuthenticated, async (req, res) => {
       return res.status(404).json({ error: "Agreement not found" });
     }
 
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await verifyEmployerAccess(userId, agreement.employerId)) {
       return res.status(403).json({ error: "Access denied to this agreement" });
     }

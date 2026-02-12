@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SignInButton } from "@clerk/clerk-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -321,15 +322,17 @@ export default function LandingPage() {
               <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
             </div>
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" asChild data-testid="button-login-nav">
-                <a href="/api/login">Log In</a>
-              </Button>
-              <Button size="sm" asChild data-testid="button-get-started-nav">
-                <a href="/api/login">
+              <SignInButton mode="modal">
+                <Button variant="ghost" size="sm" data-testid="button-login-nav">
+                  Log In
+                </Button>
+              </SignInButton>
+              <SignInButton mode="modal">
+                <Button size="sm" data-testid="button-get-started-nav">
                   Get Started
                   <ArrowRight className="ml-1 h-4 w-4" />
-                </a>
-              </Button>
+                </Button>
+              </SignInButton>
             </div>
           </div>
         </div>
@@ -364,18 +367,17 @@ export default function LandingPage() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-            <Button 
-              size="lg" 
-              asChild
-              data-testid="button-employer-login"
-              className="h-14 px-8 text-lg font-semibold animate-pulse-glow"
-            >
-              <a href="/api/login">
+            <SignInButton mode="modal">
+              <Button 
+                size="lg" 
+                data-testid="button-employer-login"
+                className="h-14 px-8 text-lg font-semibold animate-pulse-glow"
+              >
                 <Building2 className="mr-2 h-5 w-5" />
                 Start Capturing Credits
                 <ArrowRight className="ml-2 h-5 w-5" />
-              </a>
-            </Button>
+              </Button>
+            </SignInButton>
             <Button 
               size="lg" 
               variant="outline"
@@ -553,18 +555,17 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                <Button 
-                  variant="secondary" 
-                  size="lg" 
-                  className="w-full h-14 text-lg font-semibold bg-white text-amber-700 hover:bg-white/90"
-                  asChild
-                  data-testid="button-get-started-calculator"
-                >
-                  <a href="/api/login">
+                <SignInButton mode="modal">
+                  <Button 
+                    variant="secondary" 
+                    size="lg" 
+                    className="w-full h-14 text-lg font-semibold bg-white text-amber-700 hover:bg-white/90"
+                    data-testid="button-get-started-calculator"
+                  >
                     Start Capturing Credits
                     <ArrowRight className="ml-2 h-5 w-5" />
-                  </a>
-                </Button>
+                  </Button>
+                </SignInButton>
 
                 <p className="text-xs opacity-60 text-center">
                   Based on industry averages. Actual results may vary.
@@ -757,29 +758,27 @@ export default function LandingPage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
-              asChild
-              className="h-14 px-10 text-lg font-semibold"
-              data-testid="button-final-cta"
-            >
-              <a href="/api/login">
+            <SignInButton mode="modal">
+              <Button 
+                size="lg" 
+                className="h-14 px-10 text-lg font-semibold"
+                data-testid="button-final-cta"
+              >
                 Get Started Free
                 <ArrowRight className="ml-2 h-5 w-5" />
-              </a>
-            </Button>
-            <Button 
-              size="lg" 
-              variant="outline"
-              asChild
-              className="h-14 px-10 text-lg"
-              data-testid="button-admin-portal"
-            >
-              <a href="/api/login">
+              </Button>
+            </SignInButton>
+            <SignInButton mode="modal">
+              <Button 
+                size="lg" 
+                variant="outline"
+                className="h-14 px-10 text-lg"
+                data-testid="button-admin-portal"
+              >
                 <Shield className="mr-2 h-5 w-5" />
                 Admin Portal
-              </a>
-            </Button>
+              </Button>
+            </SignInButton>
           </div>
 
           <div className="flex flex-wrap justify-center gap-6 pt-8 text-sm text-muted-foreground">

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import { db } from "../db";
 import { apiKeys, users } from "../../shared/schema";
 import { eq, and, desc } from "drizzle-orm";
@@ -10,7 +11,7 @@ const router = Router();
 // Get all API keys for an employer (without exposing the actual keys)
 router.get("/", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -61,7 +62,7 @@ router.get("/", async (req: any, res) => {
 // Create a new API key
 router.post("/", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -147,7 +148,7 @@ router.post("/", async (req: any, res) => {
 // Update API key (name, scopes, rate limits)
 router.patch("/:keyId", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -201,7 +202,7 @@ router.patch("/:keyId", async (req: any, res) => {
 // Revoke an API key
 router.delete("/:keyId", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -249,7 +250,7 @@ router.delete("/:keyId", async (req: any, res) => {
 // Get API key usage statistics
 router.get("/:keyId/usage", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }

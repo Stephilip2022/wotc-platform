@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import { 
   calculateMilestoneProgress,
   updateMilestoneTracking,
@@ -11,7 +12,8 @@ import {
   retentionMilestones,
   retentionAlerts,
   turnoverPredictions,
-  employees
+  employees,
+  users
 } from "../../shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 
@@ -23,7 +25,9 @@ const router = Router();
  */
 router.get("/at-risk", async (req, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
     
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -45,7 +49,9 @@ router.get("/at-risk", async (req, res) => {
 router.get("/milestones/:employeeId", async (req, res) => {
   try {
     const { employeeId } = req.params;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -117,7 +123,9 @@ router.get("/milestones/:employeeId", async (req, res) => {
 router.post("/predict", async (req, res) => {
   try {
     const { employeeId } = req.body;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employeeId) {
       return res.status(400).json({ error: "employeeId is required" });
@@ -168,8 +176,10 @@ router.post("/predict", async (req, res) => {
 router.patch("/alerts/:id/acknowledge", async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.claims?.sub;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const userId = clerkUserId;
+    const employerId = currentUser?.employerId;
 
     if (!userId || !employerId) {
       return res.status(403).json({ error: "Authentication required" });
@@ -223,7 +233,9 @@ router.patch("/alerts/:id/acknowledge", async (req, res) => {
 router.patch("/alerts/:id/dismiss", async (req, res) => {
   try {
     const { id } = req.params;
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -274,7 +286,9 @@ router.patch("/alerts/:id/dismiss", async (req, res) => {
  */
 router.post("/batch-update", async (req, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -299,7 +313,9 @@ router.post("/batch-update", async (req, res) => {
  */
 router.get("/alerts", async (req, res) => {
   try {
-    const employerId = req.user?.claims?.employerId;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId;
 
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });

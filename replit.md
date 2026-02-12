@@ -24,7 +24,7 @@ PostgreSQL, accessed via Neon serverless driver, is the primary database. Drizzl
 
 ### Authentication & Authorization
 
-Replit Auth (OpenID Connect) integrated with Passport.js provides authentication. Cookie-based sessions are stored in PostgreSQL with secure, HTTP-only cookies and CSRF protection. A role-based access control system supports employee, employer, admin, and licensee roles, enforced via Express middleware.
+Clerk authentication provides sign-in/sign-up via `@clerk/clerk-react` (frontend) and `@clerk/express` (backend middleware). The backend uses `clerkMiddleware()` with `getAuth(req).userId` to identify users. User records are auto-created/synced on first login via `getOrCreateUser()` in `server/clerkAuth.ts`. A role-based access control system supports employee, employer, admin, and licensee roles, enforced via Express middleware. Environment variables: `VITE_CLERK_PUBLISHABLE_KEY` (frontend), `CLERK_SECRET_KEY` (backend).
 
 ### Core Features
 

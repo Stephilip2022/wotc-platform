@@ -1,6 +1,7 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import { db } from "../db";
-import { webhookEndpoints, webhookDeliveries, type InsertWebhookEndpoint } from "../../shared/schema";
+import { webhookEndpoints, webhookDeliveries, users, type InsertWebhookEndpoint } from "../../shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import crypto from "crypto";
 import { z } from "zod";
@@ -17,7 +18,9 @@ const webhookEventEnum = z.enum(Object.values(WEBHOOK_EVENTS) as [string, ...str
  */
 router.get("/", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -42,8 +45,10 @@ router.get("/", async (req: any, res) => {
  */
 router.post("/", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
-    const userId = req.user.claims.sub;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
+    const userId = clerkUserId;
     
     if (!employerId) {
       return res.status(403).json({ error: "Employer access required" });
@@ -115,7 +120,9 @@ router.get("/events/list", async (req, res) => {
  */
 router.get("/:id", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     const { id } = req.params;
     
     if (!employerId) {
@@ -146,7 +153,9 @@ router.get("/:id", async (req: any, res) => {
  */
 router.patch("/:id", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     const { id } = req.params;
     
     if (!employerId) {
@@ -207,7 +216,9 @@ router.patch("/:id", async (req: any, res) => {
  */
 router.delete("/:id", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     const { id } = req.params;
     
     if (!employerId) {
@@ -242,7 +253,9 @@ router.delete("/:id", async (req: any, res) => {
  */
 router.post("/:id/regenerate-secret", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     const { id } = req.params;
     
     if (!employerId) {
@@ -290,7 +303,9 @@ router.post("/:id/regenerate-secret", async (req: any, res) => {
  */
 router.get("/:id/deliveries", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     const { id } = req.params;
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
@@ -334,7 +349,9 @@ router.get("/:id/deliveries", async (req: any, res) => {
  */
 router.post("/:id/test", async (req: any, res) => {
   try {
-    const employerId = req.user.claims.employerId as string;
+    const clerkUserId = getAuth(req).userId!;
+    const [currentUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+    const employerId = currentUser?.employerId as string;
     const { id } = req.params;
     
     if (!employerId) {

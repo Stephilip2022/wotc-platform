@@ -7,7 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+import { UserButton, SignedIn, SignedOut } from "@clerk/clerk-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { registerServiceWorker } from "@/utils/registerSW";
@@ -57,9 +57,7 @@ function EmployeeRouter() {
           <h1 className="text-xl font-bold">WOTC Screening</h1>
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="sm" asChild data-testid="button-logout">
-              <a href="/api/logout">Logout</a>
-            </Button>
+            <UserButton afterSignOutUrl="/" data-testid="button-user-menu" />
           </div>
         </div>
       </header>
@@ -87,9 +85,7 @@ function PortalRouter({ role }: { role: "admin" | "employer" }) {
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Button variant="ghost" size="sm" asChild data-testid="button-logout">
-                <a href="/api/logout">Logout</a>
-              </Button>
+              <UserButton afterSignOutUrl="/" data-testid="button-user-menu" />
             </div>
           </header>
           <main className="flex-1 overflow-auto p-8">

@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { isAuthenticated } from "../replitAuth";
+import { getAuth } from "@clerk/express";
+import { isAuthenticated } from "../clerkAuth";
 import { db } from "../db";
 import { users, employers } from "@shared/schema";
 import { eq, or, and } from "drizzle-orm";
@@ -44,7 +45,7 @@ router.get("/plans", isAuthenticated, async (req, res) => {
 
 router.get("/plans/all", isAuthenticated, async (req, res) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await isAdmin(userId)) {
       return res.status(403).json({ error: "Admin access required" });
     }
@@ -71,7 +72,7 @@ router.get("/plans/:id", isAuthenticated, async (req, res) => {
 
 router.post("/plans", isAuthenticated, async (req, res) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await isAdmin(userId)) {
       return res.status(403).json({ error: "Admin access required" });
     }
@@ -86,7 +87,7 @@ router.post("/plans", isAuthenticated, async (req, res) => {
 
 router.put("/plans/:id", isAuthenticated, async (req, res) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await isAdmin(userId)) {
       return res.status(403).json({ error: "Admin access required" });
     }
@@ -104,7 +105,7 @@ router.put("/plans/:id", isAuthenticated, async (req, res) => {
 
 router.post("/employer/:employerId/assign", isAuthenticated, async (req, res) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     const { employerId } = req.params;
     
     if (!await canAccessEmployerBilling(userId, employerId)) {
@@ -128,7 +129,7 @@ router.post("/employer/:employerId/assign", isAuthenticated, async (req, res) =>
 
 router.get("/employer/:employerId", isAuthenticated, async (req, res) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     const { employerId } = req.params;
     
     if (!await canAccessEmployerBilling(userId, employerId)) {
@@ -155,7 +156,7 @@ router.post("/calculate", async (req, res) => {
 
 router.post("/initialize", isAuthenticated, async (req, res) => {
   try {
-    const userId = (req.user as any)?.id;
+    const userId = getAuth(req).userId!;
     if (!await isAdmin(userId)) {
       return res.status(403).json({ error: "Admin access required" });
     }

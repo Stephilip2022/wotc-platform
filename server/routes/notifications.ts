@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
 import { db } from "../db";
 import { pushSubscriptions, notificationPreferences, users } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -10,7 +11,7 @@ const router = Router();
 // Subscribe to push notifications
 router.post("/subscribe", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -76,7 +77,7 @@ router.post("/subscribe", async (req: any, res) => {
 // Unsubscribe from push notifications
 router.post("/unsubscribe", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -102,7 +103,7 @@ router.post("/unsubscribe", async (req: any, res) => {
 // Get notification preferences
 router.get("/preferences", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
@@ -131,7 +132,7 @@ router.get("/preferences", async (req: any, res) => {
 // Update notification preferences
 router.patch("/preferences", async (req: any, res) => {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = getAuth(req).userId!;
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
