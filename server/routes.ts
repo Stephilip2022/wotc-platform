@@ -36,6 +36,7 @@ import OpenAI from "openai";
 import Stripe from "stripe";
 import { determineEligibility, calculateCredit, TARGET_GROUPS, normalizeTargetGroup } from "./eligibility";
 import { generateWOTCExportCSV, generateStateSpecificCSV, generateExportFilename } from "./utils/csv-export";
+import { processCompletedQuestionnaire } from "./services/wotcForms";
 import notificationsRouter from "./routes/notifications";
 import apiKeysRouter from "./routes/apiKeys";
 import publicApiRouter from "./routes/publicApi";
@@ -658,6 +659,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
+      // Get the screening ID for form generation
+      let screeningIdForForms: string | null = null;
+      if (existingScreening.length > 0) {
+        screeningIdForForms = existingScreening[0].id;
+      } else {
+        const [newScreening] = await db
+          .select()
+          .from(screenings)
+          .where(eq(screenings.employeeId, employee.id))
+          .limit(1);
+        screeningIdForForms = newScreening?.id || null;
+      }
+
       // Update employee status
       await db
         .update(employees)
@@ -665,6 +679,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: eligibilityResult.isEligible ? "screening" : "not_eligible" 
         })
         .where(eq(employees.id, employee.id));
+
+      // Auto-generate Form 8850, ICF Form 9061, and bulk upload data for qualifying screenings
+      if (screeningIdForForms && (eligibilityResult.isEligible || eligibilityResult.targetGroups.length > 0)) {
+        processCompletedQuestionnaire(screeningIdForForms).catch(err => {
+          console.error("[SUBMIT] Background form generation error:", err);
+        });
+        console.log(`[SUBMIT] Triggered auto form generation for screening: ${screeningIdForForms}`);
+      }
 
       // Calculate projected credit
       if (eligibilityResult.isEligible && eligibilityResult.primaryTargetGroup) {

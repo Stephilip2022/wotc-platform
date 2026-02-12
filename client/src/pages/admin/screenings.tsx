@@ -244,6 +244,18 @@ export default function AdminScreeningsPage() {
                             Cert#: {item.screening.certificationNumber}
                           </span>
                         )}
+                        {item.screening.form8850Generated && (
+                          <Badge variant="secondary" data-testid={`badge-8850-${item.screening.id}`}>
+                            <FileText className="h-3 w-3 mr-1" />
+                            8850
+                          </Badge>
+                        )}
+                        {item.screening.form9061Generated && (
+                          <Badge variant="secondary" data-testid={`badge-9061-${item.screening.id}`}>
+                            <FileText className="h-3 w-3 mr-1" />
+                            9061
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
