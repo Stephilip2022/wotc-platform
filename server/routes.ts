@@ -30,7 +30,7 @@ import {
   csvImportTemplates,
 } from "@shared/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { setupClerkAuth, isAuthenticated, getOrCreateUser } from "./clerkAuth";
+import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId } from "./clerkAuth";
 import { getAuth } from "@clerk/express";
 import OpenAI from "openai";
 import Stripe from "stripe";
@@ -416,8 +416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/employee/questionnaire", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || !user.employerId) {
         return res.status(404).json({ error: "Employee not found" });
@@ -498,7 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getAuth(req).userId!;
       const { questionnaireId, responses, completionPercentage } = req.body;
       
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       if (!user) {
         return res.status(404).json({ error: "User not found" });
       }
@@ -559,7 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("[SUBMIT] Questionnaire ID:", questionnaireId);
       console.log("[SUBMIT] Response count:", Object.keys(responses || {}).length);
       
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       console.log("[SUBMIT] User found:", !!user);
       
       const [employee] = await db
@@ -843,8 +842,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/employer/stats", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -898,8 +896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employer/recent-activity", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -937,8 +934,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employer/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -959,8 +955,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employer/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -981,8 +976,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employer/employees/:id/remind", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1038,8 +1032,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employer/employees/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1100,8 +1093,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employer/screenings", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1135,8 +1127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/admin/stats", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1168,8 +1159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Analytics: Certification Trends (last 12 months)
   app.get("/api/admin/analytics/certification-trends", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1198,8 +1188,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Analytics: State Breakdown
   app.get("/api/admin/analytics/state-breakdown", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1238,8 +1227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/employers/summary", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1276,8 +1264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/employers", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1297,8 +1284,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/employers/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1323,8 +1309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/employers", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1365,8 +1350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin: Get export record count
   app.get("/api/admin/export/wotc-csv/count", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1439,8 +1423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/export/wotc-csv", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1532,8 +1515,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/employers/:id/logo", isAuthenticated, upload.single("logo"), async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1583,8 +1565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/admin/employers/:id/branding", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1617,8 +1598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/employers/:id/qr-code", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1688,8 +1668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/eta-forms", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1715,7 +1694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = getAuth(req).userId!;
       console.log("👤 User ID from claims:", userId);
       
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       console.log("🔐 User from DB:", user);
       
       if (!user || user.role !== "admin") {
@@ -1777,8 +1756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/eta-forms/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1802,8 +1780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/eta-forms/:id/complete-signature", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1838,8 +1815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/admin/questionnaires", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1859,8 +1835,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/admin/questionnaires", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1891,8 +1866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/admin/questionnaires/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1913,8 +1887,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all screenings with filtering
   app.get("/api/admin/screenings", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1963,8 +1936,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update screening status with audit trail
   app.patch("/api/admin/screenings/:id/status", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2081,8 +2053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload determination letter for a screening
   app.post("/api/admin/screenings/:id/determination-letter", isAuthenticated, upload.single("file"), async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2138,8 +2109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get screening history (audit trail)
   app.get("/api/admin/screenings/:id/history", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2171,8 +2141,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all hours for employer's employees
   app.get("/api/employer/hours", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2203,7 +2172,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employer/hours", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2245,7 +2214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employer/hours/import/init", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
     try {
       const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2298,8 +2267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Step 2: Get import session details
   app.get("/api/employer/hours/import/:sessionId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2329,8 +2297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Step 3: Save column mappings to session
   app.patch("/api/employer/hours/import/:sessionId/mappings", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2368,8 +2335,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all import templates for employer
   app.get("/api/employer/hours/import/templates", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2391,8 +2357,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Step 4: Process and preview import (with employee matching)
   app.post("/api/employer/hours/import/:sessionId/preview", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2567,7 +2532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employer/hours/import/templates", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2597,7 +2562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employer/hours/bulk", isAuthenticated, csvUpload.single("file"), async (req: any, res) => {
     try {
       const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2675,8 +2640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update hours entry
   app.patch("/api/employer/hours/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2717,8 +2681,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete hours entry
   app.delete("/api/employer/hours/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2752,8 +2715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Recalculate credit for a specific screening
   app.post("/api/employer/credits/calculate/:screeningId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || (user.role !== "employer" && user.role !== "admin") || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2866,8 +2828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all credit calculations for employer
   app.get("/api/employer/credits", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2895,8 +2856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auto-recalculate all credits for an employer
   app.post("/api/employer/credits/recalculate-all", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -2938,8 +2898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get admin revenue dashboard metrics
   app.get("/api/admin/revenue/dashboard", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "admin") {
         return res.status(403).json({ error: "Unauthorized" });
@@ -3090,8 +3049,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get employer's current subscription
   app.get("/api/employer/subscription", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -3122,8 +3080,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create Stripe Checkout Session for subscription
   app.post("/api/employer/subscription/checkout", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -3390,8 +3347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create Stripe Billing Portal session (for payment method updates)
   app.post("/api/employer/subscription/portal", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -3422,8 +3378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Cancel subscription
   app.post("/api/employer/subscription/cancel", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -3469,8 +3424,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Change subscription plan (upgrade/downgrade)
   app.post("/api/employer/subscription/change-plan", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -3601,8 +3555,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate invoice for an employer's certified screenings
   app.post("/api/admin/invoices/generate", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -3762,8 +3715,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all invoices for employer
   app.get("/api/employer/invoices", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || !user.employerId) {
         return res.status(403).json({ error: "Employer access required" });
@@ -3791,8 +3743,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get invoice details
   app.get("/api/invoices/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       const invoiceId = req.params.id;
 
       const [invoice] = await db
@@ -3844,8 +3795,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all invoices (admin only)
   app.get("/api/admin/invoices", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -3891,8 +3841,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mark invoice as paid
   app.post("/api/admin/invoices/:id/mark-paid", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -3975,8 +3924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all state portal configurations (with decryption for admin UI)
   app.get("/api/admin/state-portals", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4010,8 +3958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get state portals that are due for credential rotation
   app.get("/api/admin/state-portals/rotation-due", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4061,8 +4008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize state portal seeds
   app.post("/api/admin/state-portals/seed", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4114,8 +4060,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Encrypt existing plaintext credentials (one-time migration)
   app.post("/api/admin/state-portals/encrypt-credentials", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4179,8 +4124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get single state portal configuration (with decryption for bot use)
   app.get("/api/admin/state-portals/:stateCode", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4217,8 +4161,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update state portal configuration
   app.patch("/api/admin/state-portals/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4278,8 +4221,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Rotate credentials for a state portal
   app.post("/api/admin/state-portals/:id/rotate", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4380,8 +4322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get rotation history for a state portal
   app.get("/api/admin/state-portals/:id/rotation-history", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4420,8 +4361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Set rotation schedule for a state portal
   app.post("/api/admin/state-portals/:id/set-rotation-schedule", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4472,8 +4412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get state submission jobs for employer
   app.get("/api/employer/submissions", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'employer' || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -4498,7 +4437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/submissions/trigger", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4544,8 +4483,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get submission job status
   app.get("/api/admin/submissions/:jobId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4571,8 +4509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all submission jobs (admin)
   app.get("/api/admin/submissions", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4595,8 +4532,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get submission metrics for monitoring dashboard
   app.get("/api/admin/submissions/metrics", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4626,8 +4562,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get submission anomalies for alerts
   app.get("/api/admin/submissions/anomalies", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4646,8 +4581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get detailed job list with filters
   app.get("/api/admin/submissions/jobs", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4672,8 +4606,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Parse determination letter with OCR
   app.post("/api/admin/determination-letters/parse", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4703,8 +4636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Store parsed determination letter
   app.post("/api/admin/determination-letters", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4744,8 +4676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get determination letters
   app.get("/api/admin/determination-letters", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4773,7 +4704,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/employer/credit-forecast", isAuthenticated, async (req: any, res) => {
     try {
       const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(userId);
       
       if (!user || !user.employerId) {
         return res.status(403).json({ error: "Employer access required" });
@@ -4817,8 +4748,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get monthly projection trend
   app.get("/api/employer/credit-forecast/trend", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || !user.employerId) {
         return res.status(403).json({ error: "Employer access required" });
@@ -4839,8 +4769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin: System-wide credit forecast
   app.get("/api/admin/credit-forecast/system-wide", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4859,8 +4788,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin: Get all stored forecasts
   app.get("/api/admin/credit-forecasts", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4930,8 +4858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Batch simplify multiple questions
   app.post("/api/questionnaire/batch-simplify", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -4967,8 +4894,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Analyze questionnaire readability
   app.post("/api/questionnaire/analyze-readability", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -5039,8 +4965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get simplification statistics
   app.get("/api/admin/questionnaire/simplification-stats", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -5070,8 +4995,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate AI eligibility prediction for an employee
   app.post("/api/admin/ai/predict-eligibility", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -5143,8 +5067,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get AI predictions for an employee
   app.get("/api/admin/ai/predictions/:employeeId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -5169,8 +5092,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Validate prediction accuracy (compare AI prediction vs actual result)
   app.post("/api/admin/ai/validate-prediction/:predictionId", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });
@@ -5223,8 +5145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get AI prediction accuracy statistics
   app.get("/api/admin/ai/stats", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = getAuth(req).userId!;
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      const user = await getUserByClerkId(getAuth(req).userId!);
       
       if (!user || user.role !== 'admin') {
         return res.status(403).json({ error: "Admin access required" });

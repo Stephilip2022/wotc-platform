@@ -38,6 +38,21 @@ export function getClerkUserId(req: Request): string | null {
   return auth?.userId || null;
 }
 
+export async function getUserByClerkId(clerkUserId: string) {
+  const [existingUser] = await db.select().from(users).where(eq(users.id, clerkUserId));
+  if (existingUser) return existingUser;
+
+  try {
+    const clerkUser = await clerkClient.users.getUser(clerkUserId);
+    const email = clerkUser.emailAddresses?.[0]?.emailAddress || null;
+    if (email) {
+      const [existingByEmail] = await db.select().from(users).where(eq(users.email, email));
+      if (existingByEmail) return existingByEmail;
+    }
+  } catch (e) {}
+  return null;
+}
+
 export async function getOrCreateUser(req: Request) {
   const auth = getAuth(req);
   if (!auth || !auth.userId) return null;
