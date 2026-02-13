@@ -760,6 +760,14 @@ export const WOTCTargetGroups = {
   
   // Group XII: Long-Term Unemployment Recipients
   "XII": "Long-Term Unemployment Recipients (27+ weeks)",
+
+  // State-Level Credit Program Groups
+  "State-Veteran": "State Veteran Employment Credits",
+  "State-Disability": "State Disability Employment Credits",
+  "State-EnterpriseZone": "Enterprise Zone & Location Credits",
+  "State-YouthTraining": "Youth, Apprenticeship & Training Credits",
+  "State-Reentry": "Re-Entry Employment Credits",
+  "State-General": "Additional State Credits",
 } as const;
 
 export type WOTCTargetGroup = keyof typeof WOTCTargetGroups;

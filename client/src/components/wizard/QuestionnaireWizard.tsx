@@ -61,6 +61,8 @@ export default function QuestionnaireWizard({
         const gatingQ = currentSection.questions?.find(q => q.id === currentSection.gatingConfig?.questionId);
         if (gatingQ) {
           onQuestionChange(gatingQ.question, sectionName);
+        } else if (currentSection.gatingConfig.questionText) {
+          onQuestionChange(currentSection.gatingConfig.questionText, sectionName);
         }
       } else if (currentSection.questions?.length > 0) {
         // Use hasOwnProperty to differentiate between unanswered and falsy-but-valid answers

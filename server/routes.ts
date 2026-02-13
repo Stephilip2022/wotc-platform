@@ -35,6 +35,8 @@ import {
   referralPartnerTeamMembers,
   referralCommissions,
   employerSetupTokens,
+  taxCreditPrograms,
+  employerProgramAssignments,
 } from "@shared/schema";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId, clerkClient } from "./clerkAuth";
@@ -439,7 +441,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Employee not found" });
       }
 
-      // Get active questionnaire for employer
       const [questionnaire] = await db
         .select()
         .from(questionnaires)
@@ -454,8 +455,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!questionnaire) {
         return res.status(404).json({ error: "No active questionnaire" });
       }
+
+      const assignments = await db
+        .select({
+          programId: employerProgramAssignments.programId,
+          isEnabled: employerProgramAssignments.isEnabled,
+          programName: taxCreditPrograms.programName,
+          state: taxCreditPrograms.state,
+          programCategory: taxCreditPrograms.programCategory,
+        })
+        .from(employerProgramAssignments)
+        .innerJoin(taxCreditPrograms, eq(employerProgramAssignments.programId, taxCreditPrograms.id))
+        .where(eq(employerProgramAssignments.employerId, user.employerId));
+
+      let enhancedQuestionnaire = { ...questionnaire };
+      if (assignments.length > 0) {
+        const { getStateLevelScreeningSections } = await import('./utils/onboarding');
+        const stateSections = getStateLevelScreeningSections(
+          assignments.map(a => ({
+            programId: a.programId,
+            programName: a.programName,
+            state: a.state,
+            programCategory: a.programCategory || "general_screening",
+            isEnabled: a.isEnabled ?? false,
+          }))
+        );
+        if (stateSections.length > 0) {
+          const baseQuestions = Array.isArray(enhancedQuestionnaire.questions) ? enhancedQuestionnaire.questions : [];
+          enhancedQuestionnaire = {
+            ...enhancedQuestionnaire,
+            questions: [...baseQuestions, ...stateSections],
+          };
+        }
+      }
       
-      res.json(questionnaire);
+      res.json(enhancedQuestionnaire);
     } catch (error) {
       console.error("Error fetching questionnaire:", error);
       res.status(500).json({ error: "Failed to fetch questionnaire" });
@@ -945,6 +979,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "No active questionnaire for this employer" });
       }
 
+      const assignments = await db
+        .select({
+          programId: employerProgramAssignments.programId,
+          isEnabled: employerProgramAssignments.isEnabled,
+          programName: taxCreditPrograms.programName,
+          state: taxCreditPrograms.state,
+          programCategory: taxCreditPrograms.programCategory,
+        })
+        .from(employerProgramAssignments)
+        .innerJoin(taxCreditPrograms, eq(employerProgramAssignments.programId, taxCreditPrograms.id))
+        .where(eq(employerProgramAssignments.employerId, employer.id));
+
+      let enhancedQuestionnaire = { ...questionnaire };
+      if (assignments.length > 0) {
+        const { getStateLevelScreeningSections } = await import('./utils/onboarding');
+        const stateSections = getStateLevelScreeningSections(
+          assignments.map(a => ({
+            programId: a.programId,
+            programName: a.programName,
+            state: a.state,
+            programCategory: a.programCategory || "general_screening",
+            isEnabled: a.isEnabled ?? false,
+          }))
+        );
+        if (stateSections.length > 0) {
+          const baseQuestions = Array.isArray(enhancedQuestionnaire.questions) ? enhancedQuestionnaire.questions : [];
+          enhancedQuestionnaire = {
+            ...enhancedQuestionnaire,
+            questions: [...baseQuestions, ...stateSections],
+          };
+        }
+      }
+
       let employee = null;
       if (employeeId) {
         const [emp] = await db
@@ -960,7 +1027,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json({
-        questionnaire,
+        questionnaire: enhancedQuestionnaire,
         employer: {
           id: employer.id,
           name: employer.name,

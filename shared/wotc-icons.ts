@@ -40,6 +40,14 @@ export const WOTCIcons: Record<WOTCTargetGroup, string> = {
   
   // Group XII: Long-Term Unemployment
   "XII": "CalendarClock",
+
+  // State-Level Credit Program Groups
+  "State-Veteran": "Medal",
+  "State-Disability": "Accessibility",
+  "State-EnterpriseZone": "MapPin",
+  "State-YouthTraining": "GraduationCap",
+  "State-Reentry": "RotateCcw",
+  "State-General": "Landmark",
 };
 
 /**
@@ -55,6 +63,7 @@ export const WOTCColors: Record<string, string> = {
   "X": "from-indigo-500 to-indigo-600",   // SSI - Indigo
   "XI": "from-red-500 to-red-600",        // Summer Youth - Red
   "XII": "from-teal-500 to-teal-600",     // Long-Term Unemployment - Teal
+  "State": "from-emerald-500 to-emerald-600", // State-Level Programs - Emerald
 };
 
 /**
@@ -86,6 +95,7 @@ export const WOTCSectionNames: Record<string, string> = {
   "X": "Disability Benefits",
   "XI": "Summer Youth Employment",
   "XII": "Long-Term Unemployment",
+  "State": "State Credit Programs",
 };
 
 /**
