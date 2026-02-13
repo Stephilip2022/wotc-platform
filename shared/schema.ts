@@ -124,6 +124,9 @@ export const employers = pgTable("employers", {
   onboardingStatus: text("onboarding_status").default("pending"), // 'pending', 'documents_sent', 'signed', 'active'
   activatedAt: timestamp("activated_at"),
   
+  // Referral partner association
+  referralPartnerId: varchar("referral_partner_id"),
+  
   // Fee & Billing configuration
   feePercentage: decimal("fee_percentage", { precision: 5, scale: 2 }).default("15.00"), // Service fee 0-20%
   revenueSharePercentage: decimal("revenue_share_percentage", { precision: 5, scale: 2 }).default("25.00"),
@@ -137,6 +140,72 @@ export const employers = pgTable("employers", {
 export const insertEmployerSchema = createInsertSchema(employers).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertEmployer = z.infer<typeof insertEmployerSchema>;
 export type Employer = typeof employers.$inferSelect;
+
+// ============================================================================
+// REFERRAL PARTNERS
+// ============================================================================
+
+export const referralPartners = pgTable("referral_partners", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  legalName: text("legal_name").notNull(),
+  dba: text("dba"),
+  ein: text("ein").unique(),
+  
+  address: text("address"),
+  city: text("city"),
+  state: text("state"),
+  zipCode: text("zip_code"),
+  
+  contactName: text("contact_name").notNull(),
+  contactTitle: text("contact_title"),
+  contactEmail: text("contact_email").notNull(),
+  contactPhone: text("contact_phone"),
+  
+  revenueSharePercentage: decimal("revenue_share_percentage", { precision: 5, scale: 2 }).notNull().default("10.00"),
+  
+  status: text("status").default("active"), // 'active', 'inactive', 'suspended'
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertReferralPartnerSchema = createInsertSchema(referralPartners).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertReferralPartner = z.infer<typeof insertReferralPartnerSchema>;
+export type ReferralPartner = typeof referralPartners.$inferSelect;
+
+export const referralPartnerTeamMembers = pgTable("referral_partner_team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => referralPartners.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  title: text("title"),
+  email: text("email"),
+  phone: text("phone"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertReferralPartnerTeamMemberSchema = createInsertSchema(referralPartnerTeamMembers).omit({ id: true, createdAt: true });
+export type InsertReferralPartnerTeamMember = z.infer<typeof insertReferralPartnerTeamMemberSchema>;
+export type ReferralPartnerTeamMember = typeof referralPartnerTeamMembers.$inferSelect;
+
+export const referralCommissions = pgTable("referral_commissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  partnerId: varchar("partner_id").notNull().references(() => referralPartners.id, { onDelete: "cascade" }),
+  quarter: text("quarter").notNull(), // e.g. "2026-Q1"
+  year: integer("year").notNull(),
+  quarterNumber: integer("quarter_number").notNull(), // 1-4
+  totalCredits: decimal("total_credits", { precision: 12, scale: 2 }).default("0.00"),
+  revenueSharePercentage: decimal("revenue_share_percentage", { precision: 5, scale: 2 }).notNull(),
+  commissionAmount: decimal("commission_amount", { precision: 12, scale: 2 }).default("0.00"),
+  referredEmployerCount: integer("referred_employer_count").default(0),
+  status: text("status").default("pending"), // 'pending', 'approved', 'paid'
+  paidAt: timestamp("paid_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertReferralCommissionSchema = createInsertSchema(referralCommissions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertReferralCommission = z.infer<typeof insertReferralCommissionSchema>;
+export type ReferralCommission = typeof referralCommissions.$inferSelect;
 
 // ============================================================================
 // CLIENT AGREEMENTS (Engagement Letters & ETA Form 9198)

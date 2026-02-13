@@ -31,6 +31,9 @@ import {
   employerWorksites,
   documentUploadTokens,
   documentUploadReminders,
+  referralPartners,
+  referralPartnerTeamMembers,
+  referralCommissions,
 } from "@shared/schema";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId } from "./clerkAuth";
@@ -1850,7 +1853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
-      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates, feePercentage } = req.body;
+      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates, feePercentage, referralPartnerId } = req.body;
 
       if (!name || !ein || !contactEmail) {
         return res.status(400).json({ error: "Company name, EIN, and contact email are required" });
@@ -1880,6 +1883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state: state || null,
         zipCode: zipCode || null,
         hiringStates: Array.isArray(hiringStates) ? hiringStates : null,
+        referralPartnerId: referralPartnerId || null,
         feePercentage: (() => {
           const fee = parseFloat(feePercentage);
           if (isNaN(fee) || fee < 0 || fee > 20) return "15.00";
@@ -6795,6 +6799,266 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching AI stats:", error);
       res.status(500).json({ error: "Failed to fetch AI statistics" });
+    }
+  });
+
+  // ============================================================================
+  // REFERRAL PARTNERS
+  // ============================================================================
+
+  app.get("/api/admin/referral-partners", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      const partners = await db.select().from(referralPartners).orderBy(desc(referralPartners.createdAt));
+      res.json(partners);
+    } catch (error) {
+      console.error("Error fetching referral partners:", error);
+      res.status(500).json({ error: "Failed to fetch referral partners" });
+    }
+  });
+
+  app.get("/api/admin/referral-partners/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      const [partner] = await db.select().from(referralPartners).where(eq(referralPartners.id, req.params.id));
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
+
+      const teamMembers = await db.select().from(referralPartnerTeamMembers)
+        .where(eq(referralPartnerTeamMembers.partnerId, req.params.id));
+
+      const referredEmployers = await db.select().from(employers)
+        .where(eq(employers.referralPartnerId, req.params.id));
+
+      const commissions = await db.select().from(referralCommissions)
+        .where(eq(referralCommissions.partnerId, req.params.id))
+        .orderBy(desc(referralCommissions.createdAt));
+
+      res.json({ ...partner, teamMembers, referredEmployers, commissions });
+    } catch (error) {
+      console.error("Error fetching referral partner:", error);
+      res.status(500).json({ error: "Failed to fetch referral partner" });
+    }
+  });
+
+  app.post("/api/admin/referral-partners", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      const { legalName, dba, ein, address, city, state, zipCode, contactName, contactTitle, contactEmail, contactPhone, revenueSharePercentage, teamMembers } = req.body;
+
+      if (!legalName || !contactName || !contactEmail) {
+        return res.status(400).json({ error: "Legal name, contact name, and contact email are required" });
+      }
+
+      const sharePct = (() => {
+        const pct = parseFloat(revenueSharePercentage);
+        if (isNaN(pct) || pct < 0 || pct > 50) return "10.00";
+        return pct.toFixed(2);
+      })();
+
+      const [newPartner] = await db.insert(referralPartners).values({
+        legalName,
+        dba: dba || null,
+        ein: ein || null,
+        address: address || null,
+        city: city || null,
+        state: state || null,
+        zipCode: zipCode || null,
+        contactName,
+        contactTitle: contactTitle || null,
+        contactEmail,
+        contactPhone: contactPhone || null,
+        revenueSharePercentage: sharePct,
+      }).returning();
+
+      if (Array.isArray(teamMembers) && teamMembers.length > 0) {
+        const membersToInsert = teamMembers.slice(0, 5).filter((m: any) => m.name);
+        if (membersToInsert.length > 0) {
+          await db.insert(referralPartnerTeamMembers).values(
+            membersToInsert.map((m: any) => ({
+              partnerId: newPartner.id,
+              name: m.name,
+              title: m.title || null,
+              email: m.email || null,
+              phone: m.phone || null,
+            }))
+          );
+        }
+      }
+
+      res.json({ success: true, partner: newPartner });
+    } catch (error: any) {
+      console.error("Error creating referral partner:", error);
+      if (error?.code === "23505") {
+        return res.status(400).json({ error: "A partner with this EIN already exists" });
+      }
+      res.status(500).json({ error: "Failed to create referral partner" });
+    }
+  });
+
+  app.patch("/api/admin/referral-partners/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      const { legalName, dba, ein, address, city, state, zipCode, contactName, contactTitle, contactEmail, contactPhone, revenueSharePercentage, status } = req.body;
+
+      const updates: any = { updatedAt: new Date() };
+      if (legalName !== undefined) updates.legalName = legalName;
+      if (dba !== undefined) updates.dba = dba || null;
+      if (ein !== undefined) updates.ein = ein || null;
+      if (address !== undefined) updates.address = address || null;
+      if (city !== undefined) updates.city = city || null;
+      if (state !== undefined) updates.state = state || null;
+      if (zipCode !== undefined) updates.zipCode = zipCode || null;
+      if (contactName !== undefined) updates.contactName = contactName;
+      if (contactTitle !== undefined) updates.contactTitle = contactTitle || null;
+      if (contactEmail !== undefined) updates.contactEmail = contactEmail;
+      if (contactPhone !== undefined) updates.contactPhone = contactPhone || null;
+      if (revenueSharePercentage !== undefined) {
+        const pct = parseFloat(revenueSharePercentage);
+        updates.revenueSharePercentage = (!isNaN(pct) && pct >= 0 && pct <= 50) ? pct.toFixed(2) : "10.00";
+      }
+      if (status !== undefined) updates.status = status;
+
+      const [updated] = await db.update(referralPartners)
+        .set(updates)
+        .where(eq(referralPartners.id, req.params.id))
+        .returning();
+
+      res.json({ success: true, partner: updated });
+    } catch (error) {
+      console.error("Error updating referral partner:", error);
+      res.status(500).json({ error: "Failed to update referral partner" });
+    }
+  });
+
+  app.post("/api/admin/referral-partners/:id/team-members", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      const existing = await db.select().from(referralPartnerTeamMembers)
+        .where(eq(referralPartnerTeamMembers.partnerId, req.params.id));
+      if (existing.length >= 5) {
+        return res.status(400).json({ error: "Maximum 5 team members per partner" });
+      }
+
+      const { name, title, email, phone } = req.body;
+      if (!name) return res.status(400).json({ error: "Name is required" });
+
+      const [member] = await db.insert(referralPartnerTeamMembers).values({
+        partnerId: req.params.id,
+        name,
+        title: title || null,
+        email: email || null,
+        phone: phone || null,
+      }).returning();
+
+      res.json({ success: true, member });
+    } catch (error) {
+      console.error("Error adding team member:", error);
+      res.status(500).json({ error: "Failed to add team member" });
+    }
+  });
+
+  app.delete("/api/admin/referral-partners/:partnerId/team-members/:memberId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      await db.delete(referralPartnerTeamMembers)
+        .where(and(
+          eq(referralPartnerTeamMembers.id, req.params.memberId),
+          eq(referralPartnerTeamMembers.partnerId, req.params.partnerId)
+        ));
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing team member:", error);
+      res.status(500).json({ error: "Failed to remove team member" });
+    }
+  });
+
+  app.post("/api/admin/referral-partners/:id/calculate-commission", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") return res.status(403).json({ error: "Unauthorized" });
+
+      const partnerId = req.params.id;
+      const [partner] = await db.select().from(referralPartners).where(eq(referralPartners.id, partnerId));
+      if (!partner) return res.status(404).json({ error: "Partner not found" });
+
+      const now = new Date();
+      const year = req.body.year || now.getFullYear();
+      const quarterNumber = req.body.quarter || Math.ceil((now.getMonth() + 1) / 3);
+      const quarterLabel = `${year}-Q${quarterNumber}`;
+
+      const quarterStart = new Date(year, (quarterNumber - 1) * 3, 1);
+      const quarterEnd = new Date(year, quarterNumber * 3, 0, 23, 59, 59);
+
+      const referredEmployerList = await db.select({ id: employers.id })
+        .from(employers)
+        .where(eq(employers.referralPartnerId, partnerId));
+
+      const employerIds = referredEmployerList.map(e => e.id);
+      let totalCredits = 0;
+
+      if (employerIds.length > 0) {
+        const credits = await db.select({
+          total: sql<string>`COALESCE(SUM(${creditCalculations.creditAmount}), 0)`,
+        })
+          .from(creditCalculations)
+          .where(and(
+            sql`${creditCalculations.employerId} = ANY(${employerIds})`,
+            sql`${creditCalculations.createdAt} >= ${quarterStart}`,
+            sql`${creditCalculations.createdAt} <= ${quarterEnd}`,
+          ));
+        totalCredits = parseFloat(credits[0]?.total || "0");
+      }
+
+      const commissionAmount = (totalCredits * parseFloat(partner.revenueSharePercentage)) / 100;
+
+      const existingCommission = await db.select().from(referralCommissions)
+        .where(and(
+          eq(referralCommissions.partnerId, partnerId),
+          eq(referralCommissions.quarter, quarterLabel),
+        ));
+
+      let commission;
+      if (existingCommission.length > 0) {
+        [commission] = await db.update(referralCommissions)
+          .set({
+            totalCredits: totalCredits.toFixed(2),
+            commissionAmount: commissionAmount.toFixed(2),
+            revenueSharePercentage: partner.revenueSharePercentage,
+            referredEmployerCount: employerIds.length,
+            updatedAt: new Date(),
+          })
+          .where(eq(referralCommissions.id, existingCommission[0].id))
+          .returning();
+      } else {
+        [commission] = await db.insert(referralCommissions).values({
+          partnerId,
+          quarter: quarterLabel,
+          year,
+          quarterNumber,
+          totalCredits: totalCredits.toFixed(2),
+          revenueSharePercentage: partner.revenueSharePercentage,
+          commissionAmount: commissionAmount.toFixed(2),
+          referredEmployerCount: employerIds.length,
+        }).returning();
+      }
+
+      res.json({ success: true, commission });
+    } catch (error) {
+      console.error("Error calculating commission:", error);
+      res.status(500).json({ error: "Failed to calculate commission" });
     }
   });
 
