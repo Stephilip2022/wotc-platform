@@ -76,6 +76,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "CSV Export", url: "/admin/export", icon: Download },
     { title: "State Automation", url: "/admin/automation", icon: Settings },
     { title: "State Credentials", url: "/admin/state-credentials", icon: KeyRound },
+    { title: "Onboarding", url: "/admin/onboarding", icon: UserPlus },
     { title: "Settings", url: "/admin/settings", icon: Settings },
   ];
 

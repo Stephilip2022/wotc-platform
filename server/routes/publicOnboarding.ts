@@ -1,13 +1,49 @@
 import { Router } from "express";
 import { db } from "../db";
 import {
-  employers, onboardingInviteTokens, onboardingInstances, 
-  onboardingTasks, onboardingDocuments, onboardingFormData
+  employers, employees, onboardingInviteTokens, onboardingInstances, 
+  onboardingTasks, onboardingDocuments, onboardingFormData,
+  onboardingSettings
 } from "../../shared/schema";
 import { eq, and } from "drizzle-orm";
 import multer from "multer";
 
 const router = Router();
+
+async function handleCompletionActions(instanceId: string, employerId: string) {
+  try {
+    const [settings] = await db.select().from(onboardingSettings).where(eq(onboardingSettings.employerId, employerId));
+    const [instance] = await db.select().from(onboardingInstances).where(eq(onboardingInstances.id, instanceId));
+    if (!instance) return;
+
+    if (settings?.autoCreateEmployee !== false) {
+      const existingEmployee = await db.select().from(employees)
+        .where(and(eq(employees.employerId, employerId), eq(employees.email, instance.email)));
+
+      if (existingEmployee.length === 0) {
+        await db.insert(employees).values({
+          employerId,
+          firstName: instance.firstName,
+          lastName: instance.lastName,
+          email: instance.email,
+          phone: instance.phone || null,
+          jobTitle: instance.jobTitle || null,
+          department: instance.department || null,
+          startDate: instance.startDate || null,
+          status: "active",
+          onboardingStatus: "completed",
+        });
+        console.log(`[Onboarding] Auto-created employee for ${instance.firstName} ${instance.lastName}`);
+      }
+    }
+
+    if (settings?.autoTriggerScreening) {
+      console.log(`[Onboarding] WOTC screening auto-trigger for ${instance.firstName} ${instance.lastName}`);
+    }
+  } catch (error) {
+    console.error("[Onboarding] Completion actions error:", error);
+  }
+}
 
 const onboardingUpload = multer({
   storage: multer.memoryStorage(),
@@ -377,6 +413,10 @@ router.post("/:token/submit", async (req, res) => {
         updatedAt: new Date(),
       })
       .where(eq(onboardingInstances.id, instance.id));
+
+    handleCompletionActions(instance.id, instance.employerId).catch(err =>
+      console.error("[Onboarding] Completion actions failed:", err)
+    );
 
     res.json({ message: "Onboarding completed successfully! Your employer will be notified." });
   } catch (error) {

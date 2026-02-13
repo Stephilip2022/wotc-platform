@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,14 +14,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   UserPlus, Send, Clock, CheckCircle, AlertCircle, Users, BarChart3,
   Link2, Eye, Upload, FileText, ArrowLeft, FileCheck, Shield, X,
+  Settings, Layers, Download, Plus, Trash2, Pencil, Save,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import type { OnboardingInstance } from "@shared/schema";
+import type { OnboardingInstance, OnboardingSettings, OnboardingTemplate } from "@shared/schema";
 
 type InstanceDetail = {
   instance: OnboardingInstance;
@@ -41,6 +46,16 @@ type AnalyticsData = {
 };
 
 const PIE_COLORS = ["hsl(var(--muted-foreground))", "hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--destructive))"];
+
+const ALL_STEPS = [
+  { key: "personal_info", label: "Personal Information" },
+  { key: "tax_w4", label: "Federal Tax (W-4)" },
+  { key: "state_withholding", label: "State Tax Withholding" },
+  { key: "direct_deposit", label: "Direct Deposit" },
+  { key: "emergency_contact", label: "Emergency Contact" },
+  { key: "id_upload", label: "Photo ID Upload" },
+  { key: "policy_sign", label: "Policy Acknowledgements" },
+];
 
 export default function NewHireOnboardingPage() {
   const { toast } = useToast();
@@ -69,6 +84,151 @@ export default function NewHireOnboardingPage() {
     queryKey: ["/api/onboarding/employer/analytics"],
     enabled: activeTab === "analytics",
   });
+
+  const { data: settingsData, isLoading: settingsLoading } = useQuery<OnboardingSettings>({
+    queryKey: ["/api/onboarding/employer/settings"],
+    enabled: activeTab === "settings",
+  });
+
+  const { data: templatesData, isLoading: templatesLoading } = useQuery<OnboardingTemplate[]>({
+    queryKey: ["/api/onboarding/employer/templates"],
+    enabled: activeTab === "templates",
+  });
+
+  const getDefaultSettings = () => ({
+    requiredSteps: ALL_STEPS.map(s => s.key),
+    optionalSteps: [] as string[],
+    deadlineDays: 30,
+    welcomeMessage: "",
+    autoCreateEmployee: true,
+    autoTriggerScreening: false,
+  });
+
+  const [settingsForm, setSettingsForm] = useState(getDefaultSettings());
+  const [settingsInitialized, setSettingsInitialized] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+
+  useEffect(() => {
+    if (settingsData && !settingsInitialized) {
+      setSettingsForm({
+        requiredSteps: settingsData.requiredSteps || ALL_STEPS.map(s => s.key),
+        optionalSteps: settingsData.optionalSteps || [],
+        deadlineDays: settingsData.deadlineDays || 30,
+        welcomeMessage: settingsData.welcomeMessage || "",
+        autoCreateEmployee: settingsData.autoCreateEmployee ?? true,
+        autoTriggerScreening: settingsData.autoTriggerScreening ?? false,
+      });
+      setSettingsInitialized(true);
+    }
+  }, [settingsData, settingsInitialized]);
+
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<OnboardingTemplate | null>(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: "", department: "", jobTitle: "", welcomeMessage: "", isDefault: false,
+    requiredSteps: [] as string[], optionalSteps: [] as string[],
+  });
+
+  const settingsMutation = useMutation({
+    mutationFn: async (data: typeof settingsForm) => {
+      const response = await apiRequest("PUT", "/api/onboarding/employer/settings", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Settings Saved", description: "Onboarding settings have been updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/employer/settings"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to save settings", variant: "destructive" });
+    },
+  });
+
+  const createTemplateMutation = useMutation({
+    mutationFn: async (data: typeof templateForm) => {
+      const response = await apiRequest("POST", "/api/onboarding/employer/templates", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Template Created", description: "Onboarding template has been created" });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/employer/templates"] });
+      setTemplateDialogOpen(false);
+      resetTemplateForm();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to create template", variant: "destructive" });
+    },
+  });
+
+  const updateTemplateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: typeof templateForm }) => {
+      const response = await apiRequest("PUT", `/api/onboarding/employer/templates/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Template Updated", description: "Template has been updated" });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/employer/templates"] });
+      setTemplateDialogOpen(false);
+      setEditingTemplate(null);
+      resetTemplateForm();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update template", variant: "destructive" });
+    },
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/onboarding/employer/templates/${id}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Template Deleted", description: "Template has been removed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/employer/templates"] });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to delete template", variant: "destructive" });
+    },
+  });
+
+  const resetTemplateForm = () => {
+    setTemplateForm({ name: "", department: "", jobTitle: "", welcomeMessage: "", isDefault: false, requiredSteps: [], optionalSteps: [] });
+  };
+
+  const openEditTemplate = (t: OnboardingTemplate) => {
+    setEditingTemplate(t);
+    setTemplateForm({
+      name: t.name,
+      department: t.department || "",
+      jobTitle: t.jobTitle || "",
+      welcomeMessage: t.welcomeMessage || "",
+      isDefault: t.isDefault || false,
+      requiredSteps: t.requiredSteps || [],
+      optionalSteps: t.optionalSteps || [],
+    });
+    setTemplateDialogOpen(true);
+  };
+
+  const handleExportDownload = async (instanceId: string) => {
+    if (!instanceId || exportLoading) return;
+    setExportLoading(true);
+    try {
+      const response = await fetch(`/api/onboarding/employer/instances/${instanceId}/export`, { credentials: "include" });
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = response.headers.get("Content-Disposition")?.split("filename=")[1]?.replace(/"/g, "") || "onboarding-export.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: "Export Downloaded", description: "Onboarding data has been exported" });
+    } catch {
+      toast({ title: "Error", description: "Failed to export data", variant: "destructive" });
+    } finally {
+      setExportLoading(false);
+    }
+  };
 
   const { data: instanceDetail, isLoading: detailLoading } = useQuery<InstanceDetail>({
     queryKey: ["/api/onboarding/employer/instances", selectedInstanceId, "detail"],
@@ -156,6 +316,12 @@ export default function NewHireOnboardingPage() {
             {detailLoading ? "Loading..." : `${instanceDetail?.instance.firstName} ${instanceDetail?.instance.lastName}`}
           </h1>
           {instanceDetail && getStatusBadge(instanceDetail.instance.status)}
+          {instanceDetail && (
+            <Button variant="outline" size="sm" onClick={() => handleExportDownload(selectedInstanceId!)} disabled={exportLoading} data-testid="button-export-instance">
+              <Download className="h-4 w-4 mr-1" />
+              {exportLoading ? "Exporting..." : "Export"}
+            </Button>
+          )}
         </div>
 
         {detailLoading ? (
@@ -535,6 +701,8 @@ export default function NewHireOnboardingPage() {
         <TabsList data-testid="tabs-onboarding">
           <TabsTrigger value="invites" data-testid="tab-invites">Invites</TabsTrigger>
           <TabsTrigger value="analytics" data-testid="tab-analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings">Settings</TabsTrigger>
+          <TabsTrigger value="templates" data-testid="tab-templates">Templates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="invites">
@@ -726,6 +894,307 @@ export default function NewHireOnboardingPage() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="settings">
+          {settingsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Clock className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Onboarding Steps</CardTitle>
+                  <CardDescription>Choose which steps are required, optional, or disabled for new hires</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {ALL_STEPS.map(step => {
+                      const isRequired = settingsForm.requiredSteps.includes(step.key);
+                      const isOptional = settingsForm.optionalSteps.includes(step.key);
+                      const status = isRequired ? "required" : isOptional ? "optional" : "disabled";
+
+                      return (
+                        <div key={step.key} className="flex items-center justify-between gap-4" data-testid={`setting-step-${step.key}`}>
+                          <span className="text-sm font-medium">{step.label}</span>
+                          <Select
+                            value={status}
+                            onValueChange={(val) => {
+                              setSettingsForm(prev => {
+                                const newRequired = prev.requiredSteps.filter(k => k !== step.key);
+                                const newOptional = prev.optionalSteps.filter(k => k !== step.key);
+                                if (val === "required") newRequired.push(step.key);
+                                if (val === "optional") newOptional.push(step.key);
+                                return { ...prev, requiredSteps: newRequired, optionalSteps: newOptional };
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="w-32" data-testid={`select-step-status-${step.key}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="required">Required</SelectItem>
+                              <SelectItem value="optional">Optional</SelectItem>
+                              <SelectItem value="disabled">Disabled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Deadlines & Messages</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label htmlFor="deadlineDays">Deadline (days to complete)</Label>
+                    <Input
+                      id="deadlineDays"
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={settingsForm.deadlineDays}
+                      onChange={(e) => setSettingsForm(prev => ({ ...prev, deadlineDays: parseInt(e.target.value) || 30 }))}
+                      data-testid="input-deadline-days"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="welcomeMessage">Welcome Message (shown on first screen)</Label>
+                    <Textarea
+                      id="welcomeMessage"
+                      rows={3}
+                      value={settingsForm.welcomeMessage}
+                      onChange={(e) => setSettingsForm(prev => ({ ...prev, welcomeMessage: e.target.value }))}
+                      data-testid="input-welcome-message"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Completion Actions</CardTitle>
+                  <CardDescription>Actions taken automatically when a new hire completes onboarding</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Auto-create employee record</p>
+                      <p className="text-xs text-muted-foreground">Automatically add to your employee list when onboarding is completed</p>
+                    </div>
+                    <Switch
+                      checked={settingsForm.autoCreateEmployee}
+                      onCheckedChange={(checked) => setSettingsForm(prev => ({ ...prev, autoCreateEmployee: checked }))}
+                      data-testid="switch-auto-create-employee"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Auto-trigger WOTC screening</p>
+                      <p className="text-xs text-muted-foreground">Automatically send WOTC screening questionnaire after onboarding</p>
+                    </div>
+                    <Switch
+                      checked={settingsForm.autoTriggerScreening}
+                      onCheckedChange={(checked) => setSettingsForm(prev => ({ ...prev, autoTriggerScreening: checked }))}
+                      data-testid="switch-auto-trigger-screening"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Button
+                onClick={() => settingsMutation.mutate(settingsForm)}
+                disabled={settingsMutation.isPending}
+                data-testid="button-save-settings"
+              >
+                <Save className="h-4 w-4 mr-1" />
+                {settingsMutation.isPending ? "Saving..." : "Save Settings"}
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="templates">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle>Onboarding Templates</CardTitle>
+                <CardDescription>Create templates for different departments or job roles</CardDescription>
+              </div>
+              <Button onClick={() => { resetTemplateForm(); setEditingTemplate(null); setTemplateDialogOpen(true); }} data-testid="button-create-template">
+                <Plus className="h-4 w-4 mr-1" />
+                New Template
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {templatesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Clock className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : !templatesData || templatesData.length === 0 ? (
+                <div className="text-center py-12">
+                  <Layers className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No templates yet</h3>
+                  <p className="text-muted-foreground">Create a template to speed up onboarding for specific roles</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Job Title</TableHead>
+                      <TableHead>Steps</TableHead>
+                      <TableHead>Default</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {templatesData.map(t => (
+                      <TableRow key={t.id} data-testid={`row-template-${t.id}`}>
+                        <TableCell className="font-medium">{t.name}</TableCell>
+                        <TableCell>{t.department || "--"}</TableCell>
+                        <TableCell>{t.jobTitle || "--"}</TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {(t.requiredSteps?.length || 0) + (t.optionalSteps?.length || 0)} steps
+                          </span>
+                        </TableCell>
+                        <TableCell>{t.isDefault ? <Badge>Default</Badge> : "--"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => openEditTemplate(t)} data-testid={`button-edit-template-${t.id}`}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => deleteTemplateMutation.mutate(t.id)} data-testid={`button-delete-template-${t.id}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{editingTemplate ? "Edit Template" : "New Template"}</DialogTitle>
+                <DialogDescription>
+                  {editingTemplate ? "Update the template configuration" : "Create a reusable onboarding configuration"}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Template Name</Label>
+                  <Input
+                    value={templateForm.name}
+                    onChange={(e) => setTemplateForm(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Engineering Hires"
+                    data-testid="input-template-name"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Department</Label>
+                    <Input
+                      value={templateForm.department}
+                      onChange={(e) => setTemplateForm(f => ({ ...f, department: e.target.value }))}
+                      placeholder="e.g. Engineering"
+                      data-testid="input-template-department"
+                    />
+                  </div>
+                  <div>
+                    <Label>Job Title</Label>
+                    <Input
+                      value={templateForm.jobTitle}
+                      onChange={(e) => setTemplateForm(f => ({ ...f, jobTitle: e.target.value }))}
+                      placeholder="e.g. Software Engineer"
+                      data-testid="input-template-job-title"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label>Welcome Message</Label>
+                  <Textarea
+                    value={templateForm.welcomeMessage}
+                    onChange={(e) => setTemplateForm(f => ({ ...f, welcomeMessage: e.target.value }))}
+                    placeholder="Custom welcome message for this template"
+                    rows={2}
+                    data-testid="input-template-welcome"
+                  />
+                </div>
+                <div>
+                  <Label className="mb-2 block">Step Configuration</Label>
+                  <div className="space-y-2">
+                    {ALL_STEPS.map(step => {
+                      const isRequired = templateForm.requiredSteps.includes(step.key);
+                      const isOptional = templateForm.optionalSteps.includes(step.key);
+                      const val = isRequired ? "required" : isOptional ? "optional" : "disabled";
+                      return (
+                        <div key={step.key} className="flex items-center justify-between gap-2">
+                          <span className="text-sm">{step.label}</span>
+                          <Select
+                            value={val}
+                            onValueChange={(v) => {
+                              setTemplateForm(f => {
+                                const req = f.requiredSteps.filter(k => k !== step.key);
+                                const opt = f.optionalSteps.filter(k => k !== step.key);
+                                if (v === "required") req.push(step.key);
+                                if (v === "optional") opt.push(step.key);
+                                return { ...f, requiredSteps: req, optionalSteps: opt };
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="required">Required</SelectItem>
+                              <SelectItem value="optional">Optional</SelectItem>
+                              <SelectItem value="disabled">Disabled</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={templateForm.isDefault}
+                    onCheckedChange={(checked) => setTemplateForm(f => ({ ...f, isDefault: checked }))}
+                    data-testid="switch-template-default"
+                  />
+                  <Label>Set as default template</Label>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setTemplateDialogOpen(false)} data-testid="button-cancel-template">Cancel</Button>
+                <Button
+                  onClick={() => {
+                    if (editingTemplate) {
+                      updateTemplateMutation.mutate({ id: editingTemplate.id, data: templateForm });
+                    } else {
+                      createTemplateMutation.mutate(templateForm);
+                    }
+                  }}
+                  disabled={!templateForm.name || createTemplateMutation.isPending || updateTemplateMutation.isPending}
+                  data-testid="button-submit-template"
+                >
+                  {createTemplateMutation.isPending || updateTemplateMutation.isPending ? "Saving..." : editingTemplate ? "Update" : "Create"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
       </Tabs>
     </div>

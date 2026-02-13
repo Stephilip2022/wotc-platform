@@ -49,6 +49,7 @@ import AdminSettingsPage from "@/pages/admin/settings";
 import TaxProgramsPage from "@/pages/admin/tax-programs";
 import StateCreditsMatrixPage from "@/pages/admin/state-credits-matrix";
 import ReferralPartnersPage from "@/pages/admin/referral-partners";
+import AdminOnboardingOverview from "@/pages/admin/onboarding-overview";
 import MultiCreditPage from "@/pages/employer/multi-credit";
 import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
 import BulkImportPage from "@/pages/employer/bulk-import";
@@ -83,6 +84,7 @@ function AdminRoutes() {
       <Route path="/admin/tax-programs" component={TaxProgramsPage} />
       <Route path="/admin/state-credits-matrix" component={StateCreditsMatrixPage} />
       <Route path="/admin/referral-partners" component={ReferralPartnersPage} />
+      <Route path="/admin/onboarding" component={AdminOnboardingOverview} />
       <Route path="/admin/settings" component={AdminSettingsPage} />
       <Route path="/employer/onboarding" component={OnboardingWizardPage} />
       <Route component={NotFound} />

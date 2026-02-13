@@ -4,9 +4,10 @@ import { db } from "../db";
 import { 
   employers, employees, users,
   onboardingInviteTokens, onboardingInstances, onboardingTasks, 
-  onboardingDocuments, onboardingFormData
+  onboardingDocuments, onboardingFormData,
+  onboardingSettings, onboardingTemplates
 } from "../../shared/schema";
-import { eq, and, desc, sql, count } from "drizzle-orm";
+import { eq, and, desc, sql, count, inArray } from "drizzle-orm";
 import crypto from "crypto";
 import multer from "multer";
 import { sendOnboardingInviteEmail } from "../email/notifications";
@@ -103,14 +104,27 @@ router.post("/employer/invite", async (req, res) => {
       return res.status(403).json({ error: "Onboarding module not enabled" });
     }
 
-    const { email, firstName, lastName, phone, jobTitle, department, startDate } = req.body;
+    const { email, firstName, lastName, phone, jobTitle, department, startDate, templateId } = req.body;
     if (!email || !firstName || !lastName) {
       return res.status(400).json({ error: "email, firstName, and lastName are required" });
     }
 
+    const [settings] = await db.select().from(onboardingSettings).where(eq(onboardingSettings.employerId, user.employerId));
+
+    let template = null;
+    if (templateId) {
+      const [t] = await db.select().from(onboardingTemplates)
+        .where(and(eq(onboardingTemplates.id, templateId), eq(onboardingTemplates.employerId, user.employerId)));
+      template = t || null;
+    }
+
+    const deadlineDays = settings?.deadlineDays || 30;
     const token = crypto.randomBytes(32).toString("hex");
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30);
+    expiresAt.setDate(expiresAt.getDate() + deadlineDays);
+
+    const effectiveJobTitle = jobTitle || template?.jobTitle || "";
+    const effectiveDepartment = department || template?.department || "";
 
     const [invite] = await db
       .insert(onboardingInviteTokens)
@@ -121,8 +135,8 @@ router.post("/employer/invite", async (req, res) => {
         firstName,
         lastName,
         phone,
-        jobTitle,
-        department,
+        jobTitle: effectiveJobTitle,
+        department: effectiveDepartment,
         startDate,
         expiresAt,
       })
@@ -137,8 +151,8 @@ router.post("/employer/invite", async (req, res) => {
         lastName,
         email,
         phone,
-        jobTitle,
-        department,
+        jobTitle: effectiveJobTitle,
+        department: effectiveDepartment,
         startDate,
         status: "pending",
         progressPercent: 0,
@@ -146,11 +160,23 @@ router.post("/employer/invite", async (req, res) => {
       })
       .returning();
 
-    const taskRows = DEFAULT_ONBOARDING_STEPS.map(step => ({
-      instanceId: instance.id,
-      ...step,
-      status: "pending" as const,
-    }));
+    const activeStepKeys = new Set([
+      ...(template?.requiredSteps || settings?.requiredSteps || DEFAULT_ONBOARDING_STEPS.map(s => s.stepKey)),
+      ...(template?.optionalSteps || settings?.optionalSteps || []),
+    ]);
+
+    const taskRows = DEFAULT_ONBOARDING_STEPS
+      .filter(step => activeStepKeys.has(step.stepKey))
+      .map((step, idx) => {
+        const isOptional = (template?.optionalSteps || settings?.optionalSteps || []).includes(step.stepKey);
+        return {
+          instanceId: instance.id,
+          ...step,
+          category: isOptional ? "optional" : "required",
+          sortOrder: idx,
+          status: "pending" as const,
+        };
+      });
 
     await db.insert(onboardingTasks).values(taskRows);
 
@@ -549,6 +575,315 @@ router.post("/employer/bulk-invite", onboardingUpload.single("file"), async (req
   } catch (error) {
     console.error("Error processing bulk onboarding invite:", error);
     res.status(500).json({ error: "Failed to process bulk invite" });
+  }
+});
+
+// ── Settings ──
+
+router.get("/employer/settings", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const [existing] = await db.select().from(onboardingSettings).where(eq(onboardingSettings.employerId, user.employerId));
+
+    if (existing) return res.json(existing);
+
+    const [created] = await db.insert(onboardingSettings).values({ employerId: user.employerId }).returning();
+    res.json(created);
+  } catch (error) {
+    console.error("Error fetching onboarding settings:", error);
+    res.status(500).json({ error: "Failed to fetch settings" });
+  }
+});
+
+router.put("/employer/settings", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const { requiredSteps, optionalSteps, deadlineDays, welcomeMessage, autoCreateEmployee, autoTriggerScreening } = req.body;
+
+    const [existing] = await db.select().from(onboardingSettings).where(eq(onboardingSettings.employerId, user.employerId));
+
+    const updates: Record<string, any> = { updatedAt: new Date() };
+    if (requiredSteps !== undefined) updates.requiredSteps = requiredSteps;
+    if (optionalSteps !== undefined) updates.optionalSteps = optionalSteps;
+    if (deadlineDays !== undefined) updates.deadlineDays = deadlineDays;
+    if (welcomeMessage !== undefined) updates.welcomeMessage = welcomeMessage;
+    if (autoCreateEmployee !== undefined) updates.autoCreateEmployee = autoCreateEmployee;
+    if (autoTriggerScreening !== undefined) updates.autoTriggerScreening = autoTriggerScreening;
+
+    if (existing) {
+      const [updated] = await db.update(onboardingSettings)
+        .set(updates)
+        .where(eq(onboardingSettings.employerId, user.employerId))
+        .returning();
+      return res.json(updated);
+    }
+
+    const [created] = await db.insert(onboardingSettings)
+      .values({ employerId: user.employerId, ...updates })
+      .returning();
+    res.json(created);
+  } catch (error) {
+    console.error("Error updating onboarding settings:", error);
+    res.status(500).json({ error: "Failed to update settings" });
+  }
+});
+
+// ── Templates ──
+
+router.get("/employer/templates", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const templates = await db.select().from(onboardingTemplates)
+      .where(eq(onboardingTemplates.employerId, user.employerId))
+      .orderBy(desc(onboardingTemplates.createdAt));
+
+    res.json(templates);
+  } catch (error) {
+    console.error("Error fetching templates:", error);
+    res.status(500).json({ error: "Failed to fetch templates" });
+  }
+});
+
+router.post("/employer/templates", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const { name, department, jobTitle, requiredSteps, optionalSteps, welcomeMessage, isDefault } = req.body;
+    if (!name) return res.status(400).json({ error: "Template name is required" });
+
+    if (isDefault) {
+      await db.update(onboardingTemplates)
+        .set({ isDefault: false })
+        .where(eq(onboardingTemplates.employerId, user.employerId));
+    }
+
+    const [template] = await db.insert(onboardingTemplates).values({
+      employerId: user.employerId,
+      name,
+      department: department || null,
+      jobTitle: jobTitle || null,
+      requiredSteps: requiredSteps || null,
+      optionalSteps: optionalSteps || null,
+      welcomeMessage: welcomeMessage || null,
+      isDefault: isDefault || false,
+    }).returning();
+
+    res.json(template);
+  } catch (error) {
+    console.error("Error creating template:", error);
+    res.status(500).json({ error: "Failed to create template" });
+  }
+});
+
+router.put("/employer/templates/:id", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const { name, department, jobTitle, requiredSteps, optionalSteps, welcomeMessage, isDefault } = req.body;
+
+    if (isDefault) {
+      await db.update(onboardingTemplates)
+        .set({ isDefault: false })
+        .where(eq(onboardingTemplates.employerId, user.employerId));
+    }
+
+    const [updated] = await db.update(onboardingTemplates)
+      .set({
+        ...(name !== undefined && { name }),
+        ...(department !== undefined && { department }),
+        ...(jobTitle !== undefined && { jobTitle }),
+        ...(requiredSteps !== undefined && { requiredSteps }),
+        ...(optionalSteps !== undefined && { optionalSteps }),
+        ...(welcomeMessage !== undefined && { welcomeMessage }),
+        ...(isDefault !== undefined && { isDefault }),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(onboardingTemplates.id, req.params.id), eq(onboardingTemplates.employerId, user.employerId)))
+      .returning();
+
+    if (!updated) return res.status(404).json({ error: "Template not found" });
+    res.json(updated);
+  } catch (error) {
+    console.error("Error updating template:", error);
+    res.status(500).json({ error: "Failed to update template" });
+  }
+});
+
+router.delete("/employer/templates/:id", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const [deleted] = await db.delete(onboardingTemplates)
+      .where(and(eq(onboardingTemplates.id, req.params.id), eq(onboardingTemplates.employerId, user.employerId)))
+      .returning();
+
+    if (!deleted) return res.status(404).json({ error: "Template not found" });
+    res.json({ message: "Template deleted" });
+  } catch (error) {
+    console.error("Error deleting template:", error);
+    res.status(500).json({ error: "Failed to delete template" });
+  }
+});
+
+// ── Admin Onboarding Overview ──
+
+router.get("/admin/overview", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (user?.role !== "admin") return res.status(403).json({ error: "Admin access required" });
+
+    const allInstances = await db.select().from(onboardingInstances);
+    const total = allInstances.length;
+    const completed = allInstances.filter(i => i.status === "completed").length;
+    const inProgress = allInstances.filter(i => i.status === "in_progress").length;
+    const pending = allInstances.filter(i => i.status === "pending").length;
+    const expired = allInstances.filter(i => i.status === "expired").length;
+
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    const completedInstances = allInstances.filter(i => i.status === "completed" && i.completedAt && i.createdAt);
+    let avgCompletionHours = 0;
+    if (completedInstances.length > 0) {
+      const totalMs = completedInstances.reduce((sum, i) => {
+        return sum + (new Date(i.completedAt!).getTime() - new Date(i.createdAt).getTime());
+      }, 0);
+      avgCompletionHours = Math.round(totalMs / completedInstances.length / (1000 * 60 * 60));
+    }
+
+    const enabledEmployers = await db.select({ id: employers.id, name: employers.name })
+      .from(employers)
+      .where(eq(employers.onboardingModuleEnabled, true));
+
+    const employerStats = await Promise.all(enabledEmployers.map(async (emp) => {
+      const empInstances = allInstances.filter(i => i.employerId === emp.id);
+      const empCompleted = empInstances.filter(i => i.status === "completed").length;
+      return {
+        employerId: emp.id,
+        employerName: emp.name,
+        total: empInstances.length,
+        completed: empCompleted,
+        inProgress: empInstances.filter(i => i.status === "in_progress").length,
+        pending: empInstances.filter(i => i.status === "pending").length,
+        completionRate: empInstances.length > 0 ? Math.round((empCompleted / empInstances.length) * 100) : 0,
+      };
+    }));
+
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentInstances = allInstances.filter(i => new Date(i.createdAt) > thirtyDaysAgo);
+    const dailyTrend: Record<string, number> = {};
+    for (let d = 0; d < 30; d++) {
+      const date = new Date(thirtyDaysAgo);
+      date.setDate(date.getDate() + d);
+      dailyTrend[date.toISOString().split("T")[0]] = 0;
+    }
+    recentInstances.forEach(i => {
+      const day = new Date(i.createdAt).toISOString().split("T")[0];
+      if (dailyTrend[day] !== undefined) dailyTrend[day]++;
+    });
+
+    res.json({
+      totals: { total, completed, inProgress, pending, expired, completionRate, avgCompletionHours },
+      employerStats: employerStats.sort((a, b) => b.total - a.total),
+      dailyTrend: Object.entries(dailyTrend).map(([date, count]) => ({ date, count })),
+      enabledEmployerCount: enabledEmployers.length,
+    });
+  } catch (error) {
+    console.error("Error fetching admin onboarding overview:", error);
+    res.status(500).json({ error: "Failed to fetch admin overview" });
+  }
+});
+
+// ── Document Export ──
+
+router.get("/employer/instances/:id/export", async (req, res) => {
+  try {
+    const clerkUserId = getAuth(req).userId!;
+    const user = await getUserByClerkId(clerkUserId);
+    if (!user?.employerId) return res.status(403).json({ error: "Employer access required" });
+
+    const [instance] = await db.select().from(onboardingInstances)
+      .where(and(eq(onboardingInstances.id, req.params.id), eq(onboardingInstances.employerId, user.employerId)));
+    if (!instance) return res.status(404).json({ error: "Instance not found" });
+
+    const tasks = await db.select().from(onboardingTasks)
+      .where(eq(onboardingTasks.instanceId, instance.id))
+      .orderBy(onboardingTasks.sortOrder);
+
+    const documents = await db.select({
+      id: onboardingDocuments.id,
+      documentType: onboardingDocuments.documentType,
+      fileName: onboardingDocuments.fileName,
+      fileSize: onboardingDocuments.fileSize,
+      mimeType: onboardingDocuments.mimeType,
+      status: onboardingDocuments.status,
+      signedAt: onboardingDocuments.signedAt,
+      createdAt: onboardingDocuments.createdAt,
+    }).from(onboardingDocuments).where(eq(onboardingDocuments.instanceId, instance.id));
+
+    const forms = await db.select().from(onboardingFormData)
+      .where(eq(onboardingFormData.instanceId, instance.id));
+
+    const maskSsn = (v: string) => v ? `***-**-${v.replace(/\D/g, "").slice(-4)}` : "";
+    const maskAccount = (v: string) => v ? `****${v.slice(-4)}` : "";
+
+    const exportData = {
+      employee: {
+        firstName: instance.firstName,
+        lastName: instance.lastName,
+        email: instance.email,
+        phone: instance.phone,
+        jobTitle: instance.jobTitle,
+        department: instance.department,
+        startDate: instance.startDate,
+      },
+      status: instance.status,
+      progressPercent: instance.progressPercent,
+      completedAt: instance.completedAt,
+      createdAt: instance.createdAt,
+      tasks: tasks.map(t => ({
+        step: t.title,
+        status: t.status,
+        completedAt: t.completedAt,
+      })),
+      forms: forms.map(f => {
+        let parsed: Record<string, any> = {};
+        try { parsed = JSON.parse(f.formData); } catch { parsed = {}; }
+        if (f.formType === "tax_w4" && parsed.ssn) parsed.ssn = maskSsn(parsed.ssn);
+        if (f.formType === "direct_deposit" && parsed.accountNumber) parsed.accountNumber = maskAccount(parsed.accountNumber);
+        return { formType: f.formType, isComplete: f.isComplete, data: parsed };
+      }),
+      documents: documents.map(d => ({
+        type: d.documentType,
+        fileName: d.fileName,
+        status: d.status,
+        signedAt: d.signedAt,
+      })),
+      exportedAt: new Date().toISOString(),
+    };
+
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="onboarding-${instance.firstName}-${instance.lastName}.json"`);
+    res.json(exportData);
+  } catch (error) {
+    console.error("Error exporting onboarding data:", error);
+    res.status(500).json({ error: "Failed to export onboarding data" });
   }
 });
 
