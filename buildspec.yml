@@ -1,0 +1,17 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 194449348563.dkr.ecr.us-east-2.amazonaws.com
+  build:
+    commands:
+      - echo Building Docker image...
+      - docker build -t rockerbox-wotc .
+      - docker tag rockerbox-wotc:latest 194449348563.dkr.ecr.us-east-2.amazonaws.com/rockerbox-wotc:latest
+  post_build:
+    commands:
+      - echo Pushing Docker image to ECR...
+      - docker push 194449348563.dkr.ecr.us-east-2.amazonaws.com/rockerbox-wotc:latest
+      - echo Build and push completed successfully!
