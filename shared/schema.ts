@@ -106,6 +106,9 @@ export const employers = pgTable("employers", {
   state: text("state"),
   zipCode: text("zip_code"),
   
+  // States where employer hires employees
+  hiringStates: text("hiring_states").array(), // Array of US state codes e.g. ['CA', 'TX', 'NY']
+  
   // White-label branding
   logoUrl: text("logo_url"),
   primaryColor: text("primary_color").default("#2563eb"),

@@ -1850,10 +1850,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
-      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode } = req.body;
+      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates } = req.body;
 
       if (!name || !ein || !contactEmail) {
         return res.status(400).json({ error: "Company name, EIN, and contact email are required" });
+      }
+
+      // Auto-generate unique questionnaire URL slug from company name
+      let slug = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      
+      // Ensure uniqueness by checking DB and appending random suffix if needed
+      const existing = await db.select({ id: employers.id })
+        .from(employers)
+        .where(eq(employers.questionnaireUrl, slug));
+      if (existing.length > 0) {
+        slug = `${slug}-${crypto.randomUUID().slice(0, 8)}`;
       }
 
       const [newEmployer] = await db.insert(employers).values({
@@ -1865,8 +1879,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         city: city || null,
         state: state || null,
         zipCode: zipCode || null,
+        hiringStates: Array.isArray(hiringStates) ? hiringStates : null,
+        questionnaireUrl: slug,
         onboardingStatus: "pending",
       }).returning();
+
+      // Send welcome email with Form 9198 and engagement letter links
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
+        : "http://localhost:5000";
+      
+      try {
+        const { sendWelcomeEmail } = await import('./email/notifications');
+        await sendWelcomeEmail(contactEmail, {
+          employerName: name,
+          contactName: contactEmail.split('@')[0],
+          dashboardUrl: `${baseUrl}/employer/dashboard`,
+          questionnaireUrl: `${baseUrl}/screen/${slug}`,
+          form9198Url: `${baseUrl}/employer/onboarding`,
+          engagementLetterUrl: `${baseUrl}/employer/onboarding`,
+        });
+        console.log(`Welcome email sent to ${contactEmail} for employer ${name}`);
+      } catch (emailError) {
+        console.error("Failed to send welcome email (employer still created):", emailError);
+      }
       
       res.json({ success: true, id: newEmployer.id, employer: newEmployer });
     } catch (error: any) {
@@ -2152,7 +2188,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!employer.questionnaireUrl) {
-        return res.status(400).json({ error: "Employer has no questionnaire URL" });
+        // Auto-generate if missing (legacy employers)
+        let slug = employer.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
+        const existingSlug = await db.select({ id: employers.id })
+          .from(employers)
+          .where(eq(employers.questionnaireUrl, slug));
+        if (existingSlug.length > 0) {
+          slug = `${slug}-${crypto.randomUUID().slice(0, 8)}`;
+        }
+        await db.update(employers)
+          .set({ questionnaireUrl: slug })
+          .where(eq(employers.id, employerId));
+        employer = { ...employer, questionnaireUrl: slug };
       }
 
       // Generate QR code as data URL

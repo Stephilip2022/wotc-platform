@@ -23,8 +23,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Settings, FileText, CheckCircle } from "lucide-react";
+import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Employer, EtaForm9198 } from "@shared/schema";
 import { useForm } from "react-hook-form";
@@ -33,6 +35,37 @@ import { insertEmployerSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { z } from "zod";
 import { Link } from "wouter";
+
+const US_STATES = [
+  { code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" },
+  { code: "AZ", name: "Arizona" }, { code: "AR", name: "Arkansas" },
+  { code: "CA", name: "California" }, { code: "CO", name: "Colorado" },
+  { code: "CT", name: "Connecticut" }, { code: "DE", name: "Delaware" },
+  { code: "FL", name: "Florida" }, { code: "GA", name: "Georgia" },
+  { code: "HI", name: "Hawaii" }, { code: "ID", name: "Idaho" },
+  { code: "IL", name: "Illinois" }, { code: "IN", name: "Indiana" },
+  { code: "IA", name: "Iowa" }, { code: "KS", name: "Kansas" },
+  { code: "KY", name: "Kentucky" }, { code: "LA", name: "Louisiana" },
+  { code: "ME", name: "Maine" }, { code: "MD", name: "Maryland" },
+  { code: "MA", name: "Massachusetts" }, { code: "MI", name: "Michigan" },
+  { code: "MN", name: "Minnesota" }, { code: "MS", name: "Mississippi" },
+  { code: "MO", name: "Missouri" }, { code: "MT", name: "Montana" },
+  { code: "NE", name: "Nebraska" }, { code: "NV", name: "Nevada" },
+  { code: "NH", name: "New Hampshire" }, { code: "NJ", name: "New Jersey" },
+  { code: "NM", name: "New Mexico" }, { code: "NY", name: "New York" },
+  { code: "NC", name: "North Carolina" }, { code: "ND", name: "North Dakota" },
+  { code: "OH", name: "Ohio" }, { code: "OK", name: "Oklahoma" },
+  { code: "OR", name: "Oregon" }, { code: "PA", name: "Pennsylvania" },
+  { code: "RI", name: "Rhode Island" }, { code: "SC", name: "South Carolina" },
+  { code: "SD", name: "South Dakota" }, { code: "TN", name: "Tennessee" },
+  { code: "TX", name: "Texas" }, { code: "UT", name: "Utah" },
+  { code: "VT", name: "Vermont" }, { code: "VA", name: "Virginia" },
+  { code: "WA", name: "Washington" }, { code: "WV", name: "West Virginia" },
+  { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" },
+  { code: "DC", name: "District of Columbia" },
+  { code: "PR", name: "Puerto Rico" }, { code: "VI", name: "U.S. Virgin Islands" },
+  { code: "GU", name: "Guam" }, { code: "AS", name: "American Samoa" },
+];
 
 type EmployerFormData = z.infer<typeof insertEmployerSchema>;
 
@@ -45,6 +78,8 @@ export default function AdminEmployersPage() {
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [signedByName, setSignedByName] = useState("");
   const [signedByEmail, setSignedByEmail] = useState("");
+  const [selectedHiringStates, setSelectedHiringStates] = useState<string[]>([]);
+  const [stateSearchTerm, setStateSearchTerm] = useState("");
 
   const { data: employers, isLoading } = useQuery<Employer[]>({
     queryKey: ["/api/admin/employers"],
@@ -78,17 +113,22 @@ export default function AdminEmployersPage() {
 
   const addEmployerMutation = useMutation({
     mutationFn: async (data: EmployerFormData) => {
-      const response = await apiRequest("POST", "/api/admin/employers", data);
+      const response = await apiRequest("POST", "/api/admin/employers", {
+        ...data,
+        hiringStates: selectedHiringStates.length > 0 ? selectedHiringStates : null,
+      });
       return await response.json();
     },
     onSuccess: () => {
       toast({
         title: "Employer Added",
-        description: "New employer has been added to the system.",
+        description: "New employer has been added to the system. A unique questionnaire URL has been generated.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/employers"] });
       setDialogOpen(false);
       form.reset();
+      setSelectedHiringStates([]);
+      setStateSearchTerm("");
     },
     onError: (error: any) => {
       toast({
@@ -282,6 +322,88 @@ export default function AdminEmployersPage() {
                     )}
                   />
                 </div>
+
+                <div className="space-y-3">
+                  <FormLabel>Hiring States</FormLabel>
+                  <p className="text-xs text-muted-foreground">
+                    Select the states where this employer hires employees
+                  </p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (selectedHiringStates.length === US_STATES.length) {
+                          setSelectedHiringStates([]);
+                        } else {
+                          setSelectedHiringStates(US_STATES.map(s => s.code));
+                        }
+                      }}
+                      data-testid="button-select-all-states"
+                    >
+                      {selectedHiringStates.length === US_STATES.length ? "Deselect All" : "Select All 50 States"}
+                    </Button>
+                    {selectedHiringStates.length > 0 && (
+                      <span className="text-sm text-muted-foreground">
+                        {selectedHiringStates.length} state{selectedHiringStates.length !== 1 ? "s" : ""} selected
+                      </span>
+                    )}
+                  </div>
+                  {selectedHiringStates.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {selectedHiringStates.sort().map(code => (
+                        <Badge
+                          key={code}
+                          variant="secondary"
+                          className="cursor-pointer"
+                          onClick={() => setSelectedHiringStates(prev => prev.filter(s => s !== code))}
+                          data-testid={`badge-state-${code}`}
+                        >
+                          {code}
+                          <X className="h-3 w-3 ml-1" />
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <Input
+                    placeholder="Search states..."
+                    value={stateSearchTerm}
+                    onChange={(e) => setStateSearchTerm(e.target.value)}
+                    data-testid="input-search-states"
+                  />
+                  <ScrollArea className="h-48 border rounded-md p-2">
+                    <div className="grid grid-cols-2 gap-1">
+                      {US_STATES
+                        .filter(s =>
+                          s.name.toLowerCase().includes(stateSearchTerm.toLowerCase()) ||
+                          s.code.toLowerCase().includes(stateSearchTerm.toLowerCase())
+                        )
+                        .map(state => (
+                          <label
+                            key={state.code}
+                            className="flex items-center gap-2 p-1.5 rounded-md hover-elevate cursor-pointer text-sm"
+                            data-testid={`label-state-${state.code}`}
+                          >
+                            <Checkbox
+                              checked={selectedHiringStates.includes(state.code)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedHiringStates(prev => [...prev, state.code]);
+                                } else {
+                                  setSelectedHiringStates(prev => prev.filter(s => s !== state.code));
+                                }
+                              }}
+                              data-testid={`checkbox-state-${state.code}`}
+                            />
+                            <span>{state.code}</span>
+                            <span className="text-muted-foreground">{state.name}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </ScrollArea>
+                </div>
+
                 <DialogFooter>
                   <Button type="submit" disabled={addEmployerMutation.isPending} data-testid="button-submit-employer">
                     {addEmployerMutation.isPending ? "Adding..." : "Add Employer"}
@@ -327,6 +449,7 @@ export default function AdminEmployersPage() {
                 <TableHead>Company Name</TableHead>
                 <TableHead>EIN</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Hiring States</TableHead>
                 <TableHead>Revenue Share</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -339,6 +462,25 @@ export default function AdminEmployersPage() {
                     <TableCell className="font-medium">{employer.name}</TableCell>
                     <TableCell className="font-mono text-sm">{employer.ein}</TableCell>
                     <TableCell>{employer.contactEmail}</TableCell>
+                    <TableCell>
+                      {employer.hiringStates && employer.hiringStates.length > 0 ? (
+                        <div className="flex flex-wrap gap-0.5">
+                          {employer.hiringStates.length <= 5 ? (
+                            employer.hiringStates.map(s => (
+                              <Badge key={s} variant="secondary" className="text-xs no-default-active-elevate">
+                                {s}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              {employer.hiringStates.length} states
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">--</span>
+                      )}
+                    </TableCell>
                     <TableCell>{employer.revenueSharePercentage}%</TableCell>
                     <TableCell>
                       <Badge variant={employer.billingStatus === "active" ? "default" : "secondary"}>
@@ -359,7 +501,7 @@ export default function AdminEmployersPage() {
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                     {searchTerm ? "No employers found" : "No employers yet. Add your first employer to get started."}
                   </TableCell>
                 </TableRow>

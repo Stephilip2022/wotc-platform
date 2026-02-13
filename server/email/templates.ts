@@ -41,6 +41,8 @@ export interface WelcomeEmailData {
   dashboardUrl: string;
   questionnaireUrl: string;
   employerLogoUrl?: string;
+  form9198Url?: string;
+  engagementLetterUrl?: string;
 }
 
 export function renderScreeningInvite(data: ScreeningInviteData): string {
@@ -706,11 +708,26 @@ export function renderWelcomeEmail(data: WelcomeEmailData): string {
               <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 24px; color: #4b5563;">
                 Thank you for registering <strong>${data.employerName}</strong> with our WOTC optimization platform. Your account has been successfully created, and you're ready to start maximizing your tax credit opportunities.
               </p>
+              ${data.form9198Url || data.engagementLetterUrl ? `
+              <div style="margin: 0 0 32px 0; padding: 24px; background-color: #fef3c7; border-radius: 6px; border-left: 4px solid #f59e0b;">
+                <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #92400e;">
+                  Action Required: Sign Your Documents
+                </h2>
+                <p style="margin: 0 0 16px 0; font-size: 15px; line-height: 24px; color: #4b5563;">
+                  To activate your WOTC screening account, please review and electronically sign the following documents:
+                </p>
+                <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #4b5563; font-size: 15px; line-height: 28px;">
+                  ${data.form9198Url ? `<li><a href="${data.form9198Url}" style="color: #0ea5e9; text-decoration: underline; font-weight: 500;">ETA Form 9198 (Pre-Screening Notice)</a> - Required for WOTC program participation</li>` : ''}
+                  ${data.engagementLetterUrl ? `<li><a href="${data.engagementLetterUrl}" style="color: #0ea5e9; text-decoration: underline; font-weight: 500;">Engagement Letter</a> - Service agreement for WOTC processing</li>` : ''}
+                </ul>
+              </div>
+              ` : ''}
               <div style="margin: 0 0 32px 0; padding: 24px; background-color: #f0f9ff; border-radius: 6px; border-left: 4px solid #0ea5e9;">
                 <h2 style="margin: 0 0 12px 0; font-size: 18px; font-weight: 600; color: #0369a1;">
                   Quick Start Guide
                 </h2>
                 <ol style="margin: 0; padding-left: 20px; color: #4b5563; font-size: 15px; line-height: 24px;">
+                  <li style="margin-bottom: 8px;">Sign your ETA Form 9198 and Engagement Letter (see above)</li>
                   <li style="margin-bottom: 8px;">Access your employer dashboard to manage your account</li>
                   <li style="margin-bottom: 8px;">Add employees and invite them to complete WOTC screenings</li>
                   <li style="margin-bottom: 8px;">Track screening submissions and certifications</li>
