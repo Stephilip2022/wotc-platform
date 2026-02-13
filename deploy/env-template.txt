@@ -1,0 +1,40 @@
+###############################################################################
+# Rockerbox WOTC Platform - Production Environment Variables
+# Copy these to your AWS App Runner service configuration
+###############################################################################
+
+# ---- Required: Database ----
+DATABASE_URL=<your-neon-postgresql-connection-string>
+
+# ---- Required: Authentication (Clerk) ----
+VITE_CLERK_PUBLISHABLE_KEY=<your-clerk-publishable-key>
+CLERK_SECRET_KEY=<your-clerk-secret-key>
+
+# ---- Required: Application ----
+NODE_ENV=production
+PORT=5000
+SESSION_SECRET=<generate-a-random-64-char-string>
+APP_BASE_URL=https://your-custom-domain.com
+
+# ---- Payment Processing (Stripe) ----
+STRIPE_SECRET_KEY=<your-stripe-secret-key>
+VITE_STRIPE_PUBLIC_KEY=<your-stripe-publishable-key>
+
+# ---- Email (Resend) ----
+RESEND_API_KEY=<your-resend-api-key>
+
+# ---- SMS (Twilio) ----
+TWILIO_ACCOUNT_SID=<your-twilio-account-sid>
+TWILIO_AUTH_TOKEN=<your-twilio-auth-token>
+TWILIO_PHONE_NUMBER=<your-twilio-phone-number>
+
+# ---- AI Services (OpenAI) ----
+OPENAI_API_KEY=<your-openai-api-key>
+
+# ---- State Automation (CSDC) ----
+CSDC_PROXY_KEY=<your-csdc-proxy-key>
+
+# ---- Optional: Object Storage ----
+# If using AWS S3 instead of Replit Object Storage for production:
+# AWS_S3_BUCKET=rockerbox-uploads
+# AWS_S3_REGION=us-east-2
