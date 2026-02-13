@@ -1,7 +1,7 @@
 import { clerkMiddleware, getAuth, requireAuth, createClerkClient } from "@clerk/express";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import { db } from "./db";
-import { users } from "@shared/schema";
+import { users, employers } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 const publishableKey = process.env.VITE_CLERK_PUBLISHABLE_KEY || process.env.CLERK_PUBLISHABLE_KEY;
@@ -85,6 +85,23 @@ export async function getOrCreateUser(req: Request) {
           .where(eq(users.email, email))
           .returning();
         return updated;
+      }
+
+      const [matchingEmployer] = await db.select().from(employers).where(eq(employers.contactEmail, email));
+      if (matchingEmployer) {
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            id: clerkUserId,
+            email,
+            firstName,
+            lastName,
+            profileImageUrl,
+            role: "employer",
+            employerId: matchingEmployer.id,
+          })
+          .returning();
+        return newUser;
       }
     }
 
