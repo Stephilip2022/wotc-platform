@@ -30,9 +30,10 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import type { z } from "zod";
+import { z } from "zod";
 
-type EmployeeFormData = z.infer<typeof insertEmployeeSchema>;
+const employeeFormSchema = insertEmployeeSchema.omit({ employerId: true, userId: true, status: true });
+type EmployeeFormData = z.infer<typeof employeeFormSchema>;
 
 export default function EmployeesPage() {
   const { toast } = useToast();
@@ -44,7 +45,7 @@ export default function EmployeesPage() {
   });
 
   const form = useForm<EmployeeFormData>({
-    resolver: zodResolver(insertEmployeeSchema),
+    resolver: zodResolver(employeeFormSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
