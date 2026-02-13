@@ -1850,7 +1850,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
-      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates } = req.body;
+      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates, feePercentage } = req.body;
 
       if (!name || !ein || !contactEmail) {
         return res.status(400).json({ error: "Company name, EIN, and contact email are required" });
@@ -1880,6 +1880,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         state: state || null,
         zipCode: zipCode || null,
         hiringStates: Array.isArray(hiringStates) ? hiringStates : null,
+        feePercentage: (() => {
+          const fee = parseFloat(feePercentage);
+          if (isNaN(fee) || fee < 0 || fee > 20) return "15.00";
+          return fee.toFixed(2);
+        })(),
         questionnaireUrl: slug,
         onboardingStatus: "pending",
       }).returning();
@@ -1898,8 +1903,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           questionnaireUrl: `${baseUrl}/screen/${slug}`,
           form9198Url: `${baseUrl}/employer/onboarding`,
           engagementLetterUrl: `${baseUrl}/employer/onboarding`,
+          feePercentage: newEmployer.feePercentage || "15.00",
         });
-        console.log(`Welcome email sent to ${contactEmail} for employer ${name}`);
+        console.log(`Welcome email sent to ${contactEmail} for employer ${name} with ${newEmployer.feePercentage}% fee`);
       } catch (emailError) {
         console.error("Failed to send welcome email (employer still created):", emailError);
       }

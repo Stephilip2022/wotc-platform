@@ -124,7 +124,8 @@ export const employers = pgTable("employers", {
   onboardingStatus: text("onboarding_status").default("pending"), // 'pending', 'documents_sent', 'signed', 'active'
   activatedAt: timestamp("activated_at"),
   
-  // Billing configuration
+  // Fee & Billing configuration
+  feePercentage: decimal("fee_percentage", { precision: 5, scale: 2 }).default("15.00"), // Service fee 0-20%
   revenueSharePercentage: decimal("revenue_share_percentage", { precision: 5, scale: 2 }).default("25.00"),
   stripeCustomerId: text("stripe_customer_id"),
   billingStatus: text("billing_status").default("active"), // 'active', 'suspended', 'inactive'

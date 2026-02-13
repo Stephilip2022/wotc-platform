@@ -43,6 +43,7 @@ export interface WelcomeEmailData {
   employerLogoUrl?: string;
   form9198Url?: string;
   engagementLetterUrl?: string;
+  feePercentage?: string;
 }
 
 export function renderScreeningInvite(data: ScreeningInviteData): string {
@@ -718,7 +719,7 @@ export function renderWelcomeEmail(data: WelcomeEmailData): string {
                 </p>
                 <ul style="margin: 0 0 16px 0; padding-left: 20px; color: #4b5563; font-size: 15px; line-height: 28px;">
                   ${data.form9198Url ? `<li><a href="${data.form9198Url}" style="color: #0ea5e9; text-decoration: underline; font-weight: 500;">ETA Form 9198 (Pre-Screening Notice)</a> - Required for WOTC program participation</li>` : ''}
-                  ${data.engagementLetterUrl ? `<li><a href="${data.engagementLetterUrl}" style="color: #0ea5e9; text-decoration: underline; font-weight: 500;">Engagement Letter</a> - Service agreement for WOTC processing</li>` : ''}
+                  ${data.engagementLetterUrl ? `<li><a href="${data.engagementLetterUrl}" style="color: #0ea5e9; text-decoration: underline; font-weight: 500;">Engagement Letter</a> - Service agreement for WOTC processing${data.feePercentage ? ` (${data.feePercentage}% service fee)` : ''}</li>` : ''}
                 </ul>
               </div>
               ` : ''}

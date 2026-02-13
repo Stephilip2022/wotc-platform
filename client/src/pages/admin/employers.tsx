@@ -26,7 +26,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Employer, EtaForm9198 } from "@shared/schema";
 import { useForm } from "react-hook-form";
@@ -108,6 +109,7 @@ export default function AdminEmployersPage() {
       city: "",
       state: "",
       zipCode: "",
+      feePercentage: "15.00",
     },
   });
 
@@ -323,6 +325,52 @@ export default function AdminEmployersPage() {
                   />
                 </div>
 
+                <FormField
+                  control={form.control}
+                  name="feePercentage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Service Fee Percentage
+                      </FormLabel>
+                      <p className="text-xs text-muted-foreground">
+                        Set the percentage fee (0% - 20%) for this employer's engagement letter
+                      </p>
+                      <div className="flex items-center gap-4">
+                        <FormControl>
+                          <Slider
+                            min={0}
+                            max={20}
+                            step={0.5}
+                            value={[parseFloat(field.value || "15")]}
+                            onValueChange={(vals) => field.onChange(vals[0].toFixed(2))}
+                            className="flex-1"
+                            data-testid="slider-fee-percentage"
+                          />
+                        </FormControl>
+                        <div className="flex items-center gap-1 min-w-[80px]">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={20}
+                            step={0.5}
+                            value={field.value || "15.00"}
+                            onChange={(e) => {
+                              const val = Math.min(20, Math.max(0, parseFloat(e.target.value) || 0));
+                              field.onChange(val.toFixed(2));
+                            }}
+                            className="w-[70px] text-center"
+                            data-testid="input-fee-percentage"
+                          />
+                          <span className="text-sm font-medium text-muted-foreground">%</span>
+                        </div>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
                 <div className="space-y-3">
                   <FormLabel>Hiring States</FormLabel>
                   <p className="text-xs text-muted-foreground">
@@ -450,7 +498,7 @@ export default function AdminEmployersPage() {
                 <TableHead>EIN</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Hiring States</TableHead>
-                <TableHead>Revenue Share</TableHead>
+                <TableHead>Fee %</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -481,7 +529,7 @@ export default function AdminEmployersPage() {
                         <span className="text-sm text-muted-foreground">--</span>
                       )}
                     </TableCell>
-                    <TableCell>{employer.revenueSharePercentage}%</TableCell>
+                    <TableCell data-testid={`text-fee-${employer.id}`}>{employer.feePercentage || "15.00"}%</TableCell>
                     <TableCell>
                       <Badge variant={employer.billingStatus === "active" ? "default" : "secondary"}>
                         {employer.billingStatus?.toUpperCase()}
