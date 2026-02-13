@@ -11,7 +11,7 @@ export default function EmployerCreditsPage() {
   const { toast } = useToast();
 
   // Fetch credits
-  const { data: credits, isLoading } = useQuery({
+  const { data: credits, isLoading } = useQuery<any[]>({
     queryKey: ["/api/employer/credits"],
   });
 

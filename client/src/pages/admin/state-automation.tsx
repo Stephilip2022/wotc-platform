@@ -444,10 +444,10 @@ export default function StateAutomationPage() {
                           <TableCell>{job.employerId}</TableCell>
                           <TableCell>{getJobStatusBadge(job.status)}</TableCell>
                           <TableCell>
-                            {job.recordsSubmitted || 0} / {job.totalRecords || 0}
+                            {(job.successCount || 0) + (job.failureCount || 0)} / {job.recordCount || 0}
                           </TableCell>
                           <TableCell className="max-w-xs truncate text-xs text-muted-foreground">
-                            {job.confirmationNumber || job.error || '-'}
+                            {job.confirmationNumber || job.errorMessage || '-'}
                           </TableCell>
                           <TableCell className="text-xs">
                             {formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}

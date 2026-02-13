@@ -2945,7 +2945,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         certificationDate,
         certificationExpiresAt,
         determinationLetterId,
-        changedBy: userId,
+        changedBy: user.id,
       });
 
       // Send determination result email if status changed to certified or denied
