@@ -1891,6 +1891,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         onboardingStatus: "pending",
       }).returning();
 
+      // Auto-create default WOTC questionnaire so screening link works immediately
+      try {
+        const [existingQ] = await db.select({ id: questionnaires.id })
+          .from(questionnaires)
+          .where(eq(questionnaires.employerId, newEmployer.id))
+          .limit(1);
+        if (!existingQ) {
+          const { getDefaultWotcQuestionnaire } = await import('./utils/onboarding');
+          await db.insert(questionnaires).values({
+            employerId: newEmployer.id,
+            name: "WOTC Comprehensive Screening 2024",
+            description: "Complete screening for all Work Opportunity Tax Credit target groups",
+            isActive: true,
+            questions: getDefaultWotcQuestionnaire(),
+          });
+          console.log(`Default questionnaire created for employer ${name}`);
+        }
+      } catch (qError) {
+        console.error("Failed to create default questionnaire (employer still created):", qError);
+      }
+
       // Send welcome email with Form 9198 and engagement letter links
       const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
       
@@ -1899,7 +1920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await sendWelcomeEmail(contactEmail, {
           employerName: name,
           contactName: contactEmail.split('@')[0],
-          dashboardUrl: `${baseUrl}/employer/dashboard`,
+          dashboardUrl: `${baseUrl}/employer`,
           questionnaireUrl: `${baseUrl}/screen/${slug}`,
           form9198Url: `${baseUrl}/employer/onboarding`,
           engagementLetterUrl: `${baseUrl}/employer/onboarding`,
