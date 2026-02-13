@@ -556,7 +556,7 @@ export default function AdminReferralPartnersPage() {
                       </TableCell>
                       <TableCell data-testid={`text-dba-${partner.id}`}>{partner.dba || "--"}</TableCell>
                       <TableCell className="font-mono text-sm" data-testid={`text-ein-${partner.id}`}>
-                        {partner.ein || "--"}
+                        {partner.ein ? `***-***${partner.ein.slice(-4)}` : "--"}
                       </TableCell>
                       <TableCell data-testid={`text-contact-${partner.id}`}>
                         <div className="text-sm">
@@ -627,7 +627,7 @@ export default function AdminReferralPartnersPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">EIN</p>
-                    <p className="font-mono" data-testid="text-detail-ein">{partnerDetail.ein || "--"}</p>
+                    <p className="font-mono" data-testid="text-detail-ein">{partnerDetail.ein ? `***-***${partnerDetail.ein.slice(-4)}` : "--"}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Status</p>
@@ -743,7 +743,7 @@ export default function AdminReferralPartnersPage() {
                               {employer.name}
                             </TableCell>
                             <TableCell className="font-mono text-sm" data-testid={`text-employer-ein-${employer.id}`}>
-                              {employer.ein}
+                              {employer.ein ? `***-***${employer.ein.slice(-4)}` : "--"}
                             </TableCell>
                             <TableCell data-testid={`text-employer-email-${employer.id}`}>
                               {employer.contactEmail}

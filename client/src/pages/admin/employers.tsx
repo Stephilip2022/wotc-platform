@@ -563,7 +563,7 @@ export default function AdminEmployersPage() {
                 filteredEmployers.map((employer) => (
                   <TableRow key={employer.id} data-testid={`row-employer-${employer.id}`}>
                     <TableCell className="font-medium">{employer.name}</TableCell>
-                    <TableCell className="font-mono text-sm">{employer.ein}</TableCell>
+                    <TableCell className="font-mono text-sm">{employer.ein ? `***-***${employer.ein.slice(-4)}` : ""}</TableCell>
                     <TableCell>{employer.contactEmail}</TableCell>
                     <TableCell>
                       {employer.hiringStates && employer.hiringStates.length > 0 ? (
@@ -603,14 +603,27 @@ export default function AdminEmployersPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => navigate(`/admin/employers/${employer.id}/settings`)}
-                        data-testid={`button-settings-${employer.id}`}
-                      >
-                        <Settings className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => resendWelcomeEmailMutation.mutate(employer.id)}
+                          disabled={resendWelcomeEmailMutation.isPending}
+                          title="Resend welcome email"
+                          data-testid={`button-resend-email-${employer.id}`}
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => navigate(`/admin/employers/${employer.id}/settings`)}
+                          title="Employer settings"
+                          data-testid={`button-settings-${employer.id}`}
+                        >
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -648,7 +661,7 @@ export default function AdminEmployersPage() {
                     pendingForms.map((form) => (
                       <TableRow key={form.id} data-testid={`row-eta-form-${form.id}`}>
                         <TableCell className="font-medium">{form.employerName}</TableCell>
-                        <TableCell className="font-mono text-sm">{form.ein}</TableCell>
+                        <TableCell className="font-mono text-sm">{form.ein ? `***-***${form.ein.slice(-4)}` : ""}</TableCell>
                         <TableCell>{form.contactEmail}</TableCell>
                         <TableCell>
                           {form.signatureRequestSentAt

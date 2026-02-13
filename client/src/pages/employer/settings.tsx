@@ -69,7 +69,7 @@ export default function EmployerSettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>EIN</Label>
-                  <Input defaultValue={employer?.ein || ""} disabled data-testid="input-ein" />
+                  <Input defaultValue={employer?.ein ? `***-***${employer.ein.slice(-4)}` : ""} disabled data-testid="input-ein" />
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
