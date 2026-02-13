@@ -111,7 +111,7 @@ export default function TaxProgramsPage() {
   });
 
   const { data: employers = [] } = useQuery<Employer[]>({
-    queryKey: ["/api/employers"],
+    queryKey: ["/api/admin/employers"],
   });
 
   const { data: assignments = [], isLoading: assignmentsLoading } = useQuery<EmployerAssignment[]>({
@@ -413,7 +413,7 @@ export default function TaxProgramsPage() {
                 <SelectContent>
                   {employers.map((emp) => (
                     <SelectItem key={emp.id} value={String(emp.id)}>
-                      {emp.name} ({emp.state})
+                      {emp.name}{emp.state ? ` (${emp.state})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
