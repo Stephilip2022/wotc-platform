@@ -2184,7 +2184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const employerId = req.params.id;
 
       // Get employer
-      const [employer] = await db
+      let [employer] = await db
         .select()
         .from(employers)
         .where(eq(employers.id, employerId));
@@ -2194,7 +2194,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!employer.questionnaireUrl) {
-        // Auto-generate if missing (legacy employers)
         let slug = employer.name
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
