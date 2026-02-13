@@ -45,6 +45,7 @@ Employees (new hires/applicants) do NOT log in or have a portal. They access the
 -   **Zero-Touch Processing**: Automated submission readiness detection, intelligent queue management, and an orchestrator for automated state portal submissions with retry logic and MFA handling.
 -   **Public API & Developer Platform**: Secure REST API (v1) for employees, screenings, and credits with API key management, scope-based permissions, rate limiting, and a robust webhook system. A developer portal UI provides key management, webhook configuration, interactive API docs, and usage analytics.
 -   **White-Label & Enterprise Features**: Admin portal for white-label licensee management (branding, billing, revenue sharing), a Spanish translation service, and enhanced integration security.
+-   **New Hire Onboarding Module**: Opt-in per employer (admin toggle). Mobile-first digital onboarding portal (`/onboard/:token`) for W-4, state withholding, direct deposit, emergency contact, ID upload, and policy e-signatures. Employer management page with invite creation, progress tracking, and completion metrics. Dashboard card shows upcoming hires and readiness status. Schema: `onboarding_invite_tokens`, `onboarding_instances`, `onboarding_tasks`, `onboarding_documents`, `onboarding_form_data`. Routes: `server/routes/onboarding.ts` (employer), `server/routes/publicOnboarding.ts` (public).
 -   **UI Components**: AI Chat Assistant, Document OCR Page, Multi-Credit Bundling Page, and a White-Label Preview Component.
 
 ## External Dependencies

@@ -96,6 +96,8 @@ import certificationRouter from "./routes/certification";
 import clientAgreementsRouter from "./routes/clientAgreements";
 import pricingRouter from "./routes/pricing";
 import taxProgramsRouter from "./routes/taxPrograms";
+import onboardingRouter from "./routes/onboarding";
+import publicOnboardingRouter from "./routes/publicOnboarding";
 import { 
   translateText, 
   translateToSpanish, 
@@ -218,6 +220,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Tax Credit Programs catalog and employer assignments
   app.use("/api/tax-programs", isAuthenticated, taxProgramsRouter);
+
+  // New Hire Onboarding Module (authenticated employer routes)
+  app.use("/api/onboarding", isAuthenticated, onboardingRouter);
+
+  // Public onboarding portal (token-based, no auth)
+  app.use("/api/public/onboard", publicOnboardingRouter);
 
   // ============================================================================
   // TRANSLATION ROUTES
@@ -1646,6 +1654,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // EMPLOYER PORTAL ROUTES
   // ============================================================================
+
+  app.get("/api/employer/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || !user.employerId) {
+        return res.status(403).json({ error: "Employer access required" });
+      }
+      const [employer] = await db.select().from(employers).where(eq(employers.id, user.employerId));
+      if (!employer) return res.status(404).json({ error: "Employer not found" });
+      res.json(employer);
+    } catch (error) {
+      console.error("Error fetching employer profile:", error);
+      res.status(500).json({ error: "Failed to fetch employer profile" });
+    }
+  });
   
   app.get("/api/employer/stats", isAuthenticated, async (req: any, res) => {
     try {
@@ -2120,7 +2143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Unauthorized" });
       }
 
-      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates, feePercentage, referralPartnerId } = req.body;
+      const { name, ein, contactEmail, contactPhone, address, city, state, zipCode, hiringStates, feePercentage, referralPartnerId, onboardingModuleEnabled } = req.body;
 
       if (!name || !ein || !contactEmail) {
         return res.status(400).json({ error: "Company name, EIN, and contact email are required" });
@@ -2158,6 +2181,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })(),
         questionnaireUrl: slug,
         onboardingStatus: "pending",
+        onboardingModuleEnabled: onboardingModuleEnabled === true,
       }).returning();
 
       // Auto-create default WOTC questionnaire so screening link works immediately

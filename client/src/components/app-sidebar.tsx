@@ -23,7 +23,6 @@ import {
   CheckSquare,
   Clock,
   KeyRound,
-  Code,
   Webhook,
   Book,
   Activity,
@@ -37,8 +36,12 @@ import {
   Layers,
   Calculator,
   Handshake,
+  UserPlus,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
+import type { Employer } from "@shared/schema";
 
 interface AppSidebarProps {
   role: "admin" | "employer";
@@ -46,6 +49,14 @@ interface AppSidebarProps {
 
 export function AppSidebar({ role }: AppSidebarProps) {
   const [location] = useLocation();
+  const { user } = useAuth();
+
+  const { data: employer } = useQuery<Employer>({
+    queryKey: ["/api/employer/profile"],
+    enabled: role === "employer" && !!user?.employerId,
+  });
+
+  const onboardingEnabled = !!(employer as any)?.onboardingModuleEnabled;
 
   const adminItems = [
     { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
@@ -81,6 +92,10 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Reports", url: "/employer/reports", icon: FileText },
     { title: "Billing", url: "/employer/billing", icon: DollarSign },
     { title: "Settings", url: "/employer/settings", icon: Settings },
+  ];
+
+  const onboardingItems = [
+    { title: "Onboarding", url: "/employer/new-hire-onboarding", icon: UserPlus },
   ];
 
   const developerItems = [
@@ -119,6 +134,30 @@ export function AppSidebar({ role }: AppSidebarProps) {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {role === "employer" && onboardingEnabled && (
+          <SidebarGroup>
+            <SidebarGroupLabel>New Hire Onboarding</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {onboardingItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton 
+                      asChild 
+                      isActive={location === item.url}
+                      data-testid={`link-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <Link href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
         
         {role === "employer" && (
           <SidebarGroup>

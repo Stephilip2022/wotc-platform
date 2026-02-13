@@ -56,6 +56,8 @@ import EmployerSettingsPortalPage from "@/pages/employer/settings";
 import EmployerDocumentsPage from "@/pages/employer/documents";
 import EmployerReportsPage from "@/pages/employer/reports";
 import EmployerSetupPage from "@/pages/employer-setup";
+import NewHireOnboardingPage from "@/pages/employer/new-hire-onboarding";
+import PublicOnboarding from "@/pages/public-onboarding";
 import { Loader2 } from "lucide-react";
 
 function AdminRoutes() {
@@ -110,6 +112,7 @@ function EmployerRoutes() {
       <Route path="/employer/documents" component={EmployerDocumentsPage} />
       <Route path="/employer/settings" component={EmployerSettingsPortalPage} />
       <Route path="/employer/onboarding" component={OnboardingWizardPage} />
+      <Route path="/employer/new-hire-onboarding" component={NewHireOnboardingPage} />
       <Route path="/employer/reports" component={EmployerReportsPage} />
       <Route path="/employer/import" component={BulkImportPage} />
       <Route component={NotFound} />
@@ -161,6 +164,11 @@ function Router() {
   if (location.startsWith("/setup/")) {
     const setupToken = location.split("/setup/")[1]?.split("?")[0] || "";
     return <EmployerSetupPage token={setupToken} />;
+  }
+
+  if (location.startsWith("/onboard/")) {
+    const onboardToken = location.split("/onboard/")[1]?.split("?")[0] || "";
+    return <PublicOnboarding token={onboardToken} />;
   }
 
   if (isLoading) {

@@ -28,7 +28,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign, Handshake, Mail } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign, Handshake, Mail, UserPlus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Employer, EtaForm9198, ReferralPartner } from "@shared/schema";
 import { useForm } from "react-hook-form";
@@ -82,6 +83,7 @@ export default function AdminEmployersPage() {
   const [signedByEmail, setSignedByEmail] = useState("");
   const [selectedHiringStates, setSelectedHiringStates] = useState<string[]>([]);
   const [stateSearchTerm, setStateSearchTerm] = useState("");
+  const [onboardingEnabled, setOnboardingEnabled] = useState(false);
 
   const { data: employers, isLoading } = useQuery<Employer[]>({
     queryKey: ["/api/admin/employers"],
@@ -124,6 +126,7 @@ export default function AdminEmployersPage() {
       const response = await apiRequest("POST", "/api/admin/employers", {
         ...data,
         hiringStates: selectedHiringStates.length > 0 ? selectedHiringStates : null,
+        onboardingModuleEnabled: onboardingEnabled,
       });
       return await response.json();
     },
@@ -137,6 +140,7 @@ export default function AdminEmployersPage() {
       form.reset();
       setSelectedHiringStates([]);
       setStateSearchTerm("");
+      setOnboardingEnabled(false);
     },
     onError: (error: any) => {
       toast({
@@ -505,6 +509,23 @@ export default function AdminEmployersPage() {
                   </ScrollArea>
                 </div>
 
+                <div className="flex items-center justify-between rounded-md border p-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <UserPlus className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">New Hire Onboarding Module</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Enable the new hire onboarding system for this employer. Provides digital W-4, direct deposit, ID upload, policy e-signatures, and more.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={onboardingEnabled}
+                    onCheckedChange={setOnboardingEnabled}
+                    data-testid="switch-onboarding-module"
+                  />
+                </div>
+
                 <DialogFooter>
                   <Button type="submit" disabled={addEmployerMutation.isPending} data-testid="button-submit-employer">
                     {addEmployerMutation.isPending ? "Adding..." : "Add Employer"}
@@ -598,9 +619,17 @@ export default function AdminEmployersPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={employer.billingStatus === "active" ? "default" : "secondary"}>
-                        {employer.billingStatus?.toUpperCase()}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant={employer.billingStatus === "active" ? "default" : "secondary"}>
+                          {employer.billingStatus?.toUpperCase()}
+                        </Badge>
+                        {(employer as any).onboardingModuleEnabled && (
+                          <Badge variant="outline" className="no-default-active-elevate text-xs">
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Onboarding
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">

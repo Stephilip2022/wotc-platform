@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, ClipboardCheck, DollarSign, TrendingUp, FileText, Target, ArrowRight } from "lucide-react";
+import { Users, ClipboardCheck, DollarSign, TrendingUp, FileText, Target, ArrowRight, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import {
@@ -87,6 +87,18 @@ export default function EmployerDashboard() {
     queryKey: ["/api/employer/credits"],
   });
 
+  const { data: employer } = useQuery<any>({
+    queryKey: ["/api/employer/profile"],
+  });
+
+  const { data: onboardingMetrics } = useQuery<{
+    total: number; completed: number; inProgress: number; pending: number;
+    completionRate: number; avgCompletionMinutes: number; upcomingHires: any[];
+  }>({
+    queryKey: ["/api/onboarding/employer/metrics"],
+    enabled: !!employer?.onboardingModuleEnabled,
+  });
+
   // Pull-to-refresh for mobile
   const handleRefresh = async () => {
     await Promise.all([
@@ -94,6 +106,8 @@ export default function EmployerDashboard() {
       queryClient.invalidateQueries({ queryKey: ["/api/employer/recent-activity"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/employer/screenings"] }),
       queryClient.invalidateQueries({ queryKey: ["/api/employer/credits"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/profile"] }),
+      queryClient.invalidateQueries({ queryKey: ["/api/onboarding/employer/metrics"] }),
     ]);
   };
 
@@ -393,6 +407,71 @@ export default function EmployerDashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* New Hire Onboarding */}
+      {employer?.onboardingModuleEnabled && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0">
+            <div>
+              <CardTitle>New Hire Onboarding</CardTitle>
+              <CardDescription>Track onboarding progress for new hires</CardDescription>
+            </div>
+            <Link href="/employer/new-hire-onboarding">
+              <Button variant="outline" size="sm" data-testid="button-view-onboarding">
+                View All
+                <ArrowRight className="h-3 w-3 ml-1" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {onboardingMetrics ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold" data-testid="text-onboarding-in-progress">{onboardingMetrics.inProgress}</div>
+                    <p className="text-xs text-muted-foreground">In Progress</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold" data-testid="text-onboarding-completed">{onboardingMetrics.completed}</div>
+                    <p className="text-xs text-muted-foreground">Completed</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold" data-testid="text-onboarding-rate">{onboardingMetrics.completionRate}%</div>
+                    <p className="text-xs text-muted-foreground">Completion Rate</p>
+                  </div>
+                </div>
+                {onboardingMetrics.upcomingHires.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Upcoming Starts</p>
+                    {onboardingMetrics.upcomingHires.slice(0, 3).map((hire: any) => (
+                      <div key={hire.id} className="flex items-center justify-between text-sm" data-testid={`row-upcoming-${hire.id}`}>
+                        <div className="flex items-center gap-2">
+                          <UserPlus className="h-3 w-3 text-muted-foreground" />
+                          <span>{hire.firstName} {hire.lastName}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="no-default-active-elevate text-xs">{hire.progressPercent}%</Badge>
+                          {hire.startDate && <span className="text-xs text-muted-foreground">{hire.startDate}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-6">
+                <UserPlus className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">No onboarding invites yet</p>
+                <Link href="/employer/new-hire-onboarding">
+                  <Button variant="outline" size="sm" className="mt-2" data-testid="button-start-onboarding">
+                    Invite New Hire
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recent Activity */}
       <Card>

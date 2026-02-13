@@ -124,6 +124,9 @@ export const employers = pgTable("employers", {
   onboardingStatus: text("onboarding_status").default("pending"), // 'pending', 'documents_sent', 'signed', 'active'
   activatedAt: timestamp("activated_at"),
   
+  // New Hire Onboarding Module
+  onboardingModuleEnabled: boolean("onboarding_module_enabled").default(false),
+  
   // Referral partner association
   referralPartnerId: varchar("referral_partner_id"),
   
@@ -2878,3 +2881,135 @@ export const documentUploadReminders = pgTable("document_upload_reminders", {
 export const insertDocumentUploadReminderSchema = createInsertSchema(documentUploadReminders).omit({ id: true, createdAt: true });
 export type InsertDocumentUploadReminder = z.infer<typeof insertDocumentUploadReminderSchema>;
 export type DocumentUploadReminder = typeof documentUploadReminders.$inferSelect;
+
+// ============================================================================
+// NEW HIRE ONBOARDING MODULE
+// ============================================================================
+
+export const onboardingInviteTokens = pgTable("onboarding_invite_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  token: varchar("token").notNull().unique(),
+  email: text("email").notNull(),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  phone: text("phone"),
+  jobTitle: text("job_title"),
+  department: text("department"),
+  startDate: text("start_date"),
+  usedAt: timestamp("used_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_token").on(table.token),
+  index("idx_onboarding_invite_employer").on(table.employerId),
+]);
+
+export const insertOnboardingInviteTokenSchema = createInsertSchema(onboardingInviteTokens).omit({ id: true, createdAt: true, usedAt: true });
+export type InsertOnboardingInviteToken = z.infer<typeof insertOnboardingInviteTokenSchema>;
+export type OnboardingInviteToken = typeof onboardingInviteTokens.$inferSelect;
+
+export const onboardingInstances = pgTable("onboarding_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  employeeId: varchar("employee_id").references(() => employees.id, { onDelete: "set null" }),
+  inviteTokenId: varchar("invite_token_id").references(() => onboardingInviteTokens.id, { onDelete: "set null" }),
+
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email").notNull(),
+  phone: text("phone"),
+  jobTitle: text("job_title"),
+  department: text("department"),
+  startDate: text("start_date"),
+
+  status: text("status").notNull().default("pending"), // 'pending', 'in_progress', 'completed', 'expired'
+  progressPercent: integer("progress_percent").notNull().default(0),
+  currentStep: text("current_step").default("welcome"), // which step they're on
+
+  completedAt: timestamp("completed_at"),
+  startedAt: timestamp("started_at"),
+  lastActivityAt: timestamp("last_activity_at"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_instance_employer").on(table.employerId),
+  index("idx_onboarding_instance_employee").on(table.employeeId),
+  index("idx_onboarding_instance_status").on(table.status),
+]);
+
+export const insertOnboardingInstanceSchema = createInsertSchema(onboardingInstances).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export type InsertOnboardingInstance = z.infer<typeof insertOnboardingInstanceSchema>;
+export type OnboardingInstance = typeof onboardingInstances.$inferSelect;
+
+export const onboardingTasks = pgTable("onboarding_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instanceId: varchar("instance_id").notNull().references(() => onboardingInstances.id, { onDelete: "cascade" }),
+
+  stepKey: text("step_key").notNull(), // 'personal_info', 'tax_w4', 'state_withholding', 'direct_deposit', 'emergency_contact', 'id_upload', 'policy_sign', 'welcome_video'
+  title: text("title").notNull(),
+  description: text("description"),
+  category: text("category").notNull().default("required"), // 'required', 'optional', 'recommended'
+  sortOrder: integer("sort_order").notNull().default(0),
+
+  status: text("status").notNull().default("pending"), // 'pending', 'in_progress', 'completed', 'skipped'
+  completedAt: timestamp("completed_at"),
+  data: jsonb("data"), // form data for this step
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_task_instance").on(table.instanceId),
+]);
+
+export const insertOnboardingTaskSchema = createInsertSchema(onboardingTasks).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertOnboardingTask = z.infer<typeof insertOnboardingTaskSchema>;
+export type OnboardingTask = typeof onboardingTasks.$inferSelect;
+
+export const onboardingDocuments = pgTable("onboarding_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instanceId: varchar("instance_id").notNull().references(() => onboardingInstances.id, { onDelete: "cascade" }),
+  taskId: varchar("task_id").references(() => onboardingTasks.id, { onDelete: "set null" }),
+
+  documentType: text("document_type").notNull(), // 'government_id', 'bank_letter', 'voided_check', 'policy_signature', 'w4_form', 'other'
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url"),
+  fileSize: integer("file_size"),
+  mimeType: text("mime_type"),
+
+  signatureData: text("signature_data"), // base64 e-signature for policy acknowledgements
+  signedAt: timestamp("signed_at"),
+
+  status: text("status").notNull().default("pending"), // 'pending', 'verified', 'rejected', 'expired'
+  verifiedBy: varchar("verified_by"),
+  verifiedAt: timestamp("verified_at"),
+  rejectionReason: text("rejection_reason"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_doc_instance").on(table.instanceId),
+]);
+
+export const insertOnboardingDocumentSchema = createInsertSchema(onboardingDocuments).omit({ id: true, createdAt: true });
+export type InsertOnboardingDocument = z.infer<typeof insertOnboardingDocumentSchema>;
+export type OnboardingDocument = typeof onboardingDocuments.$inferSelect;
+
+export const onboardingFormData = pgTable("onboarding_form_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  instanceId: varchar("instance_id").notNull().references(() => onboardingInstances.id, { onDelete: "cascade" }),
+
+  formType: text("form_type").notNull(), // 'w4', 'state_withholding', 'direct_deposit', 'emergency_contact', 'personal_info'
+  formData: text("form_data").notNull(), // encrypted JSON of form fields
+  isComplete: boolean("is_complete").default(false),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_form_instance").on(table.instanceId),
+  index("idx_onboarding_form_type").on(table.instanceId, table.formType),
+])
+
+export const insertOnboardingFormDataSchema = createInsertSchema(onboardingFormData).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOnboardingFormData = z.infer<typeof insertOnboardingFormDataSchema>;
+export type OnboardingFormData = typeof onboardingFormData.$inferSelect;
