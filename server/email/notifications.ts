@@ -5,11 +5,15 @@ import {
   renderInvoiceNotification,
   renderDeterminationResult,
   renderWelcomeEmail,
+  renderOnboardingInvite,
+  renderOnboardingReminder,
   type ScreeningInviteData,
   type StatusUpdateData,
   type InvoiceNotificationData,
   type DeterminationResultData,
   type WelcomeEmailData,
+  type OnboardingInviteData,
+  type OnboardingReminderData,
 } from './templates';
 
 export async function sendScreeningInvite(
@@ -159,5 +163,51 @@ export async function sendWelcomeEmail(
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
+  }
+}
+
+export async function sendOnboardingInviteEmail(
+  to: string,
+  data: OnboardingInviteData
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const { client, fromEmail } = await getUncachableResendClient();
+
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: [to],
+      subject: `Complete Your Onboarding - ${data.employerName}`,
+      html: renderOnboardingInvite(data),
+    });
+
+    console.log(`[Onboarding] Invite email sent to ${to}:`, result.data?.id);
+
+    return { success: true, messageId: result.data?.id || 'unknown' };
+  } catch (error) {
+    console.error('Failed to send onboarding invite email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+export async function sendOnboardingReminderEmail(
+  to: string,
+  data: OnboardingReminderData
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  try {
+    const { client, fromEmail } = await getUncachableResendClient();
+
+    const result = await client.emails.send({
+      from: fromEmail,
+      to: [to],
+      subject: `Reminder: Complete Your Onboarding - ${data.employerName}`,
+      html: renderOnboardingReminder(data),
+    });
+
+    console.log(`[Onboarding] Reminder email sent to ${to}:`, result.data?.id);
+
+    return { success: true, messageId: result.data?.id || 'unknown' };
+  } catch (error) {
+    console.error('Failed to send onboarding reminder email:', error);
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

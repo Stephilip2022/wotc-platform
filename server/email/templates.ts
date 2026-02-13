@@ -35,6 +35,24 @@ export interface DeterminationResultData {
   creditAmount?: string;
 }
 
+export interface OnboardingInviteData {
+  firstName: string;
+  employerName: string;
+  onboardingUrl: string;
+  jobTitle?: string;
+  startDate?: string;
+  employerLogoUrl?: string;
+}
+
+export interface OnboardingReminderData {
+  firstName: string;
+  employerName: string;
+  onboardingUrl: string;
+  progressPercent: number;
+  daysRemaining: number;
+  employerLogoUrl?: string;
+}
+
 export interface WelcomeEmailData {
   employerName: string;
   contactName: string;
@@ -771,5 +789,13 @@ export function renderWelcomeEmail(data: WelcomeEmailData): string {
 </body>
 </html>
   `.trim();
+}
+
+export function renderOnboardingInvite(data: OnboardingInviteData): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Complete Your Onboarding</title></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#f3f4f6;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:40px 20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">${data.employerLogoUrl ? `<tr><td style="padding:32px;text-align:center;background-color:#f9fafb;"><img src="${data.employerLogoUrl}" alt="${data.employerName}" style="max-height:60px;max-width:200px;"></td></tr>` : ''}<tr><td style="padding:40px 32px;"><h1 style="margin:0 0 16px 0;font-size:24px;font-weight:700;color:#111827;">Welcome to ${data.employerName}!</h1><p style="margin:0 0 24px 0;font-size:16px;line-height:24px;color:#4b5563;">Hi ${data.firstName},</p><p style="margin:0 0 24px 0;font-size:16px;line-height:24px;color:#4b5563;">Congratulations on your new position${data.jobTitle ? ` as <strong>${data.jobTitle}</strong>` : ''}! Please complete your onboarding paperwork before your first day${data.startDate ? ` on <strong>${data.startDate}</strong>` : ''}.</p><div style="margin:0 0 24px 0;padding:20px;background-color:#f0f9ff;border-radius:6px;border-left:4px solid #0ea5e9;"><p style="margin:0 0 8px 0;font-size:15px;font-weight:600;color:#0369a1;">What you'll complete:</p><ul style="margin:0;padding-left:20px;color:#4b5563;font-size:14px;line-height:24px;"><li>Personal information</li><li>Federal W-4 tax withholding</li><li>State tax withholding</li><li>Direct deposit setup</li><li>Emergency contact</li><li>Photo ID upload</li><li>Policy acknowledgements</li></ul></div><p style="margin:0 0 24px 0;font-size:14px;color:#6b7280;">The process takes about 10-15 minutes and works on any device.</p><table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center"><a href="${data.onboardingUrl}" style="display:inline-block;padding:14px 40px;background-color:#0ea5e9;color:#ffffff;text-decoration:none;border-radius:6px;font-size:16px;font-weight:600;">Start Onboarding</a></td></tr></table><p style="margin:24px 0 0 0;font-size:13px;color:#9ca3af;text-align:center;">This link will expire in 30 days. If you have questions, contact your HR department.</p></td></tr><tr><td style="padding:24px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;"><p style="margin:0;font-size:13px;color:#6b7280;text-align:center;">Sent by ${data.employerName} via WOTC Platform</p></td></tr></table></td></tr></table></body></html>`;
+}
+
+export function renderOnboardingReminder(data: OnboardingReminderData): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Onboarding Reminder</title></head><body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background-color:#f3f4f6;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:40px 20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);"><tr><td style="padding:40px 32px;"><h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#111827;">Friendly Reminder: Complete Your Onboarding</h1><p style="margin:0 0 24px 0;font-size:16px;line-height:24px;color:#4b5563;">Hi ${data.firstName},</p><p style="margin:0 0 16px 0;font-size:16px;line-height:24px;color:#4b5563;">You're ${data.progressPercent}% through your onboarding with <strong>${data.employerName}</strong>. Please finish the remaining steps${data.daysRemaining > 0 ? ` within the next ${data.daysRemaining} days` : ''}.</p><div style="margin:0 0 24px 0;background-color:#f3f4f6;border-radius:8px;padding:4px;"><div style="background-color:#0ea5e9;height:8px;border-radius:6px;width:${data.progressPercent}%;"></div></div><table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center"><a href="${data.onboardingUrl}" style="display:inline-block;padding:14px 40px;background-color:#0ea5e9;color:#ffffff;text-decoration:none;border-radius:6px;font-size:16px;font-weight:600;">Continue Onboarding</a></td></tr></table></td></tr><tr><td style="padding:24px 32px;background-color:#f9fafb;border-top:1px solid #e5e7eb;"><p style="margin:0;font-size:13px;color:#6b7280;text-align:center;">Sent by ${data.employerName} via WOTC Platform</p></td></tr></table></td></tr></table></body></html>`;
 }
 
