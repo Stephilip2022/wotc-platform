@@ -48,8 +48,15 @@ import {
   Crown,
   Rocket,
   Layers,
-  Handshake
+  Handshake,
+  Smartphone,
+  FileText,
+  Pen,
+  Wallet,
+  UserPlus,
+  ClipboardCheck,
 } from "lucide-react";
+import { Link } from "wouter";
 
 function GoldNugget({ className }: { className?: string }) {
   return (
@@ -318,10 +325,11 @@ export default function LandingPage() {
               <span className="text-xl font-bold gradient-text">Rockerbox</span>
             </div>
             <div className="hidden md:flex items-center gap-6">
-              <a href="#calculator" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Calculator</a>
-              <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
-              <a href="#industries" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Industries</a>
-              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors">How It Works</a>
+              <a href="#calculator" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-calculator">Calculator</a>
+              <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-features">Features</a>
+              <a href="#industries" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-industries">Industries</a>
+              <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-how-it-works">How It Works</a>
+              <a href="#onboarding" className="text-sm text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-onboarding">Onboarding</a>
             </div>
             <div className="flex items-center gap-3">
               <SignInButton mode="modal">
@@ -680,6 +688,111 @@ export default function LandingPage() {
                 </Card>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* New Hire Onboarding Section */}
+      <section id="onboarding" className="py-24 px-4 md:px-8 scroll-mt-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center space-y-4 mb-14">
+            <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">
+              <Smartphone className="h-3 w-3 mr-1" />
+              New Hire Onboarding
+            </Badge>
+            <h2 className="text-4xl md:text-6xl font-black">
+              Paperless <span className="gradient-text">Onboarding</span>
+            </h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Digitize your entire new hire experience. W-4, direct deposit, ID verification, and policy
+              signatures — completed from any device in under 10 minutes. No app download or login required.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
+            <Card className="hover-elevate" data-testid="card-onboarding-new-hires">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-bold">For New Hires</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-5">
+                  New hires receive a secure link via email or text message. They complete everything from their phone — no account, no app, no login needed.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { icon: Users, label: "Personal Info" },
+                    { icon: FileText, label: "W-4 Tax Form" },
+                    { icon: Building2, label: "State Withholding" },
+                    { icon: Wallet, label: "Direct Deposit" },
+                    { icon: Upload, label: "Photo ID Upload" },
+                    { icon: Pen, label: "Policy E-Signatures" },
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <step.icon className="h-4 w-4 text-primary shrink-0" />
+                      <span>{step.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="hover-elevate" data-testid="card-onboarding-employers">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Building2 className="w-5 h-5 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-bold">For Employers</h3>
+                </div>
+                <p className="text-sm text-muted-foreground mb-5">
+                  Employers log into the Rockerbox portal to send invites, track progress, customize workflows, and manage everything from a single dashboard.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { icon: UserPlus, label: "Single & Bulk Invites" },
+                    { icon: ClipboardCheck, label: "Progress Tracking" },
+                    { icon: Layers, label: "Department Templates" },
+                    { icon: Zap, label: "Auto-Create Records" },
+                    { icon: TrendingUp, label: "Analytics Dashboard" },
+                    { icon: Globe, label: "WOTC Integration" },
+                  ].map((feat, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm">
+                      <feat.icon className="h-4 w-4 text-primary shrink-0" />
+                      <span>{feat.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+            {[
+              { value: "< 10 min", label: "Avg Completion", icon: Clock },
+              { value: "100%", label: "Paperless", icon: FileText },
+              { value: "7 Steps", label: "Complete Process", icon: ClipboardCheck },
+              { value: "Any Device", label: "Mobile-First", icon: Smartphone },
+            ].map((stat, i) => (
+              <Card key={i} className="bg-muted/50" data-testid={`onboarding-stat-landing-${i}`}>
+                <CardContent className="p-4 text-center">
+                  <stat.icon className="w-5 h-5 text-primary mx-auto mb-2" />
+                  <p className="text-xl font-black gradient-text">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <Link href="/onboarding" data-testid="link-onboarding-page">
+              <Button size="lg" variant="outline" data-testid="button-learn-more-onboarding">
+                Learn More About New Hire Onboarding
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

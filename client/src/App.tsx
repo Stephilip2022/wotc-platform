@@ -59,6 +59,7 @@ import EmployerReportsPage from "@/pages/employer/reports";
 import EmployerSetupPage from "@/pages/employer-setup";
 import NewHireOnboardingPage from "@/pages/employer/new-hire-onboarding";
 import PublicOnboarding from "@/pages/public-onboarding";
+import OnboardingInfoPage from "@/pages/onboarding-info";
 import { Loader2 } from "lucide-react";
 
 function AdminRoutes() {
@@ -171,6 +172,10 @@ function Router() {
   if (location.startsWith("/onboard/")) {
     const onboardToken = location.split("/onboard/")[1]?.split("?")[0] || "";
     return <PublicOnboarding token={onboardToken} />;
+  }
+
+  if (location === "/onboarding") {
+    return <OnboardingInfoPage />;
   }
 
   if (isLoading) {
