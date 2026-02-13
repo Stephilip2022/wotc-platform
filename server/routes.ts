@@ -1764,7 +1764,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employer/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const user = await getUserByClerkId(getAuth(req).userId!);
+      const user = await getOrCreateUser(req);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
@@ -1785,7 +1785,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employer/employees", isAuthenticated, async (req: any, res) => {
     try {
-      const user = await getUserByClerkId(getAuth(req).userId!);
+      const user = await getOrCreateUser(req);
       
       if (!user || user.role !== "employer" || !user.employerId) {
         return res.status(403).json({ error: "Unauthorized" });
