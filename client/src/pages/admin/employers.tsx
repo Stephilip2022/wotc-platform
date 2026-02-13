@@ -213,13 +213,14 @@ export default function AdminEmployersPage() {
                 Add Employer
               </Button>
             </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Add New Employer</DialogTitle>
               <DialogDescription>
                 Create a new employer account in the WOTC system.
               </DialogDescription>
             </DialogHeader>
+            <div className="flex-1 overflow-y-auto pr-2">
             <Form {...form}>
               <form onSubmit={form.handleSubmit((data) => addEmployerMutation.mutate(data))} className="space-y-6">
                 <FormField
@@ -491,6 +492,7 @@ export default function AdminEmployersPage() {
                 </DialogFooter>
               </form>
             </Form>
+            </div>
           </DialogContent>
         </Dialog>
         </div>
