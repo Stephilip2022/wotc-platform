@@ -47,6 +47,7 @@ import DocumentOCRPage from "@/pages/admin/document-ocr";
 import PricingConfigPage from "@/pages/admin/pricing-config";
 import AdminSettingsPage from "@/pages/admin/settings";
 import TaxProgramsPage from "@/pages/admin/tax-programs";
+import StateCreditsMatrixPage from "@/pages/admin/state-credits-matrix";
 import ReferralPartnersPage from "@/pages/admin/referral-partners";
 import MultiCreditPage from "@/pages/employer/multi-credit";
 import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
@@ -78,6 +79,7 @@ function AdminRoutes() {
       <Route path="/admin/document-ocr" component={DocumentOCRPage} />
       <Route path="/admin/pricing" component={PricingConfigPage} />
       <Route path="/admin/tax-programs" component={TaxProgramsPage} />
+      <Route path="/admin/state-credits-matrix" component={StateCreditsMatrixPage} />
       <Route path="/admin/referral-partners" component={ReferralPartnersPage} />
       <Route path="/admin/settings" component={AdminSettingsPage} />
       <Route path="/employer/onboarding" component={OnboardingWizardPage} />
