@@ -79,6 +79,7 @@ function AdminRoutes() {
       <Route path="/admin/tax-programs" component={TaxProgramsPage} />
       <Route path="/admin/referral-partners" component={ReferralPartnersPage} />
       <Route path="/admin/settings" component={AdminSettingsPage} />
+      <Route path="/employer/onboarding" component={OnboardingWizardPage} />
       <Route component={NotFound} />
     </Switch>
   );
