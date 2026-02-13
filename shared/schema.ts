@@ -2723,3 +2723,60 @@ export const generatedReports = pgTable("generated_reports", {
 export const insertGeneratedReportSchema = createInsertSchema(generatedReports).omit({ id: true, createdAt: true });
 export type InsertGeneratedReport = z.infer<typeof insertGeneratedReportSchema>;
 export type GeneratedReport = typeof generatedReports.$inferSelect;
+
+// ============================================================================
+// DOCUMENT UPLOAD TOKENS (One-time secure links for post-screening uploads)
+// ============================================================================
+
+export const documentUploadTokens = pgTable("document_upload_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  screeningId: varchar("screening_id").references(() => screenings.id, { onDelete: "cascade" }),
+
+  token: varchar("token").notNull().unique(),
+  requiredDocuments: jsonb("required_documents").notNull(), // e.g. ["dd214", "drivers_license"]
+  targetGroups: jsonb("target_groups").notNull(), // which groups triggered the request
+
+  isUsed: boolean("is_used").default(false),
+  usedAt: timestamp("used_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_upload_tokens_employee").on(table.employeeId),
+  index("idx_upload_tokens_token").on(table.token),
+]);
+
+export const insertDocumentUploadTokenSchema = createInsertSchema(documentUploadTokens).omit({ id: true, createdAt: true });
+export type InsertDocumentUploadToken = z.infer<typeof insertDocumentUploadTokenSchema>;
+export type DocumentUploadToken = typeof documentUploadTokens.$inferSelect;
+
+// ============================================================================
+// DOCUMENT UPLOAD REMINDERS (Scheduled SMS reminders at 3, 5, 7 days)
+// ============================================================================
+
+export const documentUploadReminders = pgTable("document_upload_reminders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  uploadTokenId: varchar("upload_token_id").notNull().references(() => documentUploadTokens.id, { onDelete: "cascade" }),
+
+  reminderDay: integer("reminder_day").notNull(), // 3, 5, or 7
+  scheduledAt: timestamp("scheduled_at").notNull(),
+  sentAt: timestamp("sent_at"),
+  phoneNumber: text("phone_number").notNull(),
+
+  status: text("status").notNull().default("pending"), // 'pending', 'sent', 'failed', 'cancelled'
+  twilioMessageSid: text("twilio_message_sid"),
+  errorMessage: text("error_message"),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_reminders_status_scheduled").on(table.status, table.scheduledAt),
+  index("idx_reminders_employee").on(table.employeeId),
+])
+
+export const insertDocumentUploadReminderSchema = createInsertSchema(documentUploadReminders).omit({ id: true, createdAt: true });
+export type InsertDocumentUploadReminder = z.infer<typeof insertDocumentUploadReminderSchema>;
+export type DocumentUploadReminder = typeof documentUploadReminders.$inferSelect;
