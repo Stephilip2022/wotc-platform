@@ -37,6 +37,6 @@ export async function getUncachableResendClient() {
   const { apiKey, fromEmail } = await getCredentials();
   return {
     client: new Resend(apiKey),
-    fromEmail: fromEmail || 'noreply@wotc-platform.com'
+    fromEmail: fromEmail || 'support@rockerbox.app'
   };
 }

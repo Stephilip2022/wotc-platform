@@ -752,7 +752,7 @@ export function renderWelcomeEmail(data: WelcomeEmailData): string {
                   Need Help?
                 </h3>
                 <p style="margin: 0; font-size: 14px; line-height: 20px; color: #6b7280;">
-                  Our support team is here to assist you with any questions about the WOTC program, screening process, or platform features. Contact us anytime at support@wotc-platform.com
+                  Our support team is here to assist you with any questions about the WOTC program, screening process, or platform features. Contact us anytime at support@rockerbox.app
                 </p>
               </div>
             </td>

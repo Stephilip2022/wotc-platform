@@ -48,3 +48,4 @@ integrations = ["javascript_openai_ai_integrations:1.0.0", "javascript_object_st
 CSDC_PROXY_HOST = "165.245.131.175"
 CSDC_PROXY_PORT = "22"
 CSDC_PROXY_USER = "root"
+APP_BASE_URL = "https://rockerbox.app"

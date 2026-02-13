@@ -1541,9 +1541,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate questionnaire URL
-      const baseUrl = process.env.REPLIT_DEPLOYMENT 
-        ? `https://${process.env.REPLIT_DEPLOYMENT}` 
-        : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+      const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
       const questionnaireUrl = `${baseUrl}/screen/${employer.questionnaireUrl}?employee=${employee.id}`;
 
       // Send screening invitation email
@@ -1894,9 +1892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }).returning();
 
       // Send welcome email with Form 9198 and engagement letter links
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : "http://localhost:5000";
+      const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
       
       try {
         const { sendWelcomeEmail } = await import('./email/notifications');
@@ -2215,9 +2211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Generate QR code as data URL
-      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
-        ? `https://${process.env.REPLIT_DEV_DOMAIN}` 
-        : "http://localhost:5000";
+      const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
       const fullUrl = `${baseUrl}/screen/${employer.questionnaireUrl}`;
       
       const qrCodeDataUrl = await QRCode.toDataURL(fullUrl, {
@@ -2322,9 +2316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Send welcome email if form is approved
       if (newForm.status === "approved") {
         try {
-          const baseUrl = process.env.REPLIT_DEPLOYMENT 
-            ? `https://${process.env.REPLIT_DEPLOYMENT}` 
-            : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+          const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
           
           const { sendWelcomeEmail } = await import('./email/notifications');
           await sendWelcomeEmail(newForm.contactEmail, {
@@ -3901,9 +3893,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 .where(eq(employers.id, dbInvoice.employerId));
 
               if (employer && employer.billingEmail) {
-                const baseUrl = process.env.REPLIT_DEPLOYMENT 
-                  ? `https://${process.env.REPLIT_DEPLOYMENT}` 
-                  : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+                const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
 
                 const { sendInvoiceNotification } = await import('./email/notifications');
                 await sendInvoiceNotification(employer.billingEmail, {

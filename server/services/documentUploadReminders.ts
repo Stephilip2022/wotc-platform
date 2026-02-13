@@ -59,13 +59,11 @@ function generateToken(): string {
 }
 
 function getBaseUrl(): string {
-  const replSlug = process.env.REPL_SLUG || '';
-  const replOwner = process.env.REPL_OWNER || '';
+  if (process.env.APP_BASE_URL) {
+    return process.env.APP_BASE_URL;
+  }
   if (process.env.REPLIT_DEV_DOMAIN) {
     return `https://${process.env.REPLIT_DEV_DOMAIN}`;
-  }
-  if (replSlug && replOwner) {
-    return `https://${replSlug}.${replOwner}.repl.co`;
   }
   return 'https://rockerbox.app';
 }
