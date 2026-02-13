@@ -46,7 +46,9 @@ import {
   Coins,
   Target,
   Crown,
-  Rocket
+  Rocket,
+  Layers,
+  Handshake
 } from "lucide-react";
 
 function GoldNugget({ className }: { className?: string }) {
@@ -164,9 +166,9 @@ export default function LandingPage() {
       description: "Built-in AI assistant helps users navigate the platform and answer WOTC questions instantly.",
     },
     {
-      icon: LineChart,
-      title: "Predictive Analytics & Forecasting",
-      description: "Advanced credit forecasting with trend analysis, employer comparisons, and optimization recommendations.",
+      icon: Layers,
+      title: "85 State Credit Programs",
+      description: "Comprehensive catalog of WOTC-similar state credits across 39 states with automated eligibility matching and smart employer recommendations.",
     },
     {
       icon: Lock,
@@ -191,17 +193,17 @@ export default function LandingPage() {
     {
       icon: PieChart,
       title: "Multi-Credit Bundling",
-      description: "Stack WOTC with R&D tax credits and state/local incentives for maximum tax savings.",
+      description: "Stack WOTC with R&D tax credits and 85 state-specific incentive programs for maximum tax savings.",
     },
     {
       icon: TrendingUp,
-      title: "Retention & Turnover Analytics",
-      description: "AI-powered turnover prediction, 400-hour milestone tracking, and retention optimization.",
+      title: "Predictive Analytics & Forecasting",
+      description: "Advanced credit forecasting, retention prediction, 400-hour milestone tracking, and ROI optimization.",
     },
     {
       icon: Upload,
-      title: "Bulk Import Tools",
-      description: "CSV upload with intelligent column detection, employee matching, and reusable mapping templates.",
+      title: "Bulk Import & PDF Reports",
+      description: "CSV upload with intelligent column detection, automated PDF report generation, and downloadable credits matrix.",
     },
   ];
 
@@ -223,8 +225,8 @@ export default function LandingPage() {
     },
     {
       icon: Sparkles,
-      title: "Guided Onboarding",
-      description: "6-step employer setup wizard with branding, payroll integration, and team management.",
+      title: "Secure Employer Onboarding",
+      description: "Token-based setup links in welcome emails. Employers set a password and are instantly activated with their portal access.",
     },
     {
       icon: DollarSign,
@@ -232,9 +234,9 @@ export default function LandingPage() {
       description: "Percentage-based, milestone flat fees, per-screening volume, or deferred annual billing.",
     },
     {
-      icon: Clock,
-      title: "400-Hour Milestone Tracking",
-      description: "Automatic tracking of hours worked to maximize first-year and second-year credits.",
+      icon: Handshake,
+      title: "Referral Partner Program",
+      description: "Full partner management with commission tracking, performance tiers, and automated partner revenue reporting.",
     },
     {
       icon: Shield,
@@ -243,16 +245,16 @@ export default function LandingPage() {
     },
     {
       icon: Zap,
-      title: "Email & Push Notifications",
-      description: "Automated screening invites, status updates, milestone alerts, and invoice reminders.",
+      title: "SMS & Email Notifications",
+      description: "Automated screening invites, document collection reminders via SMS, status updates, and invoice alerts.",
     },
   ];
 
   const stats = [
     { value: "$9,600", label: "Max Credit Per Employee", icon: DollarSign },
-    { value: "56", label: "State Portals Automated", icon: Building2 },
+    { value: "85", label: "State Credit Programs", icon: Layers },
     { value: "9", label: "Languages Supported", icon: Languages },
-    { value: "100%", label: "Automated Processing", icon: Zap },
+    { value: "56", label: "State Portals Automated", icon: Building2 },
   ];
 
   const workflowSteps = [
@@ -354,7 +356,8 @@ export default function LandingPage() {
           </h1>
           
           <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-            Automate your entire WOTC lifecycle with AI-powered screening, 
+            Automate your entire WOTC lifecycle plus 
+            <span className="text-foreground font-medium"> 85 state-specific credit programs</span> with AI-powered screening, 
             <span className="text-foreground font-medium"> 56-state portal automation</span>, and 
             <span className="text-foreground font-medium"> predictive analytics</span>. 
             Available in <span className="text-primary font-semibold">9 languages</span>.

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
+import PDFDocument from "pdfkit";
 import { db } from "../db";
 import { taxCreditPrograms, employerProgramAssignments, employers, users } from "../../shared/schema";
 import { eq, and, sql, ilike, inArray, desc, asc } from "drizzle-orm";
@@ -452,6 +453,198 @@ router.get("/stats", async (req, res) => {
       enabledAssignments: enabledAssignments.count,
     });
   } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const LEVERAGE_LABELS: Record<string, string> = {
+  wage_percentage: "Wage-based percentage credit",
+  per_employee_flat_plus_wage: "Flat amount per employee plus wage-based component",
+  percentage_of_expenditure: "Percentage of qualified expenditures",
+  flat_per_employee: "Flat credit per qualifying employee",
+  tiered_by_hours: "Tiered credit based on hours worked",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  veteran_credit: "Veteran",
+  disability_credit: "Disability",
+  reentry_credit: "Re-entry",
+  youth_training_credit: "Youth/Training",
+  enterprise_zone_credit: "Enterprise Zone",
+  historic_rehabilitation: "Historic Rehab",
+  general_screening: "General",
+};
+
+function getCaptureStrategy(program: any): string {
+  const parts: string[] = [];
+  const lt = program.leverageType || "";
+  if (lt === "wage_percentage") {
+    parts.push("Screen employees using WOTC-aligned questionnaire to identify eligibility.");
+    parts.push("Collect wage records and hours worked data from employer payroll.");
+    parts.push("Calculate credit as percentage of qualifying wages.");
+  } else if (lt === "per_employee_flat_plus_wage") {
+    parts.push("Verify employer worksite is within designated zone boundaries.");
+    parts.push("Screen new hires for zone residency and employment eligibility.");
+    parts.push("Submit zone certification along with employee wage documentation.");
+  } else if (lt === "percentage_of_expenditure") {
+    parts.push("Collect documentation of qualified expenditures from employer.");
+    parts.push("Verify project meets program-specific certification requirements.");
+    parts.push("Submit application to certifying agency with expenditure records.");
+  } else if (lt === "flat_per_employee") {
+    parts.push("Screen employees using target group criteria aligned with program rules.");
+    parts.push("Collect required documentation (hire date, job details, eligibility proof).");
+    parts.push("Submit per-employee certification to administering agency.");
+  } else if (lt === "tiered_by_hours") {
+    parts.push("Track employee hours worked to determine credit tier eligibility.");
+    parts.push("Collect payroll data to verify hours thresholds (120/400 hour milestones).");
+    parts.push("Calculate tiered credit amount based on hours worked and wage data.");
+  } else {
+    parts.push("Review program-specific criteria and documentation requirements.");
+    parts.push("Collect relevant employee/employer data for certification.");
+  }
+  parts.push(`Submit to ${program.agencyToWorkWith || "state agency"} for certification and approval.`);
+  return parts.join(" ");
+}
+
+router.get("/matrix/pdf", async (req, res) => {
+  try {
+    const programs = await db.select().from(taxCreditPrograms)
+      .where(eq(taxCreditPrograms.isActive, true))
+      .orderBy(asc(taxCreditPrograms.state), asc(taxCreditPrograms.programName));
+
+    const doc = new PDFDocument({ size: "LETTER", layout: "landscape", margin: 40 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="Rockerbox_State_Credits_Matrix.pdf"');
+    doc.pipe(res);
+
+    doc.fontSize(22).font("Helvetica-Bold").text("Rockerbox State Credits Matrix", { align: "center" });
+    doc.moveDown(0.3);
+    doc.fontSize(10).font("Helvetica").fillColor("#666666")
+      .text(`${programs.length} State-Specific Credit Programs | Generated ${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}`, { align: "center" });
+    doc.moveDown(0.3);
+    doc.fontSize(8).text("Confidential - For Internal Use Only", { align: "center" });
+    doc.fillColor("#000000");
+    doc.moveDown(1);
+
+    const colWidths = [130, 60, 70, 180, 120, 180];
+    const headers = ["Program Name", "State", "Category", "Description", "Certifying Agency", "How to Capture Credit"];
+    const startX = 40;
+    let y = doc.y;
+
+    const drawHeaderRow = (yPos: number) => {
+      doc.rect(startX, yPos, colWidths.reduce((a, b) => a + b, 0), 18).fill("#1a1a2e");
+      let x = startX;
+      doc.font("Helvetica-Bold").fontSize(7).fillColor("#ffffff");
+      for (let i = 0; i < headers.length; i++) {
+        doc.text(headers[i], x + 3, yPos + 5, { width: colWidths[i] - 6, lineBreak: false });
+        x += colWidths[i];
+      }
+      doc.fillColor("#000000");
+      return yPos + 18;
+    };
+
+    y = drawHeaderRow(y);
+
+    let currentState = "";
+    for (let idx = 0; idx < programs.length; idx++) {
+      const p = programs[idx];
+      const desc = (p.programDescription || "").substring(0, 200);
+      const agency = p.agencyToWorkWith || "—";
+      const capture = getCaptureStrategy(p).substring(0, 220);
+      const category = CATEGORY_LABELS[p.programCategory || ""] || p.programCategory || "";
+
+      const textHeight = Math.max(
+        doc.font("Helvetica").fontSize(6.5).heightOfString(p.programName, { width: colWidths[0] - 6 }),
+        doc.heightOfString(desc, { width: colWidths[3] - 6 }),
+        doc.heightOfString(capture, { width: colWidths[5] - 6 }),
+        14
+      );
+      const rowH = Math.min(textHeight + 8, 60);
+
+      if (y + rowH > 560) {
+        doc.addPage({ size: "LETTER", layout: "landscape", margin: 40 });
+        y = 40;
+        y = drawHeaderRow(y);
+        currentState = "";
+      }
+
+      if (p.state !== currentState) {
+        currentState = p.state;
+        doc.rect(startX, y, colWidths.reduce((a, b) => a + b, 0), 14).fill("#f0f0f5");
+        doc.font("Helvetica-Bold").fontSize(7).fillColor("#333333");
+        doc.text(p.state, startX + 3, y + 4);
+        doc.fillColor("#000000");
+        y += 14;
+        if (y + rowH > 560) {
+          doc.addPage({ size: "LETTER", layout: "landscape", margin: 40 });
+          y = 40;
+          y = drawHeaderRow(y);
+        }
+      }
+
+      const bgColor = idx % 2 === 0 ? "#ffffff" : "#fafafa";
+      doc.rect(startX, y, colWidths.reduce((a, b) => a + b, 0), rowH).fill(bgColor);
+
+      let x = startX;
+      doc.font("Helvetica-Bold").fontSize(6.5).fillColor("#111111");
+      doc.text(p.programName, x + 3, y + 4, { width: colWidths[0] - 6 });
+      x += colWidths[0];
+
+      doc.font("Helvetica").fontSize(6.5).fillColor("#444444");
+      doc.text(p.state, x + 3, y + 4, { width: colWidths[1] - 6 });
+      x += colWidths[1];
+
+      doc.text(category, x + 3, y + 4, { width: colWidths[2] - 6 });
+      x += colWidths[2];
+
+      doc.fontSize(6).fillColor("#555555");
+      doc.text(desc, x + 3, y + 4, { width: colWidths[3] - 6, height: rowH - 6 });
+      x += colWidths[3];
+
+      doc.fontSize(6.5).fillColor("#444444");
+      doc.text(agency, x + 3, y + 4, { width: colWidths[4] - 6, height: rowH - 6 });
+      x += colWidths[4];
+
+      doc.fontSize(6).fillColor("#555555");
+      doc.text(capture, x + 3, y + 4, { width: colWidths[5] - 6, height: rowH - 6 });
+
+      doc.rect(startX, y, colWidths.reduce((a, b) => a + b, 0), rowH).stroke("#e0e0e0");
+      y += rowH;
+    }
+
+    doc.addPage({ size: "LETTER", layout: "landscape", margin: 40 });
+    doc.fontSize(16).font("Helvetica-Bold").text("Program Summary by State", { align: "center" });
+    doc.moveDown(1);
+
+    const stateGroups: Record<string, number> = {};
+    for (const p of programs) {
+      stateGroups[p.state] = (stateGroups[p.state] || 0) + 1;
+    }
+    const sortedStates = Object.entries(stateGroups).sort((a, b) => a[0].localeCompare(b[0]));
+    
+    doc.font("Helvetica").fontSize(9);
+    const summCols = 3;
+    const summColWidth = 220;
+    let summY = doc.y;
+    for (let i = 0; i < sortedStates.length; i++) {
+      const col = i % summCols;
+      const row = Math.floor(i / summCols);
+      const sx = 40 + col * summColWidth;
+      const sy = summY + row * 16;
+      if (sy > 540) break;
+      doc.text(`${sortedStates[i][0]}: ${sortedStates[i][1]} program${sortedStates[i][1] > 1 ? "s" : ""}`, sx, sy);
+    }
+
+    doc.moveDown(2);
+    doc.fontSize(8).fillColor("#999999").text(
+      `Generated by Rockerbox WOTC Optimization Platform | ${new Date().toISOString().split("T")[0]} | Total: ${programs.length} programs across ${Object.keys(stateGroups).length} states`,
+      40, 560, { align: "center" }
+    );
+
+    doc.end();
+  } catch (error: any) {
+    console.error("Error generating matrix PDF:", error);
     res.status(500).json({ error: error.message });
   }
 });

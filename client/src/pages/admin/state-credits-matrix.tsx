@@ -32,6 +32,7 @@ import {
   MapPin,
   FileText,
   Briefcase,
+  FileDown,
 } from "lucide-react";
 
 interface ProgramDetail {
@@ -219,10 +220,22 @@ export default function StateCreditsMatrixPage() {
             Comprehensive reference of all {programs.length} state-specific credit programs across {uniqueStates.length} states
           </p>
         </div>
-        <Button variant="outline" onClick={handleExportCSV} disabled={filtered.length === 0} data-testid="button-export-csv">
-          <Download className="mr-2 h-4 w-4" />
-          Export CSV
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.open("/api/tax-programs/matrix/pdf", "_blank");
+            }}
+            data-testid="button-download-pdf"
+          >
+            <FileDown className="mr-2 h-4 w-4" />
+            Download PDF
+          </Button>
+          <Button variant="outline" onClick={handleExportCSV} disabled={filtered.length === 0} data-testid="button-export-csv">
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
