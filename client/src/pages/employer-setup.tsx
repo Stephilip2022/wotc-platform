@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Shield, CheckCircle2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useClerk } from "@clerk/clerk-react";
 
 interface SetupTokenData {
   employerName: string;
@@ -17,6 +18,7 @@ interface SetupTokenData {
 
 export default function EmployerSetupPage({ token }: { token: string }) {
   const { toast } = useToast();
+  const { signOut, session } = useClerk();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -40,17 +42,15 @@ export default function EmployerSetupPage({ token }: { token: string }) {
       const res = await apiRequest("POST", `/api/public/setup/${token}/complete`, data);
       return await res.json();
     },
-    onSuccess: (data) => {
-      if (data.signInUrl) {
-        setSetupComplete(true);
-        setTimeout(() => {
-          window.location.href = data.signInUrl;
-        }, 2000);
-      } else {
-        setSetupComplete(true);
-        setTimeout(() => {
-          window.location.href = "/";
-        }, 2000);
+    onSuccess: async (data) => {
+      setSetupComplete(true);
+      const redirectUrl = data.signInUrl || "/";
+      setTimeout(() => {
+        window.location.href = redirectUrl;
+      }, 3000);
+      try {
+        await signOut({ redirectUrl });
+      } catch (e) {
       }
     },
     onError: (error: any) => {
@@ -130,11 +130,22 @@ export default function EmployerSetupPage({ token }: { token: string }) {
             </div>
             <CardTitle data-testid="text-setup-success-title">Account Created!</CardTitle>
             <CardDescription data-testid="text-setup-success-description">
-              Your account has been set up. Redirecting you to sign in...
+              Your employer account has been set up successfully. Redirecting you to sign in with your new credentials...
             </CardDescription>
           </CardHeader>
-          <CardContent className="text-center">
+          <CardContent className="text-center space-y-3">
             <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto" />
+            <p className="text-xs text-muted-foreground">
+              Please sign in using <strong>{tokenData?.email}</strong> and the password you just created.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.href = "/"}
+              data-testid="button-go-to-signin"
+            >
+              Go to Sign In
+            </Button>
           </CardContent>
         </Card>
       </div>
