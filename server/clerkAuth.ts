@@ -76,6 +76,7 @@ export async function getOrCreateUser(req: Request) {
         const [updated] = await db
           .update(users)
           .set({
+            id: clerkUserId,
             firstName,
             lastName,
             profileImageUrl,
