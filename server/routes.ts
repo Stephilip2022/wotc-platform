@@ -736,6 +736,384 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // PUBLIC QUESTIONNAIRE ROUTES (No authentication required)
+  // These endpoints allow employees to access the WOTC screening questionnaire
+  // via direct URL, QR code, text message link, or ATS/HRIS integration
+  // ============================================================================
+
+  app.get("/api/public/screen/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const employeeId = req.query.employee as string | undefined;
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.questionnaireUrl, token));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Invalid screening link" });
+      }
+
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(
+          and(
+            eq(questionnaires.employerId, employer.id),
+            eq(questionnaires.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (!questionnaire) {
+        return res.status(404).json({ error: "No active questionnaire for this employer" });
+      }
+
+      let employee = null;
+      if (employeeId) {
+        const [emp] = await db
+          .select()
+          .from(employees)
+          .where(
+            and(
+              eq(employees.id, employeeId),
+              eq(employees.employerId, employer.id)
+            )
+          );
+        employee = emp || null;
+      }
+
+      res.json({
+        questionnaire,
+        employer: {
+          id: employer.id,
+          name: employer.name,
+          companyName: employer.name,
+          logoUrl: employer.logoUrl,
+          primaryColor: employer.primaryColor,
+          welcomeMessage: employer.welcomeMessage,
+        },
+        employeeId: employee?.id || null,
+        employeeName: employee ? `${employee.firstName} ${employee.lastName}` : null,
+      });
+    } catch (error) {
+      console.error("Error loading public questionnaire:", error);
+      res.status(500).json({ error: "Failed to load questionnaire" });
+    }
+  });
+
+  app.get("/api/public/screen/:token/response", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const employeeId = req.query.employee as string | undefined;
+
+      if (!employeeId) {
+        return res.json(null);
+      }
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.questionnaireUrl, token));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Invalid screening link" });
+      }
+
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(
+          and(
+            eq(questionnaires.employerId, employer.id),
+            eq(questionnaires.isActive, true)
+          )
+        )
+        .limit(1);
+
+      if (!questionnaire) {
+        return res.json(null);
+      }
+
+      const [response] = await db
+        .select()
+        .from(questionnaireResponses)
+        .where(
+          and(
+            eq(questionnaireResponses.employeeId, employeeId),
+            eq(questionnaireResponses.questionnaireId, questionnaire.id)
+          )
+        );
+
+      res.json(response || null);
+    } catch (error) {
+      console.error("Error fetching public response:", error);
+      res.status(500).json({ error: "Failed to fetch response" });
+    }
+  });
+
+  app.post("/api/public/screen/:token/response", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { questionnaireId, responses, completionPercentage, employeeId } = req.body;
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.questionnaireUrl, token));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Invalid screening link" });
+      }
+
+      if (!employeeId) {
+        return res.status(400).json({ error: "Employee ID required to save progress" });
+      }
+
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(
+          and(
+            eq(questionnaires.id, questionnaireId),
+            eq(questionnaires.employerId, employer.id),
+            eq(questionnaires.isActive, true)
+          )
+        );
+
+      if (!questionnaire) {
+        return res.status(400).json({ error: "Invalid questionnaire for this employer" });
+      }
+
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(
+          and(
+            eq(employees.id, employeeId),
+            eq(employees.employerId, employer.id)
+          )
+        );
+
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      const existing = await db
+        .select()
+        .from(questionnaireResponses)
+        .where(
+          and(
+            eq(questionnaireResponses.employeeId, employee.id),
+            eq(questionnaireResponses.questionnaireId, questionnaireId)
+          )
+        );
+
+      if (existing.length > 0) {
+        await db
+          .update(questionnaireResponses)
+          .set({
+            responses,
+            completionPercentage,
+            updatedAt: new Date(),
+          })
+          .where(eq(questionnaireResponses.id, existing[0].id));
+      } else {
+        await db.insert(questionnaireResponses).values({
+          employeeId: employee.id,
+          questionnaireId,
+          responses,
+          completionPercentage,
+        });
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error saving public response:", error);
+      res.status(500).json({ error: "Failed to save response" });
+    }
+  });
+
+  app.post("/api/public/screen/:token/submit", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { questionnaireId, responses, employeeId } = req.body;
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.questionnaireUrl, token));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Invalid screening link" });
+      }
+
+      if (!employeeId) {
+        return res.status(400).json({ error: "Employee ID required" });
+      }
+
+      const [questionnaire] = await db
+        .select()
+        .from(questionnaires)
+        .where(
+          and(
+            eq(questionnaires.id, questionnaireId),
+            eq(questionnaires.employerId, employer.id),
+            eq(questionnaires.isActive, true)
+          )
+        );
+
+      if (!questionnaire) {
+        return res.status(400).json({ error: "Invalid questionnaire for this employer" });
+      }
+
+      const [employee] = await db
+        .select()
+        .from(employees)
+        .where(
+          and(
+            eq(employees.id, employeeId),
+            eq(employees.employerId, employer.id)
+          )
+        );
+
+      if (!employee) {
+        return res.status(404).json({ error: "Employee not found" });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(questionnaireResponses)
+        .where(
+          and(
+            eq(questionnaireResponses.employeeId, employee.id),
+            eq(questionnaireResponses.questionnaireId, questionnaireId)
+          )
+        );
+
+      if (existing) {
+        await db
+          .update(questionnaireResponses)
+          .set({
+            responses,
+            isCompleted: true,
+            completionPercentage: 100,
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(questionnaireResponses.id, existing.id));
+      } else {
+        await db.insert(questionnaireResponses).values({
+          employeeId: employee.id,
+          questionnaireId,
+          responses,
+          isCompleted: true,
+          completionPercentage: 100,
+          submittedAt: new Date(),
+        });
+      }
+
+      const eligibilityResult = determineEligibility(
+        responses,
+        questionnaire.questions as any[],
+        employee.dateOfBirth || undefined,
+        employee.hireDate || undefined
+      );
+
+      const existingScreening = await db
+        .select()
+        .from(screenings)
+        .where(eq(screenings.employeeId, employee.id));
+
+      if (existingScreening.length > 0) {
+        await db
+          .update(screenings)
+          .set({
+            targetGroups: eligibilityResult.targetGroups,
+            primaryTargetGroup: eligibilityResult.primaryTargetGroup,
+            status: eligibilityResult.isEligible ? "eligible" : "not_eligible",
+            eligibilityDeterminedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(screenings.id, existingScreening[0].id));
+      } else {
+        await db.insert(screenings).values({
+          employeeId: employee.id,
+          employerId: employee.employerId,
+          targetGroups: eligibilityResult.targetGroups,
+          primaryTargetGroup: eligibilityResult.primaryTargetGroup,
+          status: eligibilityResult.isEligible ? "eligible" : "not_eligible",
+          eligibilityDeterminedAt: new Date(),
+        });
+      }
+
+      let screeningIdForForms: string | null = null;
+      if (existingScreening.length > 0) {
+        screeningIdForForms = existingScreening[0].id;
+      } else {
+        const [newScreening] = await db
+          .select()
+          .from(screenings)
+          .where(eq(screenings.employeeId, employee.id))
+          .limit(1);
+        screeningIdForForms = newScreening?.id || null;
+      }
+
+      await db
+        .update(employees)
+        .set({
+          status: eligibilityResult.isEligible ? "screening" : "not_eligible"
+        })
+        .where(eq(employees.id, employee.id));
+
+      if (screeningIdForForms && (eligibilityResult.isEligible || eligibilityResult.targetGroups.length > 0)) {
+        processCompletedQuestionnaire(screeningIdForForms).catch(err => {
+          console.error("[PUBLIC SUBMIT] Background form generation error:", err);
+        });
+      }
+
+      if (eligibilityResult.isEligible && eligibilityResult.primaryTargetGroup) {
+        const projectedCredit = eligibilityResult.maxPotentialCredit;
+
+        const existingCredit = await db
+          .select()
+          .from(creditCalculations)
+          .where(eq(creditCalculations.employeeId, employee.id));
+
+        if (existingCredit.length > 0) {
+          await db
+            .update(creditCalculations)
+            .set({
+              targetGroup: eligibilityResult.primaryTargetGroup,
+              projectedCreditAmount: projectedCredit.toString(),
+              updatedAt: new Date(),
+            })
+            .where(eq(creditCalculations.id, existingCredit[0].id));
+        } else {
+          await db.insert(creditCalculations).values({
+            employeeId: employee.id,
+            employerId: employee.employerId,
+            targetGroup: eligibilityResult.primaryTargetGroup,
+            projectedCreditAmount: projectedCredit.toString(),
+            hoursWorked: 0,
+            wagesEarned: "0",
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: "Thank you! Your screening questionnaire has been submitted successfully.",
+        eligibility: eligibilityResult,
+      });
+    } catch (error) {
+      console.error("Error submitting public questionnaire:", error);
+      res.status(500).json({ error: "Failed to submit questionnaire" });
+    }
+  });
+
+  // ============================================================================
   // AI ASSISTANCE ROUTES
   // ============================================================================
   
@@ -1033,7 +1411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const baseUrl = process.env.REPLIT_DEPLOYMENT 
         ? `https://${process.env.REPLIT_DEPLOYMENT}` 
         : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-      const questionnaireUrl = `${baseUrl}/questionnaire/${employer.qrToken}?employee=${employee.id}`;
+      const questionnaireUrl = `${baseUrl}/screen/${employer.questionnaireUrl}?employee=${employee.id}`;
 
       // Send screening invitation email
       const { sendScreeningInvite } = await import('./email/notifications');

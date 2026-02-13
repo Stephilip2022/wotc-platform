@@ -24,7 +24,9 @@ PostgreSQL, accessed via Neon serverless driver, is the primary database. Drizzl
 
 ### Authentication & Authorization
 
-Clerk authentication provides sign-in/sign-up via `@clerk/clerk-react` (frontend) and `@clerk/express` (backend middleware). The backend uses `clerkMiddleware()` with `getAuth(req).userId` to identify users. User records are auto-created/synced on first login via `getOrCreateUser()` in `server/clerkAuth.ts`. A role-based access control system supports employee, employer, admin, and licensee roles, enforced via Express middleware. Environment variables: `VITE_CLERK_PUBLISHABLE_KEY` (frontend), `CLERK_SECRET_KEY` (backend).
+Clerk authentication provides sign-in/sign-up via `@clerk/clerk-react` (frontend) and `@clerk/express` (backend middleware). The backend uses `clerkMiddleware()` with `getAuth(req).userId` to identify users. User records are auto-created/synced on first login via `getOrCreateUser()` in `server/clerkAuth.ts`. A role-based access control system supports employer, admin, and licensee roles, enforced via Express middleware. Environment variables: `VITE_CLERK_PUBLISHABLE_KEY` (frontend), `CLERK_SECRET_KEY` (backend).
+
+Employees (new hires/applicants) do NOT log in or have a portal. They access the WOTC screening questionnaire via public routes (`/screen/:token`) through four methods: ATS/HRIS integration, text message link, QR code, or direct URL. Public API endpoints at `/api/public/screen/:token` handle questionnaire loading, progress saving, and submission without authentication.
 
 ### Core Features
 

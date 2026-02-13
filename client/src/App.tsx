@@ -13,7 +13,7 @@ import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { registerServiceWorker } from "@/utils/registerSW";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
-import EmployeeQuestionnaire from "@/pages/employee/questionnaire";
+import PublicScreening from "@/pages/public-screening";
 import EmployerDashboard from "@/pages/employer/dashboard";
 import EmployeesPage from "@/pages/employer/employees";
 import EmployeeDetailPage from "@/pages/employer/employee-detail";
@@ -53,27 +53,6 @@ import EmployerSettingsPortalPage from "@/pages/employer/settings";
 import EmployerDocumentsPage from "@/pages/employer/documents";
 import EmployerReportsPage from "@/pages/employer/reports";
 import { Loader2 } from "lucide-react";
-
-function EmployeeRouter() {
-  return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold">WOTC Screening</h1>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <UserButton afterSignOutUrl="/" data-testid="button-user-menu" />
-          </div>
-        </div>
-      </header>
-      <Switch>
-        <Route path="/employee/questionnaire" component={EmployeeQuestionnaire} />
-        <Route path="/employee" component={EmployeeQuestionnaire} />
-        <Route component={NotFound} />
-      </Switch>
-    </div>
-  );
-}
 
 function AdminRoutes() {
   return (
@@ -160,6 +139,11 @@ function Router() {
   const { user, isLoading, isAuthenticated } = useAuth();
   const [location] = useLocation();
 
+  if (location.startsWith("/screen/")) {
+    const token = location.split("/screen/")[1]?.split("?")[0] || "";
+    return <PublicScreening token={token} />;
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -170,10 +154,6 @@ function Router() {
 
   if (!isAuthenticated) {
     return <LandingPage />;
-  }
-
-  if (user?.role === "employee") {
-    return <EmployeeRouter />;
   }
 
   if (user?.role === "admin") {

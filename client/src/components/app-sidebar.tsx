@@ -40,7 +40,7 @@ import {
 import { Link, useLocation } from "wouter";
 
 interface AppSidebarProps {
-  role: "admin" | "employer" | "employee";
+  role: "admin" | "employer";
 }
 
 export function AppSidebar({ role }: AppSidebarProps) {

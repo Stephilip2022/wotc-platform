@@ -376,7 +376,7 @@ export default function LandingPage() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Employers and employees: Log in to access your WOTC portal. Contact your administrator for account setup.
+            Employers and administrators: Log in to access your WOTC portal. Contact your administrator for account setup.
           </p>
         </div>
       </section>
