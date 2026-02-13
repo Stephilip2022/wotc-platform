@@ -14,7 +14,7 @@ if (!secretKey) {
   throw new Error("Missing CLERK_SECRET_KEY environment variable");
 }
 
-const clerkClient = createClerkClient({
+export const clerkClient = createClerkClient({
   publishableKey,
   secretKey,
 });

@@ -54,6 +54,7 @@ import BulkImportPage from "@/pages/employer/bulk-import";
 import EmployerSettingsPortalPage from "@/pages/employer/settings";
 import EmployerDocumentsPage from "@/pages/employer/documents";
 import EmployerReportsPage from "@/pages/employer/reports";
+import EmployerSetupPage from "@/pages/employer-setup";
 import { Loader2 } from "lucide-react";
 
 function AdminRoutes() {
@@ -153,6 +154,11 @@ function Router() {
   if (location.startsWith("/upload/")) {
     const token = location.split("/upload/")[1]?.split("?")[0] || "";
     return <PublicUpload token={token} />;
+  }
+
+  if (location.startsWith("/setup/")) {
+    const setupToken = location.split("/setup/")[1]?.split("?")[0] || "";
+    return <EmployerSetupPage token={setupToken} />;
   }
 
   if (isLoading) {

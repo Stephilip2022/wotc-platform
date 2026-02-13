@@ -34,9 +34,10 @@ import {
   referralPartners,
   referralPartnerTeamMembers,
   referralCommissions,
+  employerSetupTokens,
 } from "@shared/schema";
 import { eq, and, or, desc, sql } from "drizzle-orm";
-import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId } from "./clerkAuth";
+import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId, clerkClient } from "./clerkAuth";
 import { getAuth } from "@clerk/express";
 import OpenAI from "openai";
 import Stripe from "stripe";
@@ -742,6 +743,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error submitting questionnaire:", error);
       res.status(500).json({ error: "Failed to submit questionnaire" });
+    }
+  });
+
+  // ============================================================================
+  // PUBLIC EMPLOYER SETUP ROUTES (No authentication required)
+  // These endpoints allow employer contacts to set up their account via welcome email
+  // ============================================================================
+
+  app.get("/api/public/setup/:token/validate", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      const [setupToken] = await db
+        .select()
+        .from(employerSetupTokens)
+        .where(eq(employerSetupTokens.token, token));
+
+      if (!setupToken) {
+        return res.status(404).json({ error: "Invalid setup link. Please contact your administrator for a new welcome email." });
+      }
+
+      if (setupToken.usedAt) {
+        return res.status(400).json({ error: "This setup link has already been used. Please sign in with your email and password." });
+      }
+
+      if (new Date() > setupToken.expiresAt) {
+        return res.status(400).json({ error: "This setup link has expired. Please contact your administrator for a new welcome email." });
+      }
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, setupToken.employerId));
+
+      res.json({
+        employerName: employer?.name || "Your Company",
+        contactName: setupToken.contactName || "",
+        email: setupToken.email,
+        employerId: setupToken.employerId,
+      });
+    } catch (error) {
+      console.error("Error validating setup token:", error);
+      res.status(500).json({ error: "Failed to validate setup link" });
+    }
+  });
+
+  app.post("/api/public/setup/:token/complete", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body;
+
+      if (!password || password.length < 8) {
+        return res.status(400).json({ error: "Password must be at least 8 characters long." });
+      }
+
+      const [setupToken] = await db
+        .select()
+        .from(employerSetupTokens)
+        .where(eq(employerSetupTokens.token, token));
+
+      if (!setupToken) {
+        return res.status(404).json({ error: "Invalid setup link." });
+      }
+
+      if (setupToken.usedAt) {
+        return res.status(400).json({ error: "This setup link has already been used. Please sign in with your email and password." });
+      }
+
+      if (new Date() > setupToken.expiresAt) {
+        return res.status(400).json({ error: "This setup link has expired." });
+      }
+
+      const [employer] = await db
+        .select()
+        .from(employers)
+        .where(eq(employers.id, setupToken.employerId));
+
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found." });
+      }
+
+      let clerkUser;
+      try {
+        const existingUsers = await clerkClient.users.getUserList({
+          emailAddress: [setupToken.email],
+        });
+
+        if (existingUsers.data.length > 0) {
+          clerkUser = existingUsers.data[0];
+          await clerkClient.users.updateUser(clerkUser.id, {
+            password,
+          });
+        } else {
+          clerkUser = await clerkClient.users.createUser({
+            emailAddress: [setupToken.email],
+            password,
+            firstName: setupToken.contactName?.split(" ")[0] || "",
+            lastName: setupToken.contactName?.split(" ").slice(1).join(" ") || "",
+          });
+        }
+      } catch (clerkError: any) {
+        console.error("Clerk user creation error:", clerkError);
+        if (clerkError?.errors?.[0]?.message) {
+          return res.status(400).json({ error: clerkError.errors[0].message });
+        }
+        return res.status(500).json({ error: "Failed to create account. Please try again." });
+      }
+
+      const [existingUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, setupToken.email));
+
+      if (existingUser) {
+        if (existingUser.role === "admin") {
+          return res.status(400).json({ error: "This email is associated with an admin account and cannot be used for employer setup." });
+        }
+        await db
+          .update(users)
+          .set({
+            id: clerkUser.id,
+            role: "employer",
+            employerId: setupToken.employerId,
+            firstName: setupToken.contactName?.split(" ")[0] || existingUser.firstName,
+            lastName: setupToken.contactName?.split(" ").slice(1).join(" ") || existingUser.lastName,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.email, setupToken.email));
+      } else {
+        await db.insert(users).values({
+          id: clerkUser.id,
+          email: setupToken.email,
+          firstName: setupToken.contactName?.split(" ")[0] || null,
+          lastName: setupToken.contactName?.split(" ").slice(1).join(" ") || null,
+          role: "employer",
+          employerId: setupToken.employerId,
+        });
+      }
+
+      await db
+        .update(employerSetupTokens)
+        .set({ usedAt: new Date() })
+        .where(eq(employerSetupTokens.token, token));
+
+      await db
+        .update(employers)
+        .set({
+          onboardingStatus: "active",
+          activatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(employers.id, setupToken.employerId));
+
+      console.log(`Employer setup completed for ${setupToken.email} (employer: ${employer.name})`);
+
+      const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
+      res.json({
+        success: true,
+        message: "Account created successfully!",
+        signInUrl: `${baseUrl}/`,
+      });
+    } catch (error) {
+      console.error("Error completing employer setup:", error);
+      res.status(500).json({ error: "Failed to create account. Please try again." });
     }
   });
 
@@ -1912,21 +2077,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Failed to create default questionnaire (employer still created):", qError);
       }
 
-      // Send welcome email with Form 9198 and engagement letter links
+      // Generate setup token and send welcome email with setup link
       const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
       
       try {
+        const crypto = await import('crypto');
+        const setupTokenValue = crypto.randomBytes(32).toString('hex');
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 30);
+
+        await db.insert(employerSetupTokens).values({
+          employerId: newEmployer.id,
+          token: setupTokenValue,
+          email: contactEmail,
+          contactName: contactEmail.split('@')[0],
+          expiresAt,
+        });
+
+        const setupUrl = `${baseUrl}/setup/${setupTokenValue}`;
+
         const { sendWelcomeEmail } = await import('./email/notifications');
         await sendWelcomeEmail(contactEmail, {
           employerName: name,
           contactName: contactEmail.split('@')[0],
-          dashboardUrl: `${baseUrl}/employer`,
+          dashboardUrl: setupUrl,
           questionnaireUrl: `${baseUrl}/screen/${slug}`,
-          form9198Url: `${baseUrl}/employer/onboarding`,
-          engagementLetterUrl: `${baseUrl}/employer/onboarding`,
+          form9198Url: setupUrl,
+          engagementLetterUrl: setupUrl,
           feePercentage: newEmployer.feePercentage || "15.00",
         });
-        console.log(`Welcome email sent to ${contactEmail} for employer ${name} with ${newEmployer.feePercentage}% fee`);
+        console.log(`Welcome email sent to ${contactEmail} for employer ${name} with setup link`);
       } catch (emailError) {
         console.error("Failed to send welcome email (employer still created):", emailError);
       }
@@ -1941,9 +2121,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Resend welcome email to an existing employer
-  app.post("/api/admin/employers/:id/resend-welcome", async (req, res) => {
+  // Resend welcome email to an existing employer (generates new setup token)
+  app.post("/api/admin/employers/:id/resend-welcome", isAuthenticated, async (req: any, res) => {
     try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
       const { id } = req.params;
       const [employer] = await db.select().from(employers).where(eq(employers.id, id));
       if (!employer) {
@@ -1954,18 +2139,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
+
+      // Invalidate any previous unused tokens for this employer
+      await db
+        .update(employerSetupTokens)
+        .set({ usedAt: new Date() })
+        .where(and(
+          eq(employerSetupTokens.employerId, employer.id),
+          sql`${employerSetupTokens.usedAt} IS NULL`
+        ));
+
+      const crypto = await import('crypto');
+      const setupTokenValue = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 30);
+
+      await db.insert(employerSetupTokens).values({
+        employerId: employer.id,
+        token: setupTokenValue,
+        email: employer.contactEmail,
+        contactName: employer.contactEmail.split('@')[0],
+        expiresAt,
+      });
+
+      const setupUrl = `${baseUrl}/setup/${setupTokenValue}`;
+
       const { sendWelcomeEmail } = await import('./email/notifications');
       await sendWelcomeEmail(employer.contactEmail, {
         employerName: employer.name,
         contactName: employer.contactEmail.split('@')[0],
-        dashboardUrl: `${baseUrl}/employer`,
+        dashboardUrl: setupUrl,
         questionnaireUrl: `${baseUrl}/screen/${employer.questionnaireUrl}`,
-        form9198Url: `${baseUrl}/employer/onboarding`,
-        engagementLetterUrl: `${baseUrl}/employer/onboarding`,
+        form9198Url: setupUrl,
+        engagementLetterUrl: setupUrl,
         feePercentage: employer.feePercentage || "15.00",
       });
 
-      console.log(`Welcome email resent to ${employer.contactEmail} for employer ${employer.name}`);
+      console.log(`Welcome email resent to ${employer.contactEmail} for employer ${employer.name} with new setup link`);
       res.json({ success: true, message: `Welcome email sent to ${employer.contactEmail}` });
     } catch (error) {
       console.error("Error resending welcome email:", error);

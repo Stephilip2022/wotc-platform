@@ -28,6 +28,8 @@ Clerk authentication provides sign-in/sign-up via `@clerk/clerk-react` (frontend
 
 Employees (new hires/applicants) do NOT log in or have a portal. They access the WOTC screening questionnaire via public routes (`/screen/:token`) through four methods: ATS/HRIS integration, text message link, QR code, or direct URL. Public API endpoints at `/api/public/screen/:token` handle questionnaire loading, progress saving, and submission without authentication.
 
+**Employer Onboarding via Setup Tokens:** When an admin creates a new employer, a secure setup token is generated and stored in `employer_setup_tokens`. The welcome email links (Dashboard, Form 9198, Engagement Letter) point to `/setup/{token}`. The employer contact visits this public page, sees their email pre-filled, sets a password, and a Clerk account is created via the backend API. The user is linked to the employer with role=employer. Tokens expire after 30 days and are invalidated on resend. The resend welcome email endpoint is admin-protected and generates a fresh token each time.
+
 ### Core Features
 
 -   **WOTC Compliance & Screening**: Automated ETA Form 9198 intake, digital signatures, and a gamified, conditional logic questionnaire covering all WOTC target groups.

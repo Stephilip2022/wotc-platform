@@ -739,7 +739,7 @@ export function renderWelcomeEmail(data: WelcomeEmailData): string {
                 <tr>
                   <td align="center">
                     <a href="${data.dashboardUrl}" style="display: inline-block; padding: 14px 32px; background-color: #0ea5e9; color: #ffffff; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 500; margin-right: 12px;">
-                      Go to Dashboard
+                      Set Up Your Account
                     </a>
                     <a href="${data.questionnaireUrl}" style="display: inline-block; padding: 14px 32px; background-color: #ffffff; color: #0ea5e9; text-decoration: none; border-radius: 6px; font-size: 16px; font-weight: 500; border: 2px solid #0ea5e9;">
                       View Sample Questionnaire
