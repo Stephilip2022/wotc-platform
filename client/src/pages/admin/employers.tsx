@@ -27,9 +27,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign, Handshake } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Employer, EtaForm9198 } from "@shared/schema";
+import type { Employer, EtaForm9198, ReferralPartner } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployerSchema } from "@shared/schema";
@@ -90,6 +91,10 @@ export default function AdminEmployersPage() {
     queryKey: ["/api/admin/eta-forms"],
   });
 
+  const { data: referralPartners, isLoading: partnersLoading } = useQuery<ReferralPartner[]>({
+    queryKey: ["/api/admin/referral-partners"],
+  });
+
   const form = useForm<EmployerFormData>({
     resolver: zodResolver(insertEmployerSchema.omit({ 
       logoUrl: true, 
@@ -110,6 +115,7 @@ export default function AdminEmployersPage() {
       state: "",
       zipCode: "",
       feePercentage: "15.00",
+      referralPartnerId: null,
     },
   });
 
@@ -371,6 +377,32 @@ export default function AdminEmployersPage() {
                   )}
                 />
 
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <Handshake className="h-4 w-4" />
+                    Referral Partner
+                  </FormLabel>
+                  <p className="text-xs text-muted-foreground">
+                    Select the referral partner who referred this employer, or leave as "No Partner"
+                  </p>
+                  <Select
+                    value={form.watch("referralPartnerId") || "none"}
+                    onValueChange={(val) => form.setValue("referralPartnerId", val === "none" ? null : val)}
+                  >
+                    <SelectTrigger data-testid="select-referral-partner">
+                      <SelectValue placeholder="No Partner" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Partner</SelectItem>
+                      {referralPartners?.filter(p => p.status === "active").map((partner) => (
+                        <SelectItem key={partner.id} value={partner.id.toString()}>
+                          {partner.dba || partner.legalName} ({partner.revenueSharePercentage}%)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FormItem>
+
                 <div className="space-y-3">
                   <FormLabel>Hiring States</FormLabel>
                   <p className="text-xs text-muted-foreground">
@@ -499,6 +531,7 @@ export default function AdminEmployersPage() {
                 <TableHead>Contact</TableHead>
                 <TableHead>Hiring States</TableHead>
                 <TableHead>Fee %</TableHead>
+                <TableHead>Partner</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -530,6 +563,18 @@ export default function AdminEmployersPage() {
                       )}
                     </TableCell>
                     <TableCell data-testid={`text-fee-${employer.id}`}>{employer.feePercentage || "15.00"}%</TableCell>
+                    <TableCell data-testid={`text-partner-${employer.id}`}>
+                      {employer.referralPartnerId ? (
+                        <Badge variant="outline" className="no-default-active-elevate">
+                          <Handshake className="h-3 w-3 mr-1" />
+                          {referralPartners?.find(p => p.id.toString() === employer.referralPartnerId)?.dba ||
+                           referralPartners?.find(p => p.id.toString() === employer.referralPartnerId)?.legalName ||
+                           "Partner"}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">--</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge variant={employer.billingStatus === "active" ? "default" : "secondary"}>
                         {employer.billingStatus?.toUpperCase()}

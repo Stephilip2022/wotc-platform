@@ -36,6 +36,7 @@ import {
   ScanLine,
   Layers,
   Calculator,
+  Handshake,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
@@ -51,6 +52,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Analytics", url: "/admin/analytics", icon: BarChart3 },
     { title: "Revenue", url: "/admin/revenue", icon: DollarSign },
     { title: "Employers", url: "/admin/employers", icon: Building2 },
+    { title: "Partners", url: "/admin/referral-partners", icon: Handshake },
     { title: "Screenings", url: "/admin/screenings", icon: CheckSquare },
     { title: "Questionnaires", url: "/admin/questionnaires", icon: ClipboardCheck },
     { title: "White-Label", url: "/admin/licensees", icon: Palette },
