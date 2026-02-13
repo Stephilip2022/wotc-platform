@@ -32,7 +32,7 @@ Clerk authentication provides sign-in/sign-up via `@clerk/clerk-react` (frontend
 -   **Document Management**: Secure file upload system for IRS letters and supporting documents, including AI-powered OCR for data extraction.
 -   **Credit Calculation & Tracking**: Automatic calculation of WOTC credits based on hours worked, determination tracking, and an admin interface for status updates. Includes advanced features like 400-hour milestone tracking and multi-credit bundling (R&D, state/local incentives).
 -   **Payroll & Accounting Integration**: Enhanced CSV parser with intelligent column detection, employee matching, and reusable mapping templates. Bidirectional sync with major payroll providers (ADP, Gusto, QuickBooks Payroll) for real-time hours/wages and accounting exports to QuickBooks and Xero.
--   **Analytics & Reporting**: Comprehensive dashboards for employers and administrators, covering KPIs, credit projections, system-wide statistics, revenue tracking, and churn rates.
+-   **Analytics & Reporting**: Comprehensive dashboards for employers and administrators, covering KPIs, credit projections, system-wide statistics, revenue tracking, and churn rates. Enhanced with interactive data visualizations (recharts), multi-credit program analytics (by category, geographic, trends), ROI summary, and automated PDF report generation (credit summary, ROI analysis, compliance) using PDFKit. Reports stored in `generated_reports` table with download tracking.
 -   **Email Notifications**: Transactional emails for screening invites, status updates, and invoices via Resend.
 -   **State Automation**: Production-ready state portal automation using Playwright bots (Texas Appian/Okta SSO) and SFTP (CSDC states: AL, AR, CO, GA, ID, OK, OR, SC, VT, WV). Includes OCR for determination letter parsing, credential management with encryption, MFA handling for 56 configured state portals, and CSDC fixed-width file generation with automated SFTP upload to hermes.csdco.com.
 -   **AI-Powered Intelligence**: Eligibility prediction engine with confidence scores, smart questionnaire optimization (reading level adjustment, Spanish translation), prediction tracking, and predictive credit forecasting based on historical data. Includes AI turnover prediction.
@@ -55,4 +55,4 @@ Clerk authentication provides sign-in/sign-up via `@clerk/clerk-react` (frontend
 ### Key NPM Dependencies
 
 -   **Frontend**: react, react-dom, wouter, @radix-ui/*, shadcn/ui, react-hook-form, zod, @tanstack/react-query, tailwindcss
--   **Backend**: express, drizzle-orm, @neondatabase/serverless, passport, openid-client, express-session, connect-pg-simple, multer, openai
+-   **Backend**: express, drizzle-orm, @neondatabase/serverless, passport, openid-client, express-session, connect-pg-simple, multer, openai, pdfkit

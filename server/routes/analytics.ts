@@ -7,8 +7,14 @@ import {
   creditCalculations, 
   submissionQueue,
   users,
+  taxCreditPrograms,
+  programScreeningResults,
+  programCreditCalculations,
+  programSubmissions,
+  employerProgramAssignments,
+  generatedReports,
 } from "@shared/schema";
-import { eq, sql, and, gte, lte, count, desc, asc } from "drizzle-orm";
+import { eq, sql, and, gte, lte, count, desc, asc, isNotNull } from "drizzle-orm";
 
 const router = Router();
 
@@ -295,6 +301,429 @@ router.get("/leaderboard/employers", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Employer leaderboard error:", error);
     res.status(500).json({ error: "Failed to get employer leaderboard" });
+  }
+});
+
+// ============================================================================
+// MULTI-CREDIT PROGRAM ANALYTICS
+// ============================================================================
+
+router.get("/programs/overview", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    const isAdmin = dbUser?.role === "admin";
+    const employerId = dbUser?.employerId;
+
+    const programFilter = isAdmin ? sql`1=1` : sql`${employerProgramAssignments.employerId} = ${employerId}`;
+
+    const programs = await db
+      .select({
+        programId: taxCreditPrograms.id,
+        programName: taxCreditPrograms.programName,
+        state: taxCreditPrograms.state,
+        category: taxCreditPrograms.programCategory,
+        tier: taxCreditPrograms.tier,
+      })
+      .from(taxCreditPrograms)
+      .innerJoin(employerProgramAssignments, eq(taxCreditPrograms.id, employerProgramAssignments.programId))
+      .where(and(programFilter, eq(employerProgramAssignments.isEnabled, true), eq(taxCreditPrograms.isActive, true)));
+
+    const screeningResults = await db
+      .select({
+        programId: programScreeningResults.programId,
+        eligible: sql<number>`COUNT(*) FILTER (WHERE ${programScreeningResults.eligibilityResult} = 'eligible')`,
+        ineligible: sql<number>`COUNT(*) FILTER (WHERE ${programScreeningResults.eligibilityResult} = 'ineligible')`,
+        pending: sql<number>`COUNT(*) FILTER (WHERE ${programScreeningResults.screeningStatus} = 'pending')`,
+        total: count(),
+      })
+      .from(programScreeningResults)
+      .where(isAdmin ? sql`1=1` : sql`${programScreeningResults.employerId} = ${employerId}`)
+      .groupBy(programScreeningResults.programId);
+
+    const creditTotals = await db
+      .select({
+        programId: programCreditCalculations.programId,
+        totalCredits: sql<number>`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        avgCredit: sql<number>`COALESCE(AVG(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        calcCount: count(),
+      })
+      .from(programCreditCalculations)
+      .where(isAdmin ? sql`1=1` : sql`${programCreditCalculations.employerId} = ${employerId}`)
+      .groupBy(programCreditCalculations.programId);
+
+    const screeningMap = new Map(screeningResults.map(r => [r.programId, r]));
+    const creditMap = new Map(creditTotals.map(r => [r.programId, r]));
+
+    const enriched = programs.map(p => {
+      const sr = screeningMap.get(p.programId) || { eligible: 0, ineligible: 0, pending: 0, total: 0 };
+      const cr = creditMap.get(p.programId) || { totalCredits: 0, avgCredit: 0, calcCount: 0 };
+      return {
+        ...p,
+        eligible: Number(sr.eligible),
+        ineligible: Number(sr.ineligible),
+        pending: Number(sr.pending),
+        totalScreened: Number(sr.total),
+        totalCredits: Number(cr.totalCredits),
+        avgCredit: Number(cr.avgCredit),
+        calculations: Number(cr.calcCount),
+      };
+    });
+
+    res.json(enriched);
+  } catch (error) {
+    console.error("Program overview error:", error);
+    res.status(500).json({ error: "Failed to get program overview" });
+  }
+});
+
+router.get("/programs/by-category", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    const isAdmin = dbUser?.role === "admin";
+    const employerId = dbUser?.employerId;
+
+    const creditFilter = isAdmin ? sql`1=1` : sql`${programCreditCalculations.employerId} = ${employerId}`;
+
+    const byCategory = await db
+      .select({
+        category: taxCreditPrograms.programCategory,
+        programCount: sql<number>`COUNT(DISTINCT ${taxCreditPrograms.id})`,
+        totalCredits: sql<number>`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        avgCredit: sql<number>`COALESCE(AVG(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        employeeCount: sql<number>`COUNT(DISTINCT ${programCreditCalculations.employeeId})`,
+      })
+      .from(taxCreditPrograms)
+      .leftJoin(programCreditCalculations, and(
+        eq(taxCreditPrograms.id, programCreditCalculations.programId),
+        creditFilter
+      ))
+      .where(eq(taxCreditPrograms.isActive, true))
+      .groupBy(taxCreditPrograms.programCategory)
+      .orderBy(desc(sql`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`));
+
+    res.json(byCategory.map(c => ({
+      category: c.category,
+      programCount: Number(c.programCount),
+      totalCredits: Number(c.totalCredits),
+      avgCredit: Number(c.avgCredit),
+      employeeCount: Number(c.employeeCount),
+    })));
+  } catch (error) {
+    console.error("Program category error:", error);
+    res.status(500).json({ error: "Failed to get program categories" });
+  }
+});
+
+router.get("/geographic/state-credits", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    const isAdmin = dbUser?.role === "admin";
+    const employerId = dbUser?.employerId;
+
+    const creditFilter = isAdmin ? sql`1=1` : sql`${programCreditCalculations.employerId} = ${employerId}`;
+
+    const stateData = await db
+      .select({
+        state: taxCreditPrograms.state,
+        programCount: sql<number>`COUNT(DISTINCT ${taxCreditPrograms.id})`,
+        totalCredits: sql<number>`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        employeeCount: sql<number>`COUNT(DISTINCT ${programCreditCalculations.employeeId})`,
+        calcCount: sql<number>`COUNT(${programCreditCalculations.id})`,
+      })
+      .from(taxCreditPrograms)
+      .leftJoin(programCreditCalculations, and(
+        eq(taxCreditPrograms.id, programCreditCalculations.programId),
+        creditFilter
+      ))
+      .where(eq(taxCreditPrograms.isActive, true))
+      .groupBy(taxCreditPrograms.state)
+      .orderBy(desc(sql`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`));
+
+    res.json(stateData.map(s => ({
+      state: s.state,
+      stateCode: getStateCode(s.state),
+      programCount: Number(s.programCount),
+      totalCredits: Number(s.totalCredits),
+      employeeCount: Number(s.employeeCount),
+      calculations: Number(s.calcCount),
+    })));
+  } catch (error) {
+    console.error("Geographic credits error:", error);
+    res.status(500).json({ error: "Failed to get geographic data" });
+  }
+});
+
+router.get("/roi/summary", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    const isAdmin = dbUser?.role === "admin";
+    const employerId = dbUser?.employerId;
+
+    const screeningFilter = isAdmin ? sql`1=1` : sql`${screenings.employerId} = ${employerId}`;
+    const creditFilter = isAdmin ? sql`1=1` : sql`${creditCalculations.employerId} = ${employerId}`;
+    const programCreditFilter = isAdmin ? sql`1=1` : sql`${programCreditCalculations.employerId} = ${employerId}`;
+
+    const [wotcCredits] = await db
+      .select({
+        total: sql<number>`COALESCE(SUM(CAST(${creditCalculations.projectedCreditAmount} AS DECIMAL)), 0)`,
+        count: count(),
+      })
+      .from(creditCalculations)
+      .where(creditFilter);
+
+    const [multiCredits] = await db
+      .select({
+        total: sql<number>`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        count: count(),
+      })
+      .from(programCreditCalculations)
+      .where(programCreditFilter);
+
+    const [screeningStats] = await db
+      .select({
+        total: count(),
+        eligible: sql<number>`COUNT(*) FILTER (WHERE ${screenings.status} IN ('eligible', 'certified'))`,
+      })
+      .from(screenings)
+      .where(screeningFilter);
+
+    const [employerCount] = await db
+      .select({ count: count() })
+      .from(employers);
+
+    const [employeeCount] = await db
+      .select({ count: count() })
+      .from(employees)
+      .where(isAdmin ? sql`1=1` : sql`${employees.employerId} = ${employerId}`);
+
+    const totalWotcCredits = Number(wotcCredits.total);
+    const totalMultiCredits = Number(multiCredits.total);
+    const totalAllCredits = totalWotcCredits + totalMultiCredits;
+    const avgCreditPerEmployee = Number(employeeCount.count) > 0 ? totalAllCredits / Number(employeeCount.count) : 0;
+    const eligibilityRate = Number(screeningStats.total) > 0 ? (Number(screeningStats.eligible) / Number(screeningStats.total)) * 100 : 0;
+
+    res.json({
+      wotcCredits: totalWotcCredits,
+      multiCreditPrograms: totalMultiCredits,
+      totalCredits: totalAllCredits,
+      wotcCalculations: Number(wotcCredits.count),
+      multiCreditCalculations: Number(multiCredits.count),
+      totalEmployers: Number(employerCount.count),
+      totalEmployees: Number(employeeCount.count),
+      avgCreditPerEmployee: Math.round(avgCreditPerEmployee),
+      eligibilityRate: parseFloat(eligibilityRate.toFixed(1)),
+      estimatedAnnualROI: totalAllCredits > 0 ? Math.round(totalAllCredits * 4) : 0,
+    });
+  } catch (error) {
+    console.error("ROI summary error:", error);
+    res.status(500).json({ error: "Failed to get ROI summary" });
+  }
+});
+
+router.get("/programs/credit-trends", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    const isAdmin = dbUser?.role === "admin";
+    const employerId = dbUser?.employerId;
+    const { months = "12" } = req.query;
+    const monthCount = parseInt(months as string) || 12;
+
+    const startDate = new Date();
+    startDate.setMonth(startDate.getMonth() - monthCount);
+
+    const creditFilter = isAdmin 
+      ? gte(programCreditCalculations.createdAt, startDate)
+      : and(
+          eq(programCreditCalculations.employerId, employerId!),
+          gte(programCreditCalculations.createdAt, startDate)
+        );
+
+    const trends = await db
+      .select({
+        period: sql<string>`TO_CHAR(${programCreditCalculations.createdAt}, 'YYYY-MM')`,
+        category: taxCreditPrograms.programCategory,
+        totalCredits: sql<number>`COALESCE(SUM(CAST(${programCreditCalculations.finalCreditAmount} AS DECIMAL)), 0)`,
+        count: count(),
+      })
+      .from(programCreditCalculations)
+      .innerJoin(taxCreditPrograms, eq(programCreditCalculations.programId, taxCreditPrograms.id))
+      .where(creditFilter)
+      .groupBy(sql`TO_CHAR(${programCreditCalculations.createdAt}, 'YYYY-MM')`, taxCreditPrograms.programCategory)
+      .orderBy(asc(sql`TO_CHAR(${programCreditCalculations.createdAt}, 'YYYY-MM')`));
+
+    res.json(trends.map(t => ({
+      period: t.period,
+      category: t.category,
+      totalCredits: Number(t.totalCredits),
+      count: Number(t.count),
+    })));
+  } catch (error) {
+    console.error("Program credit trends error:", error);
+    res.status(500).json({ error: "Failed to get program credit trends" });
+  }
+});
+
+router.get("/submissions/summary", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    const isAdmin = dbUser?.role === "admin";
+    const employerId = dbUser?.employerId;
+
+    const subFilter = isAdmin ? sql`1=1` : sql`${programSubmissions.employerId} = ${employerId}`;
+
+    const summary = await db
+      .select({
+        channel: programSubmissions.submissionChannel,
+        status: programSubmissions.submissionStatus,
+        count: count(),
+        totalCredit: sql<number>`COALESCE(SUM(CAST(${programSubmissions.totalCreditAmount} AS DECIMAL)), 0)`,
+      })
+      .from(programSubmissions)
+      .where(subFilter)
+      .groupBy(programSubmissions.submissionChannel, programSubmissions.submissionStatus);
+
+    res.json(summary.map(s => ({
+      channel: s.channel,
+      status: s.status,
+      count: Number(s.count),
+      totalCredit: Number(s.totalCredit),
+    })));
+  } catch (error) {
+    console.error("Submission summary error:", error);
+    res.status(500).json({ error: "Failed to get submission summary" });
+  }
+});
+
+function getStateCode(stateName: string): string {
+  const map: Record<string, string> = {
+    Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR", California: "CA",
+    Colorado: "CO", Connecticut: "CT", Delaware: "DE", Florida: "FL", Georgia: "GA",
+    Hawaii: "HI", Idaho: "ID", Illinois: "IL", Indiana: "IN", Iowa: "IA",
+    Kansas: "KS", Kentucky: "KY", Louisiana: "LA", Maine: "ME", Maryland: "MD",
+    Massachusetts: "MA", Michigan: "MI", Minnesota: "MN", Mississippi: "MS", Missouri: "MO",
+    Montana: "MT", Nebraska: "NE", Nevada: "NV", "New Hampshire": "NH", "New Jersey": "NJ",
+    "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND",
+    Ohio: "OH", Oklahoma: "OK", Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI",
+    "South Carolina": "SC", "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT",
+    Vermont: "VT", Virginia: "VA", Washington: "WA", "West Virginia": "WV",
+    Wisconsin: "WI", Wyoming: "WY",
+  };
+  return map[stateName] || stateName;
+}
+
+// ============================================================================
+// REPORT GENERATION & MANAGEMENT
+// ============================================================================
+
+router.post("/reports/generate", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    if (!dbUser) return res.status(401).json({ error: "User not found" });
+
+    const { reportType, employerId, periodStart, periodEnd } = req.body;
+    if (!reportType) return res.status(400).json({ error: "reportType required" });
+
+    const isAdmin = dbUser.role === "admin";
+    const targetEmployerId = isAdmin ? (employerId || null) : dbUser.employerId;
+
+    const { generateReport } = await import("../services/reportGenerator");
+    const { reportId, buffer } = await generateReport({
+      reportType,
+      employerId: targetEmployerId || undefined,
+      periodStart: periodStart ? new Date(periodStart) : undefined,
+      periodEnd: periodEnd ? new Date(periodEnd) : undefined,
+      generatedBy: dbUser.id,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="rockerbox_${reportType}_${reportId}.pdf"`);
+    res.setHeader("X-Report-Id", reportId);
+    res.send(buffer);
+  } catch (error: any) {
+    console.error("Report generation error:", error);
+    res.status(500).json({ error: error.message || "Failed to generate report" });
+  }
+});
+
+router.get("/reports", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    if (!dbUser) return res.status(401).json({ error: "User not found" });
+
+    const isAdmin = dbUser.role === "admin";
+    const employerId = isAdmin ? (req.query.employerId as string || null) : dbUser.employerId;
+
+    const { listReports } = await import("../services/reportGenerator");
+    const reports = await listReports(employerId || null);
+    res.json(reports);
+  } catch (error: any) {
+    console.error("List reports error:", error);
+    res.status(500).json({ error: "Failed to list reports" });
+  }
+});
+
+router.get("/reports/:id/download", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    if (!dbUser) return res.status(401).json({ error: "User not found" });
+
+    const [report] = await db.select().from(generatedReports).where(eq(generatedReports.id, req.params.id));
+    if (!report) return res.status(404).json({ error: "Report not found" });
+
+    if (dbUser.role !== "admin" && report.employerId !== dbUser.employerId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    await db.update(generatedReports).set({
+      downloadCount: (report.downloadCount || 0) + 1,
+      lastDownloadedAt: new Date(),
+    }).where(eq(generatedReports.id, req.params.id));
+
+    const { generateReport } = await import("../services/reportGenerator");
+    const { buffer } = await generateReport({
+      reportType: report.reportType,
+      employerId: report.employerId || undefined,
+      periodStart: report.periodStart || undefined,
+      periodEnd: report.periodEnd || undefined,
+      generatedBy: dbUser.id,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="rockerbox_${report.reportType}_${report.id}.pdf"`);
+    res.send(buffer);
+  } catch (error: any) {
+    console.error("Report download error:", error);
+    res.status(500).json({ error: "Failed to download report" });
+  }
+});
+
+router.delete("/reports/:id", async (req: Request, res: Response) => {
+  try {
+    const user = (req as any).user?.claims;
+    const [dbUser] = await db.select().from(users).where(eq(users.id, user.sub));
+    if (!dbUser) return res.status(401).json({ error: "User not found" });
+
+    const [report] = await db.select().from(generatedReports).where(eq(generatedReports.id, req.params.id));
+    if (!report) return res.status(404).json({ error: "Report not found" });
+
+    if (dbUser.role !== "admin" && report.employerId !== dbUser.employerId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    await db.delete(generatedReports).where(eq(generatedReports.id, req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Delete report error:", error);
+    res.status(500).json({ error: "Failed to delete report" });
   }
 });
 

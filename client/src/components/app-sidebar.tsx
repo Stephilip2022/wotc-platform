@@ -75,6 +75,7 @@ export function AppSidebar({ role }: AppSidebarProps) {
     { title: "Integrations", url: "/employer/integrations", icon: Link2 },
     { title: "Documents", url: "/employer/documents", icon: FolderOpen },
     { title: "Credits", url: "/employer/credits", icon: DollarSign },
+    { title: "Reports", url: "/employer/reports", icon: FileText },
     { title: "Billing", url: "/employer/billing", icon: DollarSign },
     { title: "Settings", url: "/employer/settings", icon: Settings },
   ];

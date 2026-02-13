@@ -2688,3 +2688,38 @@ export const billingEvents = pgTable("billing_events", {
 export const insertBillingEventSchema = createInsertSchema(billingEvents).omit({ id: true, createdAt: true });
 export type InsertBillingEvent = z.infer<typeof insertBillingEventSchema>;
 export type BillingEvent = typeof billingEvents.$inferSelect;
+
+// ============================================================================
+// GENERATED REPORTS - Track PDF report generation and downloads
+// ============================================================================
+
+export const generatedReports = pgTable("generated_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").references(() => employers.id, { onDelete: "cascade" }),
+  
+  reportType: text("report_type").notNull(),
+  reportTitle: text("report_title").notNull(),
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  
+  status: text("status").notNull().default("pending"),
+  fileUrl: text("file_url"),
+  fileSize: integer("file_size"),
+  
+  reportData: jsonb("report_data"),
+  metadata: jsonb("metadata"),
+  
+  generatedBy: varchar("generated_by"),
+  downloadCount: integer("download_count").default(0),
+  lastDownloadedAt: timestamp("last_downloaded_at"),
+  
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_reports_employer").on(table.employerId),
+  index("idx_reports_type").on(table.reportType),
+  index("idx_reports_status").on(table.status),
+]);
+
+export const insertGeneratedReportSchema = createInsertSchema(generatedReports).omit({ id: true, createdAt: true });
+export type InsertGeneratedReport = z.infer<typeof insertGeneratedReportSchema>;
+export type GeneratedReport = typeof generatedReports.$inferSelect;

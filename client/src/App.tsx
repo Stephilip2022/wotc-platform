@@ -51,6 +51,7 @@ import OnboardingWizardPage from "@/pages/employer/onboarding-wizard";
 import BulkImportPage from "@/pages/employer/bulk-import";
 import EmployerSettingsPortalPage from "@/pages/employer/settings";
 import EmployerDocumentsPage from "@/pages/employer/documents";
+import EmployerReportsPage from "@/pages/employer/reports";
 import { Loader2 } from "lucide-react";
 
 function EmployeeRouter() {
@@ -121,6 +122,7 @@ function EmployerRoutes() {
       <Route path="/employer/documents" component={EmployerDocumentsPage} />
       <Route path="/employer/settings" component={EmployerSettingsPortalPage} />
       <Route path="/employer/onboarding" component={OnboardingWizardPage} />
+      <Route path="/employer/reports" component={EmployerReportsPage} />
       <Route path="/employer/import" component={BulkImportPage} />
       <Route component={NotFound} />
     </Switch>
