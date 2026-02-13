@@ -35,8 +35,10 @@ async function getCredentials() {
 
 export async function getUncachableResendClient() {
   const { apiKey } = await getCredentials();
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'Rockerbox <support@rockerbox.app>';
+  console.log(`[Email] Using sender: ${fromEmail}`);
   return {
     client: new Resend(apiKey),
-    fromEmail: process.env.RESEND_FROM_EMAIL || 'Rockerbox <support@rockerbox.app>'
+    fromEmail
   };
 }
