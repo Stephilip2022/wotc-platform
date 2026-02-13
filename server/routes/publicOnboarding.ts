@@ -89,6 +89,11 @@ router.get("/:token", async (req, res) => {
       return res.status(404).json({ error: "Employer not found" });
     }
 
+    const [settings] = await db.select().from(onboardingSettings).where(eq(onboardingSettings.employerId, invite.employerId));
+    if (settings?.welcomeMessage) {
+      employer.welcomeMessage = settings.welcomeMessage;
+    }
+
     const [instance] = await db
       .select()
       .from(onboardingInstances)
