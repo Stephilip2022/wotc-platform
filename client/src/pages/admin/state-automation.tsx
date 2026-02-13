@@ -5,19 +5,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Bot, Database, CheckCircle2, AlertCircle, Settings, Play, RefreshCw, FileText, Clock, XCircle } from "lucide-react";
+import { Bot, Database, CheckCircle2, AlertCircle, Settings, Play, RefreshCw, FileText, Clock, XCircle, Download, Plus } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 export default function StateAutomationPage() {
   const { toast } = useToast();
   const [selectedState, setSelectedState] = useState<any>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isNewSubmissionOpen, setIsNewSubmissionOpen] = useState(false);
+  const [submissionEmployerId, setSubmissionEmployerId] = useState("");
+  const [submissionStateCode, setSubmissionStateCode] = useState("");
 
   // Fetch state portal configurations
   const { data: statePortals, isLoading } = useQuery<any[]>({
@@ -76,6 +80,55 @@ export default function StateAutomationPage() {
         description: "Failed to update state portal",
         variant: "destructive",
       });
+    },
+  });
+
+  // Fetch employers for submission dialog
+  const { data: employersList } = useQuery<any[]>({
+    queryKey: ["/api/admin/employers"],
+  });
+
+  // Trigger submission job mutation
+  const triggerSubmissionMutation = useMutation({
+    mutationFn: async ({ employerId, stateCode }: { employerId: string; stateCode: string }) => {
+      const res = await apiRequest("POST", "/api/admin/submissions/trigger", { employerId, stateCode });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/submissions"] });
+      setIsNewSubmissionOpen(false);
+      setSubmissionEmployerId("");
+      setSubmissionStateCode("");
+      toast({
+        title: "Submission Started",
+        description: `Job ${data.jobId} created and processing`,
+      });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to trigger submission", variant: "destructive" });
+    },
+  });
+
+  // Download CSV mutation
+  const downloadCsvMutation = useMutation({
+    mutationFn: async ({ employerId, stateCode }: { employerId: string; stateCode: string }) => {
+      const res = await apiRequest("POST", "/api/admin/submissions/generate-csv", { employerId, stateCode });
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('content-disposition') || '';
+      const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+      const filename = filenameMatch ? filenameMatch[1] : `${stateCode}_WOTC_submission.csv`;
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      toast({ title: "Downloaded", description: "State submission file downloaded successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to generate submission file", variant: "destructive" });
     },
   });
 
@@ -154,23 +207,33 @@ export default function StateAutomationPage() {
             Manage state WOTC portal configurations and automation settings
           </p>
         </div>
-        <Button
-          onClick={() => seedMutation.mutate()}
-          disabled={seedMutation.isPending}
-          data-testid="button-seed-portals"
-        >
-          {seedMutation.isPending ? (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              Seeding...
-            </>
-          ) : (
-            <>
-              <Database className="mr-2 h-4 w-4" />
-              Seed State Portals
-            </>
-          )}
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            onClick={() => setIsNewSubmissionOpen(true)}
+            data-testid="button-new-submission"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Submission
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => seedMutation.mutate()}
+            disabled={seedMutation.isPending}
+            data-testid="button-seed-portals"
+          >
+            {seedMutation.isPending ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Seeding...
+              </>
+            ) : (
+              <>
+                <Database className="mr-2 h-4 w-4" />
+                Seed State Portals
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -572,6 +635,92 @@ export default function StateAutomationPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* New Submission Dialog */}
+      <Dialog open={isNewSubmissionOpen} onOpenChange={setIsNewSubmissionOpen}>
+        <DialogContent data-testid="dialog-new-submission">
+          <DialogHeader>
+            <DialogTitle>New State Submission</DialogTitle>
+            <DialogDescription>
+              Generate a submission file or trigger automated portal submission for an employer
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Employer</Label>
+              <Select value={submissionEmployerId} onValueChange={setSubmissionEmployerId}>
+                <SelectTrigger data-testid="select-employer">
+                  <SelectValue placeholder="Select employer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Array.isArray(employersList) ? employersList : []).map((emp: any) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.ein || 'No EIN'})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>State</Label>
+              <Select value={submissionStateCode} onValueChange={setSubmissionStateCode}>
+                <SelectTrigger data-testid="select-state">
+                  <SelectValue placeholder="Select state" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="TX">Texas (TX)</SelectItem>
+                  <SelectItem value="CA">California (CA)</SelectItem>
+                  <SelectItem value="FL">Florida (FL)</SelectItem>
+                  <SelectItem value="NY">New York (NY)</SelectItem>
+                  <SelectItem value="IL">Illinois (IL)</SelectItem>
+                  <SelectItem value="PA">Pennsylvania (PA)</SelectItem>
+                  <SelectItem value="OH">Ohio (OH)</SelectItem>
+                  <SelectItem value="GA">Georgia (GA)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!submissionEmployerId || !submissionStateCode) {
+                    toast({ title: "Missing fields", description: "Select an employer and state", variant: "destructive" });
+                    return;
+                  }
+                  downloadCsvMutation.mutate({ employerId: submissionEmployerId, stateCode: submissionStateCode });
+                }}
+                disabled={downloadCsvMutation.isPending || !submissionEmployerId || !submissionStateCode}
+                data-testid="button-download-csv"
+              >
+                {downloadCsvMutation.isPending ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Download File
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!submissionEmployerId || !submissionStateCode) {
+                    toast({ title: "Missing fields", description: "Select an employer and state", variant: "destructive" });
+                    return;
+                  }
+                  triggerSubmissionMutation.mutate({ employerId: submissionEmployerId, stateCode: submissionStateCode });
+                }}
+                disabled={triggerSubmissionMutation.isPending || !submissionEmployerId || !submissionStateCode}
+                data-testid="button-trigger-submission"
+              >
+                {triggerSubmissionMutation.isPending ? (
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
+                Submit to Portal
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

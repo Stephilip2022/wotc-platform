@@ -1,6 +1,43 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
+
+// Simple in-memory rate limiter for public endpoints
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function createRateLimiter(windowMs: number, maxRequests: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const key = `${ip}:${req.path}`;
+    const now = Date.now();
+    
+    const entry = rateLimitStore.get(key);
+    if (!entry || now > entry.resetAt) {
+      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (entry.count >= maxRequests) {
+      res.setHeader('Retry-After', Math.ceil((entry.resetAt - now) / 1000).toString());
+      return res.status(429).json({ error: "Too many requests. Please try again later." });
+    }
+
+    entry.count++;
+    next();
+  };
+}
+
+// Cleanup stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of rateLimitStore) {
+    if (now > entry.resetAt) rateLimitStore.delete(key);
+  }
+}, 300000);
+
+const publicRateLimit = createRateLimiter(60000, 30);
+const submissionRateLimit = createRateLimiter(60000, 10);
+const setupRateLimit = createRateLimiter(60000, 10);
 import { promises as fs } from "fs";
 import path from "path";
 import QRCode from "qrcode";
@@ -785,7 +822,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // These endpoints allow employer contacts to set up their account via welcome email
   // ============================================================================
 
-  app.get("/api/public/setup/:token/validate", async (req, res) => {
+  app.get("/api/public/setup/:token/validate", setupRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
 
@@ -823,7 +860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/public/setup/:token/complete", async (req, res) => {
+  app.post("/api/public/setup/:token/complete", setupRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
       const { password } = req.body;
@@ -950,7 +987,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // via direct URL, QR code, text message link, or ATS/HRIS integration
   // ============================================================================
 
-  app.get("/api/public/screen/:token", async (req, res) => {
+  app.get("/api/public/screen/:token", publicRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
       const employeeId = req.query.employee as string | undefined;
@@ -1045,7 +1082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/public/screen/:token/response", async (req, res) => {
+  app.get("/api/public/screen/:token/response", publicRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
       const employeeId = req.query.employee as string | undefined;
@@ -1095,7 +1132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/public/screen/:token/response", async (req, res) => {
+  app.post("/api/public/screen/:token/response", publicRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
       const { questionnaireId, responses, completionPercentage, employeeId } = req.body;
@@ -1177,7 +1214,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/public/screen/:token/submit", async (req, res) => {
+  app.post("/api/public/screen/:token/submit", submissionRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
       const { questionnaireId, responses, employeeId } = req.body;
@@ -1375,7 +1412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PUBLIC DOCUMENT UPLOAD ROUTES (one-time secure links, no auth required)
   // ============================================================================
 
-  app.get("/api/public/upload/:token", async (req, res) => {
+  app.get("/api/public/upload/:token", publicRateLimit, async (req, res) => {
     try {
       const { token } = req.params;
       const result = await validateUploadToken(token);
@@ -1417,7 +1454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/public/upload/:token", upload.array("documents", 5), async (req: any, res) => {
+  app.post("/api/public/upload/:token", submissionRateLimit, upload.array("documents", 5), async (req: any, res) => {
     try {
       const { token } = req.params;
       const result = await validateUploadToken(token);
@@ -3658,19 +3695,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Screening must be certified to calculate credits" });
       }
 
-      // Get total hours worked for this employee
+      // Get total hours worked and wages for this employee from payroll records
       const hoursResults = await db
         .select({
           totalHours: sql<number>`COALESCE(SUM(CAST(${hoursWorked.hours} AS DECIMAL)), 0)`,
+          totalWages: sql<number>`COALESCE(SUM(CAST(${hoursWorked.wages} AS DECIMAL)), 0)`,
         })
         .from(hoursWorked)
         .where(eq(hoursWorked.employeeId, screening.screening.employeeId));
 
       const totalHours = Number(hoursResults[0]?.totalHours || 0);
+      const recordedWages = Number(hoursResults[0]?.totalWages || 0);
 
-      // For now, we'll estimate wages based on hours (can be updated to use actual wage data)
-      // Assuming $15/hour as a default (this should come from employee/employer data in real use)
-      const estimatedWages = totalHours * 15;
+      // Use actual wages from payroll data; if no wage data, use federal minimum wage as floor
+      let totalWages = recordedWages;
+      if (totalWages === 0 && totalHours > 0) {
+        totalWages = totalHours * 7.25;
+      }
 
       const rawTargetGroup = screening.screening.primaryTargetGroup;
       if (!rawTargetGroup) {
@@ -3688,7 +3729,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Calculate credit using the eligibility engine
-      const actualCredit = calculateCredit(targetGroup, totalHours, estimatedWages);
+      const actualCredit = calculateCredit(targetGroup, totalHours, totalWages);
 
       // Get target group info
       const targetGroupInfo = TARGET_GROUPS[targetGroup];
@@ -3709,7 +3750,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .update(creditCalculations)
           .set({
             hoursWorked: Math.floor(totalHours),
-            wagesEarned: estimatedWages.toFixed(2),
+            wagesEarned: totalWages.toFixed(2),
             actualCreditAmount: actualCredit.toFixed(2),
             minimumHoursRequired: 120, // WOTC minimum is 120 hours for any credit
             status: totalHours >= 120 ? "in_progress" : "projected",
@@ -3728,7 +3769,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           projectedCreditAmount: actualCredit.toFixed(2),
           actualCreditAmount: actualCredit.toFixed(2),
           hoursWorked: Math.floor(totalHours),
-          wagesEarned: estimatedWages.toFixed(2),
+          wagesEarned: totalWages.toFixed(2),
           minimumHoursRequired: 120, // WOTC minimum is 120 hours for any credit
           status: totalHours >= 120 ? "in_progress" : "projected",
         }).returning();
@@ -5391,6 +5432,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error triggering submission:", error);
       res.status(500).json({ error: "Failed to trigger submission" });
+    }
+  });
+
+  // Generate and download state submission CSV for an employer
+  app.post("/api/admin/submissions/generate-csv", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employerId, stateCode } = req.body;
+      if (!employerId || !stateCode) {
+        return res.status(400).json({ error: "employerId and stateCode required" });
+      }
+
+      const [employer] = await db.select().from(employers).where(eq(employers.id, employerId));
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+
+      const eligibleScreenings = await db
+        .select({ screening: screenings, employee: employees })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .where(
+          and(
+            eq(screenings.employerId, employerId),
+            or(
+              eq(screenings.status, "eligible"),
+              eq(screenings.status, "submitted")
+            )
+          )
+        );
+
+      if (eligibleScreenings.length === 0) {
+        return res.status(400).json({ error: "No eligible screenings found for this employer" });
+      }
+
+      const state = stateCode.toUpperCase();
+      let csvContent: string;
+      let filename: string;
+
+      if (state === 'TX') {
+        const { generateTexasCSV } = await import('./utils/texasCsvGenerator');
+        const records = eligibleScreenings.map(s => ({
+          employee: s.employee,
+          screening: s.screening,
+          employerEin: employer.ein || '',
+          employerName: employer.name,
+          employerAddress: employer.address || '',
+          employerCity: employer.city || '',
+          employerState: employer.state || 'TX',
+          employerZip: employer.zipCode || '',
+        }));
+        csvContent = generateTexasCSV(records);
+        filename = `TX_WOTC_${employer.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+      } else if (state === 'CA') {
+        const { generateCaliforniaXML } = await import('./utils/californiaXmlGenerator');
+        const records = eligibleScreenings.map(s => ({
+          firstName: s.employee.firstName,
+          lastName: s.employee.lastName,
+          ssn: s.employee.ssn || '',
+          dateOfBirth: s.employee.dateOfBirth || '',
+          address: s.employee.address || '',
+          city: s.employee.city || '',
+          state: s.employee.state || 'CA',
+          zipCode: s.employee.zipCode || '',
+          startDate: s.employee.startDate || s.employee.hireDate || '',
+          hireDate: s.employee.hireDate || '',
+          qualifie: (s.screening.targetGroups as string[])?.join(',') || '',
+          companyName: employer.name,
+          fein: employer.ein || '',
+        }));
+        csvContent = generateCaliforniaXML(records);
+        filename = `CA_WOTC_${employer.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xml`;
+      } else {
+        const { generateStateCSV } = await import('./utils/stateCsvGenerator');
+        const records = eligibleScreenings.map(s => ({
+          employee: s.employee,
+          screening: s.screening,
+          employerEin: employer.ein || '',
+          employerName: employer.name,
+        }));
+        csvContent = generateStateCSV(state, records);
+        filename = `${state}_WOTC_${employer.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.csv`;
+      }
+
+      res.setHeader('Content-Type', state === 'CA' ? 'application/xml' : 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error generating CSV:", error);
+      res.status(500).json({ error: "Failed to generate submission file" });
+    }
+  });
+
+  // Get eligible screening counts by state for an employer
+  app.get("/api/admin/submissions/eligible-counts/:employerId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { employerId } = req.params;
+      const counts = await db
+        .select({
+          state: employees.state,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(screenings)
+        .innerJoin(employees, eq(screenings.employeeId, employees.id))
+        .where(
+          and(
+            eq(screenings.employerId, employerId),
+            or(
+              eq(screenings.status, "eligible"),
+              eq(screenings.status, "submitted")
+            )
+          )
+        )
+        .groupBy(employees.state);
+
+      res.json(counts);
+    } catch (error) {
+      console.error("Error fetching eligible counts:", error);
+      res.status(500).json({ error: "Failed to fetch counts" });
     }
   });
 
