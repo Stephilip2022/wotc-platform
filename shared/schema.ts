@@ -142,6 +142,23 @@ export type InsertEmployer = z.infer<typeof insertEmployerSchema>;
 export type Employer = typeof employers.$inferSelect;
 
 // ============================================================================
+// EMPLOYER SETUP TOKENS (for onboarding via welcome email)
+// ============================================================================
+
+export const employerSetupTokens = pgTable("employer_setup_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+  token: varchar("token").notNull().unique(),
+  email: text("email").notNull(),
+  contactName: text("contact_name"),
+  usedAt: timestamp("used_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type EmployerSetupToken = typeof employerSetupTokens.$inferSelect;
+
+// ============================================================================
 // REFERRAL PARTNERS
 // ============================================================================
 
