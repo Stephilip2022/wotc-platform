@@ -1941,6 +1941,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Resend welcome email to an existing employer
+  app.post("/api/admin/employers/:id/resend-welcome", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [employer] = await db.select().from(employers).where(eq(employers.id, id));
+      if (!employer) {
+        return res.status(404).json({ error: "Employer not found" });
+      }
+      if (!employer.contactEmail) {
+        return res.status(400).json({ error: "Employer has no contact email" });
+      }
+
+      const baseUrl = process.env.APP_BASE_URL || (process.env.REPLIT_DEV_DOMAIN ? `https://${process.env.REPLIT_DEV_DOMAIN}` : "http://localhost:5000");
+      const { sendWelcomeEmail } = await import('./email/notifications');
+      await sendWelcomeEmail(employer.contactEmail, {
+        employerName: employer.name,
+        contactName: employer.contactEmail.split('@')[0],
+        dashboardUrl: `${baseUrl}/employer`,
+        questionnaireUrl: `${baseUrl}/screen/${employer.questionnaireUrl}`,
+        form9198Url: `${baseUrl}/employer/onboarding`,
+        engagementLetterUrl: `${baseUrl}/employer/onboarding`,
+        feePercentage: employer.feePercentage || "15.00",
+      });
+
+      console.log(`Welcome email resent to ${employer.contactEmail} for employer ${employer.name}`);
+      res.json({ success: true, message: `Welcome email sent to ${employer.contactEmail}` });
+    } catch (error) {
+      console.error("Error resending welcome email:", error);
+      res.status(500).json({ error: "Failed to resend welcome email" });
+    }
+  });
+
   // ============================================================================
   // ADMIN CSV EXPORT ROUTES
   // ============================================================================

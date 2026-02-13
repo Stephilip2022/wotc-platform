@@ -28,7 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign, Handshake } from "lucide-react";
+import { Plus, Search, Settings, FileText, CheckCircle, MapPin, X, DollarSign, Handshake, Mail } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Employer, EtaForm9198, ReferralPartner } from "@shared/schema";
 import { useForm } from "react-hook-form";
@@ -142,6 +142,26 @@ export default function AdminEmployersPage() {
       toast({
         title: "Error",
         description: error?.message || "Failed to add employer. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resendWelcomeEmailMutation = useMutation({
+    mutationFn: async (employerId: string) => {
+      const response = await apiRequest("POST", `/api/admin/employers/${employerId}/resend-welcome`);
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Email Sent",
+        description: data.message || "Welcome email has been resent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to resend welcome email.",
         variant: "destructive",
       });
     },
