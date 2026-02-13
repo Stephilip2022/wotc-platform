@@ -3013,3 +3013,46 @@ export const onboardingFormData = pgTable("onboarding_form_data", {
 export const insertOnboardingFormDataSchema = createInsertSchema(onboardingFormData).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertOnboardingFormData = z.infer<typeof insertOnboardingFormDataSchema>;
 export type OnboardingFormData = typeof onboardingFormData.$inferSelect;
+
+export const onboardingSettings = pgTable("onboarding_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }).unique(),
+
+  requiredSteps: text("required_steps").array().notNull().default(sql`ARRAY['personal_info','tax_w4','state_withholding','direct_deposit','emergency_contact','id_upload','policy_sign']`),
+  optionalSteps: text("optional_steps").array().notNull().default(sql`ARRAY[]::text[]`),
+  deadlineDays: integer("deadline_days").notNull().default(30),
+  welcomeMessage: text("welcome_message"),
+  autoCreateEmployee: boolean("auto_create_employee").default(true),
+  autoTriggerScreening: boolean("auto_trigger_screening").default(false),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_settings_employer").on(table.employerId),
+]);
+
+export const insertOnboardingSettingsSchema = createInsertSchema(onboardingSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOnboardingSettings = z.infer<typeof insertOnboardingSettingsSchema>;
+export type OnboardingSettings = typeof onboardingSettings.$inferSelect;
+
+export const onboardingTemplates = pgTable("onboarding_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employerId: varchar("employer_id").notNull().references(() => employers.id, { onDelete: "cascade" }),
+
+  name: text("name").notNull(),
+  department: text("department"),
+  jobTitle: text("job_title"),
+  requiredSteps: text("required_steps").array(),
+  optionalSteps: text("optional_steps").array(),
+  welcomeMessage: text("welcome_message"),
+  isDefault: boolean("is_default").default(false),
+
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_onboarding_templates_employer").on(table.employerId),
+]);
+
+export const insertOnboardingTemplateSchema = createInsertSchema(onboardingTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOnboardingTemplate = z.infer<typeof insertOnboardingTemplateSchema>;
+export type OnboardingTemplate = typeof onboardingTemplates.$inferSelect;
