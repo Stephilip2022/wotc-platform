@@ -96,12 +96,12 @@ export default function EmployerReportsPage() {
   });
 
   const { data: reports, isLoading: loadingReports } = useQuery<ReportRecord[]>({
-    queryKey: ["/api/analytics/reports"],
+    queryKey: ["/api/employer/reports"],
   });
 
   const generateReportMutation = useMutation({
     mutationFn: async (type: string) => {
-      const response = await fetch("/api/analytics/reports/generate", {
+      const response = await fetch("/api/employer/reports/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -128,7 +128,7 @@ export default function EmployerReportsPage() {
       URL.revokeObjectURL(url);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/reports"] });
       toast({ title: "Report Generated", description: "Your PDF report has been downloaded." });
     },
     onError: (error: Error) => {
@@ -138,14 +138,14 @@ export default function EmployerReportsPage() {
 
   const deleteReportMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/analytics/reports/${id}`, {
+      const res = await fetch(`/api/employer/reports/${id}`, {
         method: "DELETE",
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to delete");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employer/reports"] });
       toast({ title: "Deleted", description: "Report removed successfully." });
     },
   });

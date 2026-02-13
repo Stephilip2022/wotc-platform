@@ -3984,6 +3984,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // REPORT GENERATION & DOWNLOAD
+  // ============================================================================
+
+  app.get("/api/employer/reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+      const { listReports } = await import('./services/reportGenerator');
+      const reports = await listReports(user.employerId);
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  });
+
+  app.post("/api/employer/reports/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "employer" || !user.employerId) {
+        return res.status(403).json({ error: "Unauthorized" });
+      }
+
+      const { reportType, periodStart, periodEnd } = req.body;
+      if (!reportType || !["credit_summary", "roi_analysis", "compliance"].includes(reportType)) {
+        return res.status(400).json({ error: "Invalid report type" });
+      }
+
+      const { generateReport } = await import('./services/reportGenerator');
+      const { reportId, buffer } = await generateReport({
+        employerId: user.employerId,
+        reportType,
+        periodStart: periodStart ? new Date(periodStart) : undefined,
+        periodEnd: periodEnd ? new Date(periodEnd) : undefined,
+        generatedBy: user.id,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${reportType}-${reportId}.pdf"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error generating report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
+  app.get("/api/admin/reports", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+      const { listReports } = await import('./services/reportGenerator');
+      const employerId = req.query.employerId as string | undefined;
+      const reports = await listReports(employerId || null);
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  });
+
+  app.post("/api/admin/reports/generate", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await getUserByClerkId(getAuth(req).userId!);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Admin access required" });
+      }
+
+      const { reportType, employerId, periodStart, periodEnd } = req.body;
+      if (!reportType || !["credit_summary", "roi_analysis", "compliance"].includes(reportType)) {
+        return res.status(400).json({ error: "Invalid report type" });
+      }
+
+      const { generateReport } = await import('./services/reportGenerator');
+      const { reportId, buffer } = await generateReport({
+        employerId: employerId || undefined,
+        reportType,
+        periodStart: periodStart ? new Date(periodStart) : undefined,
+        periodEnd: periodEnd ? new Date(periodEnd) : undefined,
+        generatedBy: user.id,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${reportType}-${reportId}.pdf"`);
+      res.send(buffer);
+    } catch (error) {
+      console.error("Error generating report:", error);
+      res.status(500).json({ error: "Failed to generate report" });
+    }
+  });
+
+  // ============================================================================
   // BILLING & SUBSCRIPTIONS
   // ============================================================================
 
@@ -5414,7 +5509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           stateCode: stateCode.toUpperCase(),
           status: 'pending',
           recordCount: 0,
-          submittedBy: userId,
+          submittedBy: user.id,
         })
         .returning();
 
