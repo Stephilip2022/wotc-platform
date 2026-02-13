@@ -4,6 +4,7 @@ import { registerDemoPortalRoutes } from "./routes-demo-portal";
 import { setupVite, serveStatic, log } from "./vite";
 import { startOrchestrator } from "./utils/submissionOrchestrator";
 import { startWebhookRetryWorker } from "./utils/webhookService";
+import { startDocumentReminderWorker } from "./workers/documentReminderWorker";
 
 const app = express();
 
@@ -96,5 +97,9 @@ app.use((req, res, next) => {
     // Start the webhook retry worker
     // This processes pending webhook retries every minute
     startWebhookRetryWorker(60000); // Check for retries every minute
+    
+    // Start the document upload reminder worker
+    // This sends scheduled SMS reminders for document uploads at 3, 5, 7 days
+    startDocumentReminderWorker();
   });
 })();

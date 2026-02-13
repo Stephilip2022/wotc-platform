@@ -31,7 +31,7 @@ Employees (new hires/applicants) do NOT log in or have a portal. They access the
 ### Core Features
 
 -   **WOTC Compliance & Screening**: Automated ETA Form 9198 intake, digital signatures, and a gamified, conditional logic questionnaire covering all WOTC target groups.
--   **Document Management**: Secure file upload system for IRS letters and supporting documents, including AI-powered OCR for data extraction.
+-   **Document Management**: Secure file upload system for IRS letters and supporting documents, including AI-powered OCR for data extraction. Post-screening document collection via one-time secure links sent via SMS (Twilio) at 3, 5, and 7 days after questionnaire completion. Veterans upload DD-214; TANF/SNAP recipients upload driver's license. Links are auto-generated and auto-expire after 14 days.
 -   **Credit Calculation & Tracking**: Automatic calculation of WOTC credits based on hours worked, determination tracking, and an admin interface for status updates. Includes advanced features like 400-hour milestone tracking and multi-credit bundling (R&D, state/local incentives).
 -   **Payroll & Accounting Integration**: Enhanced CSV parser with intelligent column detection, employee matching, and reusable mapping templates. Bidirectional sync with major payroll providers (ADP, Gusto, QuickBooks Payroll) for real-time hours/wages and accounting exports to QuickBooks and Xero.
 -   **Analytics & Reporting**: Comprehensive dashboards for employers and administrators, covering KPIs, credit projections, system-wide statistics, revenue tracking, and churn rates. Enhanced with interactive data visualizations (recharts), multi-credit program analytics (by category, geographic, trends), ROI summary, and automated PDF report generation (credit summary, ROI analysis, compliance) using PDFKit. Reports stored in `generated_reports` table with download tracking.
@@ -53,6 +53,7 @@ Employees (new hires/applicants) do NOT log in or have a portal. They access the
 -   **Payment Processing**: Stripe
 -   **Database**: Neon Serverless PostgreSQL
 -   **Email**: Resend
+-   **SMS**: Twilio (via Replit connection integration)
 
 ### Key NPM Dependencies
 

@@ -29,6 +29,8 @@ import {
   csvImportRows,
   csvImportTemplates,
   employerWorksites,
+  documentUploadTokens,
+  documentUploadReminders,
 } from "@shared/schema";
 import { eq, and, or, desc, sql } from "drizzle-orm";
 import { setupClerkAuth, isAuthenticated, getOrCreateUser, getUserByClerkId } from "./clerkAuth";
@@ -74,6 +76,11 @@ import {
   logAIInteraction,
   WOTC_TERMS,
 } from "./services/conversationalAI";
+import {
+  validateUploadToken,
+  markTokenUsed,
+  scheduleDocumentUploadReminders,
+} from "./services/documentUploadReminders";
 
 // Initialize Stripe
 if (!process.env.STRIPE_SECRET_KEY) {
@@ -1102,6 +1109,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      if (screeningIdForForms && eligibilityResult.targetGroups.length > 0) {
+        scheduleDocumentUploadReminders(
+          employee.id,
+          screeningIdForForms,
+          eligibilityResult.targetGroups
+        ).then(result => {
+          if (result.scheduled) {
+            console.log(`[PUBLIC SUBMIT] Document upload reminders scheduled for employee ${employee.id}`);
+          } else {
+            console.log(`[PUBLIC SUBMIT] No reminders scheduled: ${result.reason}`);
+          }
+        }).catch(err => {
+          console.error("[PUBLIC SUBMIT] Error scheduling document upload reminders:", err);
+        });
+      }
+
       res.json({
         success: true,
         message: "Thank you! Your screening questionnaire has been submitted successfully.",
@@ -1110,6 +1133,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error submitting public questionnaire:", error);
       res.status(500).json({ error: "Failed to submit questionnaire" });
+    }
+  });
+
+  // ============================================================================
+  // PUBLIC DOCUMENT UPLOAD ROUTES (one-time secure links, no auth required)
+  // ============================================================================
+
+  app.get("/api/public/upload/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const result = await validateUploadToken(token);
+
+      if (!result.valid || !result.data) {
+        return res.status(result.error === 'Invalid upload link' ? 404 : 410).json({ error: result.error });
+      }
+
+      const { tokenRecord, employee, employer } = result.data;
+      const requiredDocs = tokenRecord.requiredDocuments as string[];
+
+      const docDescriptions: Record<string, { label: string; description: string; accept: string }> = {
+        dd214: {
+          label: 'DD-214 Form',
+          description: 'Certificate of Release or Discharge from Active Duty. This verifies your veteran status for WOTC eligibility.',
+          accept: 'image/*,.pdf',
+        },
+        drivers_license: {
+          label: "Driver's License",
+          description: 'A current, valid government-issued photo ID for identity verification purposes.',
+          accept: 'image/*,.pdf',
+        },
+      };
+
+      res.json({
+        employerName: employer.name,
+        employerLogo: employer.logoUrl,
+        employerColor: employer.primaryColor,
+        employeeFirstName: employee.firstName,
+        requiredDocuments: requiredDocs.map(doc => ({
+          type: doc,
+          ...docDescriptions[doc] || { label: doc, description: 'Required document', accept: 'image/*,.pdf' },
+        })),
+        expiresAt: tokenRecord.expiresAt,
+      });
+    } catch (error) {
+      console.error("Error validating upload token:", error);
+      res.status(500).json({ error: "Failed to validate upload link" });
+    }
+  });
+
+  app.post("/api/public/upload/:token", upload.array("documents", 5), async (req: any, res) => {
+    try {
+      const { token } = req.params;
+      const result = await validateUploadToken(token);
+
+      if (!result.valid || !result.data) {
+        return res.status(result.error === 'Invalid upload link' ? 404 : 410).json({ error: result.error });
+      }
+
+      const { tokenRecord, employee, employer } = result.data;
+      const files = req.files as Express.Multer.File[];
+      const documentTypes = JSON.parse(req.body.documentTypes || '[]') as string[];
+
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: "No files uploaded" });
+      }
+
+      const screening = tokenRecord.screeningId
+        ? await db.select().from(screenings).where(eq(screenings.id, tokenRecord.screeningId)).then(r => r[0])
+        : null;
+
+      const uploadedDocs = [];
+      const privateDir = process.env.PRIVATE_OBJECT_DIR || "/.private";
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const docType = documentTypes[i] || 'other';
+
+        const employerDir = path.join(privateDir, employee.employerId, employee.id);
+        const filePath = path.join(employerDir, `${Date.now()}-${file.originalname}`);
+
+        await fs.mkdir(employerDir, { recursive: true });
+        await fs.writeFile(filePath, file.buffer);
+
+        const [doc] = await db.insert(documents).values({
+          employeeId: employee.id,
+          employerId: employee.employerId,
+          screeningId: screening?.id,
+          documentType: docType,
+          fileName: file.originalname,
+          fileUrl: filePath,
+          fileSize: file.size,
+          mimeType: file.mimetype,
+        }).returning();
+
+        uploadedDocs.push(doc);
+      }
+
+      await markTokenUsed(tokenRecord.id);
+
+      res.json({
+        success: true,
+        message: "Documents uploaded successfully. Thank you!",
+        documentsUploaded: uploadedDocs.length,
+      });
+    } catch (error) {
+      console.error("Error processing document upload:", error);
+      res.status(500).json({ error: "Failed to upload documents" });
     }
   });
 

@@ -14,6 +14,7 @@ import { registerServiceWorker } from "@/utils/registerSW";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import PublicScreening from "@/pages/public-screening";
+import PublicUpload from "@/pages/public-upload";
 import EmployerDashboard from "@/pages/employer/dashboard";
 import EmployeesPage from "@/pages/employer/employees";
 import EmployeeDetailPage from "@/pages/employer/employee-detail";
@@ -142,6 +143,11 @@ function Router() {
   if (location.startsWith("/screen/")) {
     const token = location.split("/screen/")[1]?.split("?")[0] || "";
     return <PublicScreening token={token} />;
+  }
+
+  if (location.startsWith("/upload/")) {
+    const token = location.split("/upload/")[1]?.split("?")[0] || "";
+    return <PublicUpload token={token} />;
   }
 
   if (isLoading) {
